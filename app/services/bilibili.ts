@@ -24,7 +24,7 @@ export default class Bilibili {
         this.mangaId = params.id
         this.mangaName = params.name
         this.downloadLockedMeta = false
-        this.downloadPath = `${process.env.DOWNLOAD_PATH}${this.website}`
+        this.downloadPath = `${process.env.DOWNLOAD_PATH}/${this.website}`
     }
 
     /**
@@ -99,11 +99,12 @@ export default class Bilibili {
                 // 移除订阅链接
                 subscribe_remove({ website: this.website, id: this.mangaId })
                 console.log(this.mangaName + ' 已完结，已移除订阅链接')
-            } else if (oldChapterLength !== newChapterLength) {
+            }
+            
+            if (oldChapterLength !== newChapterLength) {
                 await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
             } else {
                 console.log(this.mangaName + ' 没有更新')
-                return
             }
         } else {
             // 写入元数据

@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import { downloadImage, get_html } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
+import { subscribe_remove } from '#api/subsribe';
 
 export default class Toomics {
     private domain = 'https://toomics.com';
@@ -9,6 +10,7 @@ export default class Toomics {
     private mangaName: string
     private downloadPath: string
     private downloadLockedMeta: boolean
+    private downloadLockedChapter: boolean = false
     private useMoblie: boolean = false
     private html: string | null = null
     private meta: any = null
@@ -17,8 +19,9 @@ export default class Toomics {
         this.website = params.website
         this.mangaId = params.id
         this.mangaName = params.name
-        this.downloadLockedMeta = true
-        this.downloadPath = `${process.env.DOWNLOAD_PATH}${this.website}`
+        this.downloadLockedMeta = false
+        this.downloadLockedChapter = false
+        this.downloadPath = `${process.env.DOWNLOAD_PATH}/${this.website}`
     }
 
     /**
@@ -46,13 +49,16 @@ export default class Toomics {
             const rawData = fs.readFileSync(metaFile, 'utf-8')
             const oldMetaData = JSON.parse(rawData)
 
-            if (
-                oldMetaData.chapters.length !== this.chapters.length
-            ) {
+            if (this.meta.finished && this.downloadLockedChapter) {
+                // 移除订阅链接
+                subscribe_remove({ website: this.website, id: this.mangaId })
+                console.log(this.mangaName + ' 已完结，已移除订阅链接')
+            }
+
+            if (oldMetaData.chapters.length !== this.chapters.length) {
                 await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
             } else {
                 console.log(this.mangaName + ' 没有更新')
-                return
             }
         } else {
             // 写入元数据
@@ -69,7 +75,7 @@ export default class Toomics {
             const chapter = this.chapters[i]
             const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
             const chapterFolder = `${this.downloadPath}/${mangaName}/${chapterName}`
-            if (!chapter.isFree) {
+            if (!chapter.isFree && !this.downloadLockedChapter) {
                 // 虽然未解锁 但是仍然下载封面 创建目录
                 if (this.downloadLockedMeta && !fs.existsSync(chapterFolder)) {
                     await fs.promises.mkdir(chapterFolder, { recursive: true })
@@ -105,9 +111,11 @@ export default class Toomics {
         const banner = this.html?.match(/(?<=<!-- pc -->.+srcset=\")[^\"]+/s)?.[0] || '';
         const bannerBackground = this.html?.match(/(?<=<!-- pc bg -->.+src=\")[^\"]+/s)?.[0] || '';
         const cover = this.html?.match(/(?<=<!-- mobile -->.+src=\")[^\"]+/s)?.[0] || '';
+        const finishedTxt = this.html?.match(/(?<=text-3xs font-bold text-gray-900\">)[^<]+/s)?.[0] || '';
+        const finished = finishedTxt.trim() === '完结' ? true : false
 
         return {
-            title, author, describe, banner, cover, bannerBackground,
+            title, author, finished, describe, banner, cover, bannerBackground,
         }
     }
 
