@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-09-30 05:07:46
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-02 05:50:04
+ * @LastEditTime: 2024-11-17 18:14:29
  * @FilePath: \manga-get\start\kernel.ts
  */
 /*
@@ -17,8 +17,6 @@
 
 import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
-
-import { mangaDownload } from '#services/subsribe_service'
 
 /**
  * The error handler is used to convert an exception
@@ -50,13 +48,11 @@ router.use([() => import('@adonisjs/core/bodyparser_middleware')])
 export const middleware = router.named({})
 
 import { read_json } from '#utils/index'
-const subsribe = read_json('./subsribe.json')
-console.log(subsribe);
-if(subsribe.length > 0){
-  for(let i = 0; i < subsribe.length; i++){
-    const download = new mangaDownload(subsribe[i].id)
-    await download.start()
-  }
-}
-// const download = new mangaDownload(34355)
-// download.start()
+import { subsribeType } from '#type/index.js'
+import Toomics from '#services/toomics'
+import Bilibili from '#services/bilibili'
+import { create_scan_cron, task_allocation } from './init.js'
+
+create_scan_cron();
+
+task_allocation();

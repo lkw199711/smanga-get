@@ -30,16 +30,23 @@ const axios = Axios.create({
   //   baseURL: 'https://manga.bilibili.com',
   timeout: 5000,
   headers: {
-    'Content-Type': 'application/json',
-    'Cookie': cookie,
-    'Origin': 'https://manga.bilibili.com',
-    'Referer': 'https://manga.bilibili.com',
+    // 'Content-Type': 'application/json',
+    // 'Cookie': cookie,
+    // 'Origin': 'https://manga.bilibili.com',
+    'Referer': 'https://toomics.com/',
   },
   params: {
     device: 'pc',
     platform: 'web',
   },
   withCredentials: true,
+})
+
+const axiosToomics = Axios.create({
+  baseURL: 'https://toomics.com',
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+  },
 })
 
 export async function get_meta(comic_id: number) {
@@ -101,4 +108,9 @@ export async function image_token(paths: string[]) {
   })
   const data = res.data.data
   return data
+}
+
+export async function get_html(url: string) {
+  const res = await axiosToomics.get(url)
+  return res.data
 }
