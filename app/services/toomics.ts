@@ -23,7 +23,7 @@ export default class Toomics {
     private page: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
-    private scrollStep: number = 400 // 滚动步长
+    private scrollStep: number = 200 // 滚动步长
     private scrollDelay: number = 300 // 滚动延迟
     constructor(params: subsribeType) {
         this.website = params.website
@@ -51,6 +51,8 @@ export default class Toomics {
 
         // 任务初始化
         await this.init();
+
+        if (!this.browser) return
 
         // 获取元数据
         await this.get_meta()
@@ -118,6 +120,9 @@ export default class Toomics {
             }
             await this.download_chapter(chapter.name, chapter.url, chapterFolder)
         }
+
+        // 关闭浏览器 释放资源
+        this.browser.close()
 
         console.log(mangaName + ' 订阅完毕')
     }
@@ -334,20 +339,23 @@ export default class Toomics {
                     const buffer = await response.buffer();
                     const filename = url.split('/').pop() || url;
                     this.chapterPageImages[filename] = buffer;
-                } catch (e) {
-                    console.error('Error downloading image:', e);
-                }
+                } catch (e) { }
             }
         })
+
+        // 开始下载章节
+        console.log('正在下载章节:', chapterName)
 
         await chapterPage.goto(url, {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000
         }).catch(() => { })
 
+        // 获取最新cookie
         await this.set_cookie()
 
         // 不断滚动 直到页面底部
+        console.log('开始滚动页面,等待加载图片');
         let scrollY = -1;
         let window: any, document: any;
         await chapterPage.mouse.move(1000, 1000)
