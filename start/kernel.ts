@@ -52,7 +52,18 @@ import { subsribeType } from '#type/index.js'
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation } from './init.js'
+import demo from '#services/test'
 
-create_scan_cron();
+// demo();
+// create_scan_cron();
 
 task_allocation();
+/*
+const toomics = new Toomics({
+  "website": "toomics",
+  "id": 7616,
+  "name": "难缠姐妹偏要和我同居"
+})
+
+toomics.get_cookie();
+*/

@@ -13,7 +13,20 @@ const saveBase64Image = (base64Data: any, filepath: string) => {
     fs.writeFileSync(filepath, base64Image, { encoding: 'base64' });
 };
 
-async function demo() {
+function demo() {
+    const endFile = fs.readFileSync('toomicsEnd.json', 'utf-8')
+    const endJson = JSON.parse(endFile)
+    const end = endJson.map((item: any) => {
+        return {
+            website: "toomics",
+            ...item
+        }
+    })
+
+    fs.writeFileSync('toomicsEnd.json', JSON.stringify(end, null, 2), 'utf-8')
+}
+
+async function demo1() {
     // 启动无头浏览器
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
@@ -32,7 +45,7 @@ async function demo() {
     });
 
     // 打开百度首页
-    await page.goto('https://manga.bilibili.com/detail/mc31006',{ waitUntil: 'networkidle2' });
+    await page.goto('https://manga.bilibili.com/detail/mc31006', { waitUntil: 'networkidle2' });
 
     await page.setViewport({ width: 1080, height: 1920 });
     //await delay(1000); // 等待2秒，确保页面加载完成

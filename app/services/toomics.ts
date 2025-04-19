@@ -2,7 +2,9 @@ import * as fs from 'fs'
 import { downloadImage, get_html } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe';
-
+import path from 'path';
+import { delay } from '#utils/index';
+import puppeteer from 'puppeteer';
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string
@@ -15,13 +17,29 @@ export default class Toomics {
     private html: string | null = null
     private meta: any = null
     private chapters: any = null
+    private adult: boolean = false
+
+    private browser: puppeteer.Browser | null = null
+    private page: puppeteer.Page | null = null
+    private chapterPageImages: any = {}
+
+    private scrollStep: number = 800 // 滚动步长
+    private scrollDelay: number = 500 // 滚动延迟
     constructor(params: subsribeType) {
         this.website = params.website
         this.mangaId = params.id
         this.mangaName = params.name
         this.downloadLockedMeta = false
-        this.downloadLockedChapter = false
-        this.downloadPath = `${process.env.DOWNLOAD_PATH}/${this.website}`
+        // 是否下载付费章节
+        this.downloadLockedChapter = process.env.TOOMICS_DWONLOAD_VIP === 'on'
+
+        if (process.env.DOWNLOAD_PATH) {
+            this.downloadPath = path.join(process.env.DOWNLOAD_PATH, this.website);
+        } else {
+            this.downloadPath = path.join(process.cwd(), this.website);
+        }
+
+        this.adult = params.adult || false
     }
 
     /**
@@ -31,13 +49,14 @@ export default class Toomics {
         // 解析章节
         console.log(this.mangaName + ' 正在分析')
 
-        // 元数据
-        this.html = await get_html(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`)
+        // 任务初始化
+        await this.init();
 
-        this.meta = this.get_meta()
+        // 获取元数据
+        await this.get_meta()
 
-        // 章节列表
-        this.chapters = this.get_chapters()
+        // 获取章节列表
+        this.get_chapters()
 
         // 漫画名删除特殊字符
         const mangaName = this.meta.title.replaceAll(/[<>:"/\\|?*]/g, '')
@@ -94,15 +113,144 @@ export default class Toomics {
             }
 
             console.log(`${mangaName} 正在下载章节 ${chapterName}`)
-
-            await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
+            if (!fs.existsSync(`${chapterFolder}.jpg`)) {
+                await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
+            }
             await this.download_chapter(chapter.url, chapterFolder)
         }
 
         console.log(mangaName + ' 订阅完毕')
     }
 
-    get_meta() {
+    /**
+     * 任务初始化
+     * @description 新建浏览器 新建页面 放原声兼容性
+     * 检查cookie是否有效 登录并存储cookie
+     * @returns 
+     */
+    async init() {
+        this.browser = await puppeteer.launch({
+            headless: true,
+            timeout: 60 * 1000,
+            args: ['--no-sandbox', '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
+                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
+                '--disable-web-security',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--lang=zh-CN,zh', // 设置浏览器语言
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
+                //'--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
+            ],
+            defaultViewport: {
+                width: 1920,
+                height: 1440,
+            },
+        });
+
+        if (fs.existsSync('toomics-cookies.json')) {
+            const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
+            const cookie = JSON.parse(cookie1)
+            this.browser.setCookie(...cookie)
+        } else {
+            const cookieStr = process.env.TOOMICS_COOKIE || '';
+            const cookies = cookieStr.split(';').map(pair => {
+                const [name, value] = pair.trim().split('=');
+                return {
+                    name: name,
+                    value: value,
+                    domain: '.toomics.com', // 替换为目标网站主域名
+                    path: '/',
+                    secure: false,
+                    sameParty: false,
+                    httpOnly: false
+                };
+            });
+            this.browser.setCookie(...cookies);
+        }
+
+
+        this.page = await this.browser.newPage()
+
+        await this.page.setExtraHTTPHeaders({
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Sec-CH-UA-Platform': '"Windows"', // 新版指纹头‌:ml-citation{ref="3" data="citationList"}
+            'Upgrade-Insecure-Requests': '1'
+        });
+
+        let navigator: any;
+        // 消除navigator.webdriver属性‌:ml-citation{ref="3" data="citationList"}
+        await this.page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        });
+
+        // 覆盖plugins属性
+        await this.page.evaluate(() => {
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3] // 返回非空数组
+            });
+        });
+
+        await this.page.goto(this.domain + '/sc', {
+            waitUntil: 'networkidle2',
+            timeout: 60 * 1000,
+        })
+
+        const homePageHtml = await this.page?.content()
+        //flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/
+        if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
+            // console.log('cookie过期，请重新登录')
+            console.log('cookie过期，尝试重新登录')
+            try {
+                await this.page.locator('div.close_popup').click()
+                await delay(2000)
+            } catch (error) {
+                console.log('没有弹窗')
+            }
+
+
+            await this.page.locator('button[title = "菜单"]').click().catch(() => { })
+            await delay(2000)
+            await this.page.locator('button.bg-white').filter(button => button.innerText.trim() === '登录').click().catch(() => { })
+            await delay(2000)
+
+            try {
+                await this.page.locator('button[onclick="Base.changeSignInForm();"]').click()
+                await delay(2000)
+            } catch (error) {
+                console.log('没有邮箱登录按钮')
+            }
+
+            await this.page.locator('input[name="user_id"]').fill(process.env.TOOMICS_EMAIL || '').catch(() => { })
+            await delay(1000)
+            await this.page.locator('input[name="user_pw"]').fill(process.env.TOOMICS_PASSWORD || '').catch(() => { })
+            await delay(1000)
+            await this.page.locator('button[type="submit"]').click().catch(() => { })
+            await delay(2000)
+
+            // 等待导航完成
+            await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
+
+            if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(await this.page?.content())) {
+                console.log('登录失败，请检查账号密码')
+                // await this.browser?.close()
+                return
+            }
+        }
+
+        await this.set_cookie();
+    }
+
+    /**
+     * 获取漫画元数据 注意现在用的是移动端页面
+     * @returns 
+     */
+    async get_meta() {
+        this.html = await get_html(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, true)
+
         let title = this.html?.match(/(?<=<h2.+>)[^<]+/s)?.[0] || '';
         title = title.trim()
         let author = this.html?.match(/(?<=mb-0 text-xs font-normal text-gray-300\">)[^<]+/s)?.[0] || '';
@@ -113,9 +261,10 @@ export default class Toomics {
         const cover = this.html?.match(/(?<=<!-- mobile -->.+src=\")[^\"]+/s)?.[0] || '';
         const finishedTxt = this.html?.match(/(?<=text-3xs font-bold text-gray-900\">)[^<]+/s)?.[0] || '';
         const finished = finishedTxt.trim() === '完结' ? true : false
+        const audlt = this.adult;
 
-        return {
-            title, author, finished, describe, banner, cover, bannerBackground,
+        this.meta = {
+            title, author, finished, audlt, describe, banner, cover, bannerBackground,
         }
     }
 
@@ -126,6 +275,10 @@ export default class Toomics {
             index = index.trim()
             let subName = box.match(/(?<=strong.+?>)[^<]+/s)?.[0] || ''
             subName = subName.trim()
+            if (subName === '') {
+                subName = box.match(/(?<=Up<\/span>)[^<]+/s)?.[0] || ''
+                subName = subName.trim()
+            }
             const name = index + ' ' + subName;
             const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
             const date = box.match(/(?<=text-muted\">)[^<]+/s)?.[0] || ''
@@ -143,16 +296,125 @@ export default class Toomics {
         // 更新元数据日期
         this.meta.publishDate = chapters[0].date
         this.meta.chapters = chapters;
+        this.chapters = chapters;
         return chapters;
     }
+
+    async get_end_manga() {
+        const endMangaUrl = 'https://toomics.com/sc/webtoon/ranking/genre/2'
+        // const html = await get_html(endMangaUrl)
+        const endMangaBoxs = html.match(/(?<=<li>.+?<div class=\"visual\">).+?(?=<\/li>)/gs) || [];
+
+        const endMangaList = endMangaBoxs.map((box: string) => {
+            let title = box.match(/(?<=title\">)[^<"]+/)?.[0] || ''
+            title = title.trim()
+            const endTxt = box.match(/(?<=ico_fin\">)[^<]+/s)?.[0] || ''
+            const isEnd = endTxt.trim() === 'End' ? true : false
+            const adultTxt = box.match(/(?<=ico_19plus\">)[^<]+/s)?.[0] || ''
+            const adult = adultTxt.trim() === '18+' ? true : false
+            let cover = box.match(/(?<=src=\")[^\"]+/)?.[0] || ''
+            if (!cover) cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
+            const url = box.match(/(?<=href=\")[^\"]+/)?.[0] || ''
+            const id = url.match(/(?<=toon\/)[0-9]+/s)?.[0] || ''
+            return { name: title, id, cover, url: this.domain + url, isEnd, adult }
+        })
+
+        console.log('获取完结漫画列表');
+        console.log(endMangaBoxs[0]);
+        console.log(endMangaList[0]);
+
+        fs.writeFileSync('toomicsEnd.json', JSON.stringify(endMangaList, null, 2), 'utf-8')
+
+    }
+
+    async download_chapter(url: string, downloadPath: string) {
+        if (!this.browser) return;
+        const chapterPage = await this.browser?.newPage()
+        // 储存图片到内存
+        chapterPage.on('response', async (response) => {
+            const url = response.url();
+            if (response.request().resourceType() === 'image') {
+                try {
+                    const buffer = await response.buffer();
+                    const filename = url.split('/').pop() || url;
+                    this.chapterPageImages[filename] = buffer;
+                } catch (e) {
+                    console.error('Error downloading image:', e);
+                }
+            }
+        })
+
+        await chapterPage.goto(url, {
+            waitUntil: 'networkidle2',
+            timeout: 60 * 1000
+        }).catch(() => { })
+
+        await this.set_cookie()
+
+        // 不断滚动 直到页面底部
+        let scrollY = -1;
+        let window: any, document: any;
+        await chapterPage.mouse.move(1000, 1000)
+        while (1) {
+            await chapterPage.mouse.wheel({ deltaY: this.scrollStep })
+            await delay(this.scrollDelay)
+            const nowScrollY = await chapterPage.evaluate(() => window.scrollY)
+            if (nowScrollY === scrollY) break
+            scrollY = nowScrollY
+        }
+
+        // 等待三秒之后开始下载
+        await delay(3000)
+
+        // 等待图片网络请求完成
+        await chapterPage.waitForNetworkIdle().catch(() => { })
+
+        // 获取所有图片的url
+        const imageUrls = await chapterPage.evaluate(() => {
+            const els = document.querySelectorAll('img[id^="set_image_"]')
+            const urls = Array.from(els).map((el: any) => el.src)
+            return urls;
+        })
+
+        for (let i = 0; i < imageUrls.length; i++) {
+            const imageUrl = imageUrls[i]
+            const picName = i.toString().padStart(5, '0')
+            const localPath = `${downloadPath}/${picName}.jpg`
+            const key = imageUrl.split('/').pop() || imageUrl
+
+            if (this.chapterPageImages[key]) {
+                fs.writeFileSync(localPath, this.chapterPageImages[key])
+            } else {
+                console.error('图片下载失败:', imageUrl)
+            }
+        }
+
+        this.chapterPageImages = {}
+        chapterPage.close()
+        await delay(3000)
+
+    }
+
+    async set_cookie() {
+        if (!this.browser) return;
+        const cookies = await this.browser.cookies()
+        fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
+        console.log('toomics-cookie更新成功', new Date().toLocaleString());
+    }
+
+    // 以下为暂未使用的方法
+    // 元数据
+    // await this.page?.goto(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, {
+    //     waitUntil: 'networkidle2'
+    // })
 
     /**
      * 下载章节
      * @param chapterId
      * @param downloadPath
      */
-    async download_chapter(url: string, downloadPath: string) {
-        const html = await get_html(url)
+    async download_chapter1(url: string, downloadPath: string) {
+        // const html = await get_html(url, true)
         // 获取图片列表
         //let images1 = html.match(/(?<=<img id="set_image_.+src=\")http:[^\"]+[.png|.jpg]/g) || []
         let images = html.match(/(?<=src=\")https:.+?toomics.+?[.png|.jpg]*(?=\")/g) || []
@@ -161,7 +423,71 @@ export default class Toomics {
             const image = images[i]
             const picName = i.toString().padStart(5, '0')
             const localPath = `${downloadPath}/${picName}.jpg`
+            // console.log(images[i]);
+
             await downloadImage(image, localPath)
+            await delay(400)
         }
+    }
+
+    get_chapters_pc() {
+        const chapterBoxs = this.html?.match(/(?<=normal_ep).+?(?=<\/li>)/gs) || [];
+        const chapters = chapterBoxs.map((box: string) => {
+            let index = box.match(/(?<=class=\"num\">)[^<]+/s)?.[0] || ''
+            index = index.trim()
+            let subName = box.match(/(?<=strong.+?>)[^<]+/s)?.[0] || ''
+            subName = subName.trim()
+            const name = index + ' ' + subName;
+            const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
+            const date = box.match(/(?<=datetime=\")[^\"]+/s)?.[0] || ''
+            const url = box.match(/\/sc\/webtoon\/detail[^\']+/)?.[0] || ''
+
+            let isFree = false
+            const freeTxt = box.match(/(?<=class=\"label.+\">)[^<]+/s)?.[0] || ''
+            if (freeTxt === '免费') {
+                isFree = true
+            }
+
+            return { name, cover, date, url: this.domain + url, isFree }
+        })
+
+        // 更新元数据日期
+        this.meta.publishDate = chapters[0].date
+        this.meta.chapters = chapters;
+        return chapters;
+    }
+
+    async get_cookie() {
+        this.browser = await puppeteer.launch({
+            headless: false,
+            args: ['--no-sandbox', '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
+                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
+                '--disable-web-security',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--lang=zh-CN,zh', // 设置浏览器语言
+                //'--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
+                '--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+            ],
+            defaultViewport: {
+                width: 1920,
+                height: 1920,
+            },
+        });
+
+        const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
+        const cookie = JSON.parse(cookie1)
+        this.browser.setCookie(...cookie)
+        this.page = await this.browser.newPage()
+        await this.page?.goto('https://toomics.com', {
+            waitUntil: 'networkidle2',
+            timeout: 60 * 1000,
+        })
+
+        await delay(30 * 1000)
+
+        const cookies = await this.browser.cookies();
+        fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
     }
 }

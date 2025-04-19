@@ -23,7 +23,6 @@ export class Bilibili {
     this.mangaId = params.id
     this.mangaName = params.name
     this.downloadLockedMeta = false
-    this.downloadPath = `M:\\manga\\${this.website}`
   }
 
   /**

@@ -24,60 +24,27 @@ export default class Bilibili {
         this.mangaId = params.id
         this.mangaName = params.name
         this.downloadLockedMeta = false
-        this.downloadPath = `${process.env.DOWNLOAD_PATH}/${this.website}`
+        if (process.env.DOWNLOAD_PATH) {
+            this.downloadPath = path.join(process.env.DOWNLOAD_PATH, this.website);
+        } else {
+            this.downloadPath = path.join(process.cwd(), this.website);
+        }
     }
 
     /**
      * @description: 开始下载
      */
     async start() {
-        this.browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
-                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
-                '--disable-web-security',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--lang=zh-CN,zh', // 设置浏览器语言
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
-            ],
-            defaultViewport: {
-                width: 1080,
-                height: 1920,
-            },
-        });
-
-        // 示例：将字符串 "session=abc; user=123" 转为 Puppeteer 所需格式
-        const cookieStr = process.env.BILIBILI_COOKIE || '';
-        const cookies = cookieStr.split(';').map(pair => {
-            const [name, value] = pair.trim().split('=');
-            return {
-                name: name,
-                value: value,
-                domain: '.bilibili.com', // 替换为目标网站主域名
-                path: '/',
-                secure: false,
-                sameParty: false,
-                httpOnly: false
-            };
-        });
-        this.browser.setCookie(...cookies);
+        await this.init()
 
         console.log(this.mangaName + ' 正在分析')
 
+        if (!this.browser) return
+        if (!this.page) return
         // 解析章节
-        this.page = await this.browser.newPage()
-        this.page.on('response', async response => {
-            if (/ComicDetail/.test(response.url())) {
-                const ComicDetailResponse = await response.json()
-                // 获取章节列表与漫画元数据
-                this.get_meta(ComicDetailResponse)
-            }
-        });
-        this.chapterPage = await this.browser.newPage()
+
         //https://manga.bilibili.com/detail/mc31006?from=manga_search
-        await this.page.goto(`${this.domain}/detail/mc${this.mangaId}`, { waitUntil: 'networkidle2' })
+        await this.page.goto(`${this.domain}/detail/mc${this.mangaId}`, { waitUntil: 'networkidle2', timeout: 60 * 1000 }).catch(() => { })
 
         // 等待获取元数据或timeout
 
@@ -100,7 +67,7 @@ export default class Bilibili {
                 subscribe_remove({ website: this.website, id: this.mangaId })
                 console.log(this.mangaName + ' 已完结，已移除订阅链接')
             }
-            
+
             if (oldChapterLength !== newChapterLength) {
                 await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
             } else {
@@ -161,21 +128,60 @@ export default class Bilibili {
         console.log(mangaName + ' 订阅完毕')
     }
 
-    /**
-     * 下载章节
-     * @param chapterId
-     * @param downloadPath
-     */
-    async download_chapter(chapterId: number, downloadPath: string) {
-        //'https://manga.bilibili.com/mc31006/693731?from=manga_detail'
-        if (!this.browser) return
-        if (!this.chapterPage) return
+    async init() {
+        this.browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
+                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
+                '--disable-web-security',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--lang=zh-CN,zh', // 设置浏览器语言
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
+            ],
+            defaultViewport: {
+                width: 1080,
+                height: 1920,
+            },
+        });
 
-        let document: any;
+        if (fs.existsSync('bilibili_cookie.json')) {
+            const cookies = JSON.parse(fs.readFileSync('bilibili_cookie.json', 'utf-8'));
+            await this.browser.setCookie(...cookies);
+        } else {
+            // 示例：将字符串 "session=abc; user=123" 转为 Puppeteer 所需格式
+            const cookieStr = process.env.BILIBILI_COOKIE || '';
+            const cookies = cookieStr.split(';').map(pair => {
+                const [name, value] = pair.trim().split('=');
+                return {
+                    name: name,
+                    value: value,
+                    domain: '.bilibili.com', // 替换为目标网站主域名
+                    path: '/',
+                    secure: false,
+                    sameParty: false,
+                    httpOnly: false
+                };
+            });
+            this.browser.setCookie(...cookies);
+        }
+
+        await this.set_cookie()
+
+        // 初始化漫画页
+        this.page = await this.browser.newPage()
+        this.page.on('response', async response => {
+            if (/ComicDetail/.test(response.url())) {
+                const ComicDetailResponse = await response.json()
+                // 获取章节列表与漫画元数据
+                this.get_meta(ComicDetailResponse)
+            }
+        });
+
+        // 初始化章节页
         let navigator: any;
-
-        const url = `${this.domain}/mc${this.mangaId}/${chapterId}?from=manga_detail`
-
+        this.chapterPage = await this.browser.newPage()
         await this.chapterPage.setExtraHTTPHeaders({
             'Accept-Language': 'zh-CN,zh;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -196,10 +202,27 @@ export default class Bilibili {
                 get: () => [1, 2, 3] // 返回非空数组
             });
         });
+    }
 
-        await this.chapterPage?.goto(url, { waitUntil: 'networkidle2' })
+    /**
+     * 下载章节
+     * @param chapterId
+     * @param downloadPath
+     */
+    async download_chapter(chapterId: number, downloadPath: string) {
+        //'https://manga.bilibili.com/mc31006/693731?from=manga_detail'
+        if (!this.browser) return
+        if (!this.chapterPage) return
 
-        await this.chapterPage?.setViewport({ width: 1080, height: 1440 })
+        let document: any;
+
+        const url = `${this.domain}/mc${this.mangaId}/${chapterId}?from=manga_detail`
+
+        await this.chapterPage.goto(url, { waitUntil: 'networkidle2' }).catch(() => { })
+
+        await this.set_cookie();
+
+        await this.chapterPage.setViewport({ width: 1080, height: 1440 })
 
         await this.chapterPage.locator('.image-loaded').wait()
 
@@ -265,6 +288,13 @@ export default class Bilibili {
             // 保存图片
             saveBase64Image(canvasDataURL, imagePath);
         }
+    }
+
+    async set_cookie() {
+        if (!this.browser) return;
+        const cookies = await this.browser.cookies()
+        fs.writeFileSync('bilibili-cookies.json', JSON.stringify(cookies, null, 2));
+        console.log('bilibili-cookie更新成功', new Date().toLocaleString());
     }
 
     get_order(ord: number) {
