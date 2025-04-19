@@ -50,7 +50,10 @@ export default class Toomics {
         console.log(this.mangaName + ' 正在分析')
 
         // 任务初始化
-        await this.init();
+        await this.init().catch((err) => {
+            console.error(this.mangaName + ' 任务初始化失败', 'toomics响应超时', err)
+            return
+        });
 
         if (!this.browser) return
 
@@ -135,7 +138,7 @@ export default class Toomics {
      */
     async init() {
         this.browser = await puppeteer.launch({
-            headless: true,
+            headless: false,
             timeout: 60 * 1000,
             args: ['--no-sandbox', '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
