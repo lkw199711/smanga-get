@@ -53,3 +53,7 @@ export function saveBase64Image(base64Data: any, filepath: string) {
   fs.writeFileSync(filepath, base64Image, { encoding: 'base64' });
 }
 
+export function write_log(logContent: string) {
+  console.log(logContent);
+  fs.appendFileSync('log.txt', logContent + '\n', 'utf-8');
+}

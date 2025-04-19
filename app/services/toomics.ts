@@ -3,7 +3,7 @@ import { downloadImage, get_html } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
-import { delay } from '#utils/index';
+import { delay, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
 export default class Toomics {
     private domain = 'https://toomics.com';
@@ -23,8 +23,8 @@ export default class Toomics {
     private page: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
-    private scrollStep: number = 800 // 滚动步长
-    private scrollDelay: number = 500 // 滚动延迟
+    private scrollStep: number = 400 // 滚动步长
+    private scrollDelay: number = 300 // 滚动延迟
     constructor(params: subsribeType) {
         this.website = params.website
         this.mangaId = params.id
@@ -116,7 +116,7 @@ export default class Toomics {
             if (!fs.existsSync(`${chapterFolder}.jpg`)) {
                 await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
             }
-            await this.download_chapter(chapter.url, chapterFolder)
+            await this.download_chapter(chapter.name, chapter.url, chapterFolder)
         }
 
         console.log(mangaName + ' 订阅完毕')
@@ -202,32 +202,31 @@ export default class Toomics {
         const homePageHtml = await this.page?.content()
         //flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/
         if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
-            // console.log('cookie过期，请重新登录')
-            console.log('cookie过期，尝试重新登录')
-            try {
-                await this.page.locator('div.close_popup').click()
-                await delay(2000)
-            } catch (error) {
-                console.log('没有弹窗')
-            }
+            write_log('cookie过期，尝试重新登录')
 
+            // 关闭弹窗
+            await this.page.locator('div.close_popup').click().catch(() => { })
+            await delay(2000)
 
+            // 点击菜单按钮
             await this.page.locator('button[title = "菜单"]').click().catch(() => { })
             await delay(2000)
+
+            // 点击登录按钮
             await this.page.locator('button.bg-white').filter(button => button.innerText.trim() === '登录').click().catch(() => { })
             await delay(2000)
 
-            try {
-                await this.page.locator('button[onclick="Base.changeSignInForm();"]').click()
-                await delay(2000)
-            } catch (error) {
-                console.log('没有邮箱登录按钮')
-            }
+            // 点击使用邮箱登录
+            await this.page.locator('button[onclick="Base.changeSignInForm();"]').click().catch(() => { })
+            await delay(2000)
 
+            // 填充用户名与密码
             await this.page.locator('input[name="user_id"]').fill(process.env.TOOMICS_EMAIL || '').catch(() => { })
             await delay(1000)
             await this.page.locator('input[name="user_pw"]').fill(process.env.TOOMICS_PASSWORD || '').catch(() => { })
             await delay(1000)
+
+            // 点击登录按钮
             await this.page.locator('button[type="submit"]').click().catch(() => { })
             await delay(2000)
 
@@ -235,7 +234,7 @@ export default class Toomics {
             await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
 
             if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(await this.page?.content())) {
-                console.log('登录失败，请检查账号密码')
+                write_log('登录失败，请检查账号密码')
                 // await this.browser?.close()
                 return
             }
@@ -319,15 +318,12 @@ export default class Toomics {
             return { name: title, id, cover, url: this.domain + url, isEnd, adult }
         })
 
-        console.log('获取完结漫画列表');
-        console.log(endMangaBoxs[0]);
-        console.log(endMangaList[0]);
-
         fs.writeFileSync('toomicsEnd.json', JSON.stringify(endMangaList, null, 2), 'utf-8')
 
     }
 
-    async download_chapter(url: string, downloadPath: string) {
+    async download_chapter(chapterName: string, url: string, downloadPath: string) {
+        let errImgs = 0;
         if (!this.browser) return;
         const chapterPage = await this.browser?.newPage()
         // 储存图片到内存
@@ -385,12 +381,15 @@ export default class Toomics {
             if (this.chapterPageImages[key]) {
                 fs.writeFileSync(localPath, this.chapterPageImages[key])
             } else {
+                errImgs++
                 console.error('图片下载失败:', imageUrl)
             }
         }
 
         this.chapterPageImages = {}
         chapterPage.close()
+
+        write_log(`[chapter download]${chapterName} 下载完成,错误图片 ${errImgs} 张`)
         await delay(3000)
 
     }
@@ -407,28 +406,6 @@ export default class Toomics {
     // await this.page?.goto(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, {
     //     waitUntil: 'networkidle2'
     // })
-
-    /**
-     * 下载章节
-     * @param chapterId
-     * @param downloadPath
-     */
-    async download_chapter1(url: string, downloadPath: string) {
-        // const html = await get_html(url, true)
-        // 获取图片列表
-        //let images1 = html.match(/(?<=<img id="set_image_.+src=\")http:[^\"]+[.png|.jpg]/g) || []
-        let images = html.match(/(?<=src=\")https:.+?toomics.+?[.png|.jpg]*(?=\")/g) || []
-
-        for (let i = 0; i < images.length; i++) {
-            const image = images[i]
-            const picName = i.toString().padStart(5, '0')
-            const localPath = `${downloadPath}/${picName}.jpg`
-            // console.log(images[i]);
-
-            await downloadImage(image, localPath)
-            await delay(400)
-        }
-    }
 
     get_chapters_pc() {
         const chapterBoxs = this.html?.match(/(?<=normal_ep).+?(?=<\/li>)/gs) || [];
