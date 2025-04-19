@@ -10,13 +10,30 @@ export default class TasksController {
 
     }
 
-    add({ request }: HttpContext) { 
+    add({ request }: HttpContext) {
         const { website, id, name } = request.all()
 
         if (website === 'toomics') {
             toomicsTask.add({ website, id, name })
-        } else if (website === 'bilibili') { 
+        } else if (website === 'bilibili') {
             bilibiliTask.add({ website, id, name })
+        } else {
+            return {
+                code: 400,
+                message: 'Invalid website',
+            }
+        }
+
+        return {
+            code: 200,
+            message: 'Task added successfully',
+        }
+    }
+
+    get({ request }: HttpContext) {
+        return {
+            bilibili: bilibiliTask.get(),
+            toomics: toomicsTask.get(),
         }
     }
 }

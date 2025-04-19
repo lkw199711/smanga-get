@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { downloadImage } from '#api/bilibili'
 import { subsribeType } from '#type/index.js'
-import { delay, saveBase64Image } from '#utils/index'
+import { delay, saveBase64Image, write_log } from '#utils/index'
 import puppeteer from 'puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
@@ -119,7 +119,7 @@ export default class Bilibili {
             console.log(`${mangaName} 正在下载章节 ${this.get_order(chapter.ord)} ${chapterName}`)
 
             await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
-            await this.download_chapter(chapter.targetId, chapterFolder)
+            await this.download_chapter(chapter.targetId, chapter.name, chapterFolder)
         }
 
         this.chapterPage?.close()
@@ -209,7 +209,7 @@ export default class Bilibili {
      * @param chapterId
      * @param downloadPath
      */
-    async download_chapter(chapterId: number, downloadPath: string) {
+    async download_chapter(chapterId: number, chapterName: string, downloadPath: string) {
         //'https://manga.bilibili.com/mc31006/693731?from=manga_detail'
         if (!this.browser) return
         if (!this.chapterPage) return
@@ -288,6 +288,8 @@ export default class Bilibili {
             // 保存图片
             saveBase64Image(canvasDataURL, imagePath);
         }
+
+        write_log(`[chapter download]${chapterName} 下载完成`)
     }
 
     async set_cookie() {
