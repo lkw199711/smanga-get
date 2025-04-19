@@ -57,7 +57,7 @@ import demo from '#services/test'
 // demo();
 // create_scan_cron();
 
-// task_allocation();
+task_allocation();
 /*
 const toomics = new Toomics({
   "website": "toomics",
