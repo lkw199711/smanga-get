@@ -383,24 +383,40 @@ export default class Toomics {
             return urls;
         })
 
+        // 检测是否有图片加载失败
         for (let i = 0; i < imageUrls.length; i++) {
             const imageUrl = imageUrls[i]
-            const picName = i.toString().padStart(5, '0')
-            const localPath = `${downloadPath}/${picName}.jpg`
             const key = imageUrl.split('/').pop() || imageUrl
-
-            if (this.chapterPageImages[key]) {
-                fs.writeFileSync(localPath, this.chapterPageImages[key])
-            } else {
+            if (!this.chapterPageImages[key]) {
                 errImgs++
                 console.error('图片下载失败:', imageUrl)
+            }
+        }
+
+        // 有错误图片则不进行下载 留空文件夹
+        if (errImgs > 0) {
+            write_log(`[chapter download]${chapterName} 下载失败,错误图片 ${errImgs} 张`)
+            await chapterPage.close()
+            return
+        } else {
+            // 数量正确 进行下载
+            for (let i = 0; i < imageUrls.length; i++) {
+                const imageUrl = imageUrls[i]
+                const picName = i.toString().padStart(5, '0')
+                const localPath = `${downloadPath}/${picName}.jpg`
+                const key = imageUrl.split('/').pop() || imageUrl
+                if (this.chapterPageImages[key]) {
+                    fs.writeFileSync(localPath, this.chapterPageImages[key])
+                    console.log('下载图片:', localPath)
+                } else {
+                    console.error('图片下载失败:', imageUrl)
+                }
             }
         }
 
         this.chapterPageImages = {}
         chapterPage.close()
 
-        write_log(`[chapter download]${chapterName} 下载完成,错误图片 ${errImgs} 张`)
         await delay(3000)
 
     }
