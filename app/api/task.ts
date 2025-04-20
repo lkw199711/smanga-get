@@ -1,5 +1,5 @@
 import { subsribeType } from '#type/index.js';
-import fs from 'fs'
+import fs, { write } from 'fs'
 
 const taskFile = process.cwd() + '/task.json'
 /**
@@ -84,6 +84,7 @@ class Task {
 
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
+import { write_log } from '#utils/index';
 class BilibiliTask extends Task {
     constructor(tasks: subsribeType[]) {
         super(tasks)
@@ -102,7 +103,12 @@ class BilibiliTask extends Task {
         }
 
         const bilibili = new Bilibili(task)
+
         await bilibili.start()
+            .catch((err) => {
+            bilibili.browser?.close()
+            write_log(`[Bilibili] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        })
 
         this.running = false
 
@@ -128,7 +134,10 @@ class ToomicsTask extends Task {
         }
 
         const toomics = new Toomics(task)
-        await toomics.start()
+        await toomics.start().catch((err) => {
+            toomics.browser?.close()
+            write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        })
 
         this.running = false
 

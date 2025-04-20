@@ -1,11 +1,22 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { bilibiliTask, toomicsTask } from '#api/task'
 import { write_log } from '#utils/index'
+import { subscribe_add, subscribe_clear, subscribe_read } from '#api/subsribe'
 
-export default class TasksController {
+export default class SubscribesController {
+    get() {
+        return subscribe_read()
+    }
 
     add({ request }: HttpContext) {
         const { website, id, name } = request.all()
+
+        if (!website || !id || !name) {
+            return {
+                code: 400,
+                message: 'Missing parameters',
+            }
+        }
 
         if (website === 'toomics') {
             toomicsTask.add({ website, id, name })
@@ -18,23 +29,24 @@ export default class TasksController {
             }
         }
 
-        write_log(`[task]${website} ${id} ${name} 任务添加成功`)
+        subscribe_add({ website, id, name })
+        write_log(`[subscribe]${website} ${id} ${name} 订阅添加成功`)
 
         return {
             code: 200,
-            message: 'Task added successfully',
-        }
-    }
-
-    get({ request }: HttpContext) {
-        return {
-            bilibili: bilibiliTask.get(),
-            toomics: toomicsTask.get(),
+            message: 'Subscribe added successfully',
         }
     }
 
     remove({ request }: HttpContext) {
         const { website, id } = request.all()
+
+        if (!website || !id) {
+            return {
+                code: 400,
+                message: 'Missing parameters',
+            }
+        }
 
         if (website === 'toomics') {
             toomicsTask.remove(id)
@@ -47,32 +59,20 @@ export default class TasksController {
             }
         }
 
+        write_log(`[subscribe]${website} ${id} 订阅删除成功`)
+
         return {
             code: 200,
-            message: 'Task removed successfully',
+            message: 'Subscribe removed successfully',
         }
     }
 
     clear({ request }: HttpContext) {
-        const { website } = request.all()
-
-        if (website === 'toomics') {
-            toomicsTask.clear()
-        } else if (website === 'bilibili') {
-            bilibiliTask.clear()
-        } else if (!website) {
-            bilibiliTask.clear()
-            toomicsTask.clear()
-        } else {
-            return {
-                code: 400,
-                message: 'Invalid website',
-            }
-        }
+        subscribe_clear();
 
         return {
             code: 200,
-            message: 'All tasks cleared successfully',
+            message: 'Subscribe cleared successfully',
         }
     }
 }

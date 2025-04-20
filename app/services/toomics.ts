@@ -19,7 +19,7 @@ export default class Toomics {
     private chapters: any = null
     private adult: boolean = false
 
-    private browser: puppeteer.Browser | null = null
+    public browser: puppeteer.Browser | null = null
     private page: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
@@ -210,7 +210,7 @@ export default class Toomics {
         const homePageHtml = await this.page?.content()
         //flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/
         if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
-            write_log('cookie过期，尝试重新登录')
+            write_log('[cookie]cookie过期，尝试重新登录')
 
             // 关闭弹窗
             await this.page.locator('div.close_popup').click().catch(() => { })
