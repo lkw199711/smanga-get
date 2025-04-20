@@ -138,7 +138,7 @@ export default class Toomics {
      */
     async init() {
         this.browser = await puppeteer.launch({
-            headless: false,
+            headless: true,
             timeout: 60 * 1000,
             args: ['--no-sandbox', '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}

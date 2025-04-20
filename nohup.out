@@ -1,0 +1,42 @@
+toomics-cookie更新成功 4/19/2025, 6:41:00 PM
+不要忘记我 没有更新
+不要忘记我 正在下载章节 第 2 话 不要忘记我
+正在下载章节: 第 2 话 不要忘记我
+toomics-cookie更新成功 4/19/2025, 6:41:47 PM
+开始滚动页面,等待加载图片
+[chapter download]第 2 话 不要忘记我 下载完成,错误图片 0 张
+不要忘记我 正在下载章节 第 3 话 不要忘记我
+图片下载成功: /mnt/single43/manga/toomics/不要忘记我/第 3 话 不要忘记我.jpg
+正在下载章节: 第 3 话 不要忘记我
+toomics-cookie更新成功 4/19/2025, 6:44:05 PM
+开始滚动页面,等待加载图片
+/smanga/manga-get/node_modules/puppeteer-core/src/common/CallbackRegistry.ts:99
+      this._reject(callback, new TargetCloseError('Target closed'));
+                             ^
+
+
+TargetCloseError: Protocol error (Runtime.callFunctionOn): Target closed
+    at CallbackRegistry.clear (/smanga/manga-get/node_modules/puppeteer-core/src/common/CallbackRegistry.ts:99:30)
+    at CdpCDPSession.onClosed (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/CdpSession.ts:162:21)
+    at Connection.#onClose (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/Connection.ts:226:15)
+    at WebSocket.<anonymous> (/smanga/manga-get/node_modules/puppeteer-core/src/node/NodeWebSocketTransport.ts:51:22)
+    at callListener (/smanga/manga-get/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/smanga/manga-get/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/smanga/manga-get/node_modules/ws/lib/websocket.js:272:10)
+    at Socket.socketOnClose (/smanga/manga-get/node_modules/ws/lib/websocket.js:1341:15)
+    at Socket.emit (node:events:519:28) {
+  cause: ProtocolError
+      at Callback.<instance_members_initializer> (/smanga/manga-get/node_modules/puppeteer-core/src/common/CallbackRegistry.ts:125:12)
+      at new Callback (/smanga/manga-get/node_modules/puppeteer-core/src/common/CallbackRegistry.ts:130:3)
+      at CallbackRegistry.create (/smanga/manga-get/node_modules/puppeteer-core/src/common/CallbackRegistry.ts:28:22)
+      at Connection._rawSend (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/Connection.ts:136:22)
+      at CdpCDPSession.send (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/CdpSession.ts:103:29)
+      at ExecutionContext.#evaluate (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:420:44)
+      at ExecutionContext.evaluate (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/ExecutionContext.ts:291:32)
+      at IsolatedWorld.evaluate (/smanga/manga-get/node_modules/puppeteer-core/src/cdp/IsolatedWorld.ts:196:26)
+      at CdpFrame.evaluate (/smanga/manga-get/node_modules/puppeteer-core/src/api/Frame.ts:490:35)
+      at CdpFrame.<anonymous> (/smanga/manga-get/node_modules/puppeteer-core/src/util/decorators.ts:63:21)
+}
+
+Node.js v20.18.0
