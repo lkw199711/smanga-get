@@ -6,6 +6,20 @@ import puppeteer from 'puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
 
+type chapterType = {
+    targetId: number
+    title: string
+    ord: number
+    payMode: boolean
+    payGold: number
+    isLocked: boolean
+    isFree: boolean
+    cover: string
+    publishDate: string
+    size: number
+    count: number
+}
+
 export default class Bilibili {
     private domain = 'https://manga.bilibili.com'
     private website: string
@@ -14,10 +28,11 @@ export default class Bilibili {
     private downloadPath: string
     private downloadLockedMeta: boolean
     private useMoblie: boolean = false
-    private browser: puppeteer.Browser | null = null
+    public browser: puppeteer.Browser | null = null
     private page: puppeteer.Page | null = null
     private chapterPage: puppeteer.Page | null = null
     private meta: any = null
+    private metaUpdate: boolean = false
     private chapters: any = null
     constructor(params: subsribeType) {
         this.website = params.website
@@ -68,7 +83,26 @@ export default class Bilibili {
                 console.log(this.mangaName + ' 已完结，已移除订阅链接')
             }
 
+            // 检查封面是否更新
+            if (this.meta.verticalCover !== oldMetaData.verticalCover) {
+
+                let newNum = 0;
+                while (oldMetaData['verticalCover' + newNum]) {
+                    newNum++;
+                }
+
+                // 将就封面存为新建序号
+                this.meta['verticalCover' + newNum] = oldMetaData.verticalCover
+                fs.renameSync(`${metaFolder}/cover.jpg`, `${metaFolder}/cover${newNum}.jpg`)
+                this.metaUpdate = true
+            }
+
+            // 章节更新
             if (oldChapterLength !== newChapterLength) {
+                this.metaUpdate = true
+            }
+
+            if (this.metaUpdate) {
                 await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
             } else {
                 console.log(this.mangaName + ' 没有更新')
@@ -107,6 +141,7 @@ export default class Bilibili {
                 continue
             }
 
+            
             // 已下载 跳过
             if (fs.existsSync(chapterFolder)) {
                 const files = fs.readdirSync(chapterFolder)
@@ -115,11 +150,12 @@ export default class Bilibili {
                 // 创建章节文件夹
                 await fs.promises.mkdir(chapterFolder, { recursive: true })
             }
-
-            console.log(`${mangaName} 正在下载章节 ${this.get_order(chapter.ord)} ${chapterName}`)
-
-            await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
-            await this.download_chapter(chapter.targetId, chapter.name, chapterFolder)
+            
+            // 下载封面
+            if (!fs.existsSync(`${chapterFolder}.jpg`)) {
+                await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
+            }
+            await this.download_chapter(chapter, chapterFolder)
         }
 
         this.chapterPage?.close()
@@ -209,14 +245,15 @@ export default class Bilibili {
      * @param chapterId
      * @param downloadPath
      */
-    async download_chapter(chapterId: number, chapterName: string, downloadPath: string) {
+    async download_chapter(chapter: chapterType, downloadPath: string) {
+        console.log(`${this.meta.title} 正在下载章节 ${this.get_order(chapter.ord)} ${chapter.title}`)
         //'https://manga.bilibili.com/mc31006/693731?from=manga_detail'
         if (!this.browser) return
         if (!this.chapterPage) return
 
         let document: any;
 
-        const url = `${this.domain}/mc${this.mangaId}/${chapterId}?from=manga_detail`
+        const url = `${this.domain}/mc${this.mangaId}/${chapter.targetId}?from=manga_detail`
 
         await this.chapterPage.goto(url, { waitUntil: 'networkidle2' }).catch(() => { })
 
@@ -230,41 +267,52 @@ export default class Bilibili {
 
         await delay(1000)
 
+        let scrollTop = -1;
         const scrollStep = 1200; // 滚动步长
         const scrollDelay = 500; // 滚动延迟（毫秒）
-        const scrollTimeouts = 100; // 滚动次数
 
-        // 获取所有的 image-item 元素
-        let imageItems = await this.chapterPage.$$('.image-item');
         //.ps--active-y
-        for (let rollingTimeCount = 0, i = 0; i < imageItems.length; i++) {
-            let imageLoaded = false;
-            let rollingTimes = 0;
-            const item = imageItems[i];
-
-            while (rollingTimes < scrollTimeouts && !imageLoaded) {
-                imageLoaded = await this.chapterPage.evaluate((el: any) => {
-                    return el.classList.contains('image-loaded')
-                }, item)
-                //await chapterPage.mouse.wheel({ deltaY: 1000 })
-                const scrollFloat = Math.floor(Math.random() * 201) - 100 // 随机滚动范围
-                await this.chapterPage.locator(".ps--active-y").scroll({
-                    scrollTop: scrollStep * rollingTimeCount + scrollFloat,
-                })
-                rollingTimes++
-                rollingTimeCount++
-
-                const delayFloat = Math.floor(Math.random() * 101) - 50 // 随机延迟范围
-                await delay(scrollDelay + delayFloat)
-            }
+        // 不断滚动 直到页面底部
+        console.log('开始滚动页面,等待加载图片');
+        const ps = await this.chapterPage.$('.ps--active-y');
+        if (!ps) {
+            write_log(`[chapter download] ${this.meta.title} ${chapter.title} 滚动失败`)
+            return
         }
 
-        await delay(2000)
+        while (1) {
+            const scrollFloat = Math.floor(Math.random() * 201) - 100 // 随机滚动范围
+            await this.chapterPage.locator('.ps--active-y').scroll({
+                scrollTop: scrollTop + scrollStep + scrollFloat,
+            }).catch(() => { scrollTop -= 100 })
+
+            // 获取当前滚动位置
+            const newScrollTop = await this.chapterPage.evaluate((el: any) => el.scrollTop, ps)
+
+            if (newScrollTop === scrollTop) break
+
+            scrollTop = newScrollTop
+            const delayFloat = Math.floor(Math.random() * 101) - 50 // 随机延迟范围
+            await delay(scrollDelay + delayFloat)
+        }
+
+        await delay(1000)
 
         // 获取所有 canvas 元素
-        const canvasElements = await this.chapterPage.$$('.image-loaded canvas');
+        const allCanvasElements = await this.chapterPage.$$('.image-item canvas');
+        let canvasElements = await this.chapterPage.$$('.image-loaded canvas');
 
-        if (!canvasElements.length) return;
+        // 20秒等待canvas全部加载
+        for (let i = 0; i < 10; i++) {
+            if (canvasElements.length === allCanvasElements.length) break
+            await delay(2000)
+        }
+
+        if (canvasElements.length !== allCanvasElements.length || canvasElements.length === 0) {
+            write_log(`[chapter download] ${this.meta.title} ${chapter.title} 下载失败,请手动下载`)
+            return
+        }
+
         /*
                 // 截取屏幕截图并保存到指定路径
                 const screenshotPath = path.join(downloadPath, 'baidu_homepage.png'); // 保存到当前目录
@@ -289,7 +337,7 @@ export default class Bilibili {
             saveBase64Image(canvasDataURL, imagePath);
         }
 
-        write_log(`[chapter download]${chapterName} 下载完成`)
+        write_log(`[chapter download] ${this.meta.title} ${chapter.title} 下载完成`)
     }
 
     async set_cookie() {

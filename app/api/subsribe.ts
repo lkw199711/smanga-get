@@ -45,3 +45,12 @@ export function subscribe_remove({ website, id }: { website: string, id: number 
         subscribe_write(subscribe)
     }
 }
+
+/**
+ * 清空订阅
+ * @description: 清空订阅
+ * @returns
+ */
+export function subscribe_clear() { 
+    subscribe_write([])
+}
