@@ -1,12 +1,12 @@
 import puppeteer from "puppeteer";
-
+/*
 // 监听异常退出事件
 process.on('SIGINT', cleanup);   // Ctrl+C 退出
 process.on('SIGTERM', cleanup);  // 进程终止信号
 process.on('uncaughtException', cleanup); // 未捕获异常
-
+*/
 const browser = await puppeteer.launch({
-    headless: false,
+    headless: true,
     timeout: 60 * 1000,
     args: ['--no-sandbox', '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
