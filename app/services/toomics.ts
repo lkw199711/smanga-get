@@ -1,11 +1,11 @@
 import * as fs from 'fs'
-import { downloadImage, get_html } from '#api/toomics'
+import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
 import { delay, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
-import browser from '#api/browser';
+import useBrowser from '#api/browser';
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string
@@ -14,7 +14,8 @@ export default class Toomics {
     private mangaUrl: string = ''
     private downloadPath: string
     private downloadLockedMeta: boolean
-    private downloadLockedChapter: boolean = false
+    // 是否下载付费章节
+    private downloadLockedChapter: boolean = true
     private html: string | null = null
     private meta: any = null
     private chapters: any = null
@@ -30,15 +31,13 @@ export default class Toomics {
     private metaPage: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
-    private scrollStep: number = 1000 // 滚动步长
-    private scrollDelay: number = 500 // 滚动延迟
+    private scrollStep: number = 600 // 滚动步长
+    private scrollDelay: number = 1000 // 滚动延迟
     constructor(params: subsribeType) {
         this.website = params.website
         this.mangaId = params.id
         this.mangaName = params.name
         this.downloadLockedMeta = false
-        // 是否下载付费章节
-        this.downloadLockedChapter = process.env.TOOMICS_DWONLOAD_VIP === 'on'
 
         if (process.env.DOWNLOAD_PATH) {
             this.downloadPath = path.join(process.env.DOWNLOAD_PATH, this.website);
@@ -57,10 +56,7 @@ export default class Toomics {
         console.log(this.mangaName + ' 正在分析')
 
         // 任务初始化
-        await this.init().catch((err) => {
-            console.error(this.mangaName + ' 任务初始化失败', 'toomics响应超时', err)
-            return
-        });
+        await this.init()
 
         // 获取元数据
         await this.get_meta()
@@ -69,9 +65,6 @@ export default class Toomics {
         this.get_chapters()
 
         await this.download_meta()
-
-        // return;
-        if (!browser) return
 
         // 下载章节
         for (let i = 0; i < this.chapters.length; i++) {
@@ -116,10 +109,16 @@ export default class Toomics {
      */
     async init() {
 
+        if (!useBrowser.browser?.connected) {
+            await useBrowser.init()
+        }
+
+        if (!useBrowser.browser) return;
+
         if (fs.existsSync('toomics-cookies.json')) {
             const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
             const cookie = JSON.parse(cookie1)
-            browser.setCookie(...cookie)
+            useBrowser.browser.setCookie(...cookie)
         } else {
             const cookieStr = process.env.TOOMICS_COOKIE || '';
             const cookies = cookieStr.split(';').map(pair => {
@@ -134,11 +133,11 @@ export default class Toomics {
                     httpOnly: false
                 };
             });
-            browser.setCookie(...cookies);
+            useBrowser.browser.setCookie(...cookies);
         }
 
 
-        this.page = await browser.newPage()
+        this.page = await useBrowser.browser.newPage()
 
         await this.page.setExtraHTTPHeaders({
             'Accept-Language': 'zh-CN,zh;q=0.9',
@@ -202,6 +201,7 @@ export default class Toomics {
 
             if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(await this.page?.content())) {
                 write_log('登录失败，请检查账号密码')
+                throw new Error('登录失败，请检查账号密码')
                 return
             }
         }
@@ -338,8 +338,8 @@ export default class Toomics {
 
     async download_chapter(chapterName: string, url: string, downloadPath: string) {
         let errImgs = 0, repeatImg = 0;
-        if (!browser) return;
-        this.chapterPage = await browser.newPage()
+        if (!useBrowser.browser) return;
+        this.chapterPage = await useBrowser.browser.newPage()
         // 储存图片到内存
         this.chapterPage.on('response', async (response) => {
             const url = response.url();
@@ -369,9 +369,12 @@ export default class Toomics {
         let window: any, document: any;
         await this.chapterPage.mouse.move(1000, 1000)
         while (1) {
-            await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep })
+            let protocolError = false
+            await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
             await delay(this.scrollDelay)
-            const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY)
+            const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
+            if (protocolError) continue
+
             if (nowScrollY === scrollY) break
             scrollY = nowScrollY
         }
@@ -437,14 +440,14 @@ export default class Toomics {
     }
 
     async get_html(url: string) {
-        if (!browser) {
+        if (!useBrowser.browser) {
             return ''
         }
 
-        this.metaPage = await browser.newPage()
+        this.metaPage = await useBrowser.browser.newPage()
         this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
 
-        await this.metaPage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search' }).catch(() => { })
+        await this.metaPage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search', timeout: 180 * 1000 }).catch(() => { })
         await this.set_cookie()
 
         if (/ep\//.test(this.metaPage.url())) {
@@ -462,8 +465,8 @@ export default class Toomics {
     }
 
     async set_cookie() {
-        if (!browser) return;
-        const cookies = await browser.cookies()
+        if (!useBrowser.browser) return;
+        const cookies = await useBrowser.browser.cookies()
         fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
         console.log('toomics-cookie更新成功', new Date().toLocaleString());
     }
