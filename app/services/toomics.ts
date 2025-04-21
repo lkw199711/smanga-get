@@ -5,7 +5,7 @@ import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
 import { delay, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
-import { browser, browserPhone } from '#api/browser';
+import browser from '#api/browser';
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string
@@ -56,6 +56,12 @@ export default class Toomics {
         // 解析章节
         console.log(this.mangaName + ' 正在分析')
 
+        // 任务初始化
+        await this.init().catch((err) => {
+            console.error(this.mangaName + ' 任务初始化失败', 'toomics响应超时', err)
+            return
+        });
+
         // 获取元数据
         await this.get_meta()
 
@@ -64,11 +70,6 @@ export default class Toomics {
 
         await this.download_meta()
 
-        // 任务初始化
-        await this.init().catch((err) => {
-            console.error(this.mangaName + ' 任务初始化失败', 'toomics响应超时', err)
-            return
-        });
         // return;
         if (!browser) return
 
@@ -86,7 +87,6 @@ export default class Toomics {
                 continue
             }
 
-            console.log(`${this.mangaName} 正在下载章节 ${chapterName}`)
             // 已下载 跳过
             if (fs.existsSync(chapterFolder)) {
                 const files = fs.readdirSync(chapterFolder)
@@ -100,10 +100,10 @@ export default class Toomics {
         }
 
         // 关闭浏览器 释放资源
-        this.page?.close()
-        this.chapterPage?.close()
-        this.checkPage?.close()
-        this.metaPage?.close()
+        await this.page?.close().catch(() => { })
+        await this.chapterPage?.close().catch(() => { })
+        await this.checkPage?.close().catch(() => { })
+        await this.metaPage?.close().catch(() => { })
 
         console.log(this.mangaName + ' 订阅完毕')
     }
@@ -336,29 +336,6 @@ export default class Toomics {
         return chapters;
     }
 
-    async get_end_manga() {
-        const endMangaUrl = 'https://toomics.com/sc/webtoon/ranking/genre/2'
-        // const html = await get_html(endMangaUrl)
-        const endMangaBoxs = html.match(/(?<=<li>.+?<div class=\"visual\">).+?(?=<\/li>)/gs) || [];
-
-        const endMangaList = endMangaBoxs.map((box: string) => {
-            let title = box.match(/(?<=title\">)[^<"]+/)?.[0] || ''
-            title = title.trim()
-            const endTxt = box.match(/(?<=ico_fin\">)[^<]+/s)?.[0] || ''
-            const isEnd = endTxt.trim() === 'End' ? true : false
-            const adultTxt = box.match(/(?<=ico_19plus\">)[^<]+/s)?.[0] || ''
-            const adult = adultTxt.trim() === '18+' ? true : false
-            let cover = box.match(/(?<=src=\")[^\"]+/)?.[0] || ''
-            if (!cover) cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
-            const url = box.match(/(?<=href=\")[^\"]+/)?.[0] || ''
-            const id = url.match(/(?<=toon\/)[0-9]+/s)?.[0] || ''
-            return { name: title, id, cover, url: this.domain + url, isEnd, adult }
-        })
-
-        fs.writeFileSync('toomicsEnd.json', JSON.stringify(endMangaList, null, 2), 'utf-8')
-
-    }
-
     async download_chapter(chapterName: string, url: string, downloadPath: string) {
         let errImgs = 0, repeatImg = 0;
         if (!browser) return;
@@ -460,50 +437,21 @@ export default class Toomics {
     }
 
     async get_html(url: string) {
-        if (!browserPhone) {
+        if (!browser) {
             return ''
         }
 
-        let Base: any;
-
-        if (fs.existsSync('toomics-cookies-nouser.json')) {
-            const cookie1 = fs.readFileSync('toomics-cookies-nouser.json', 'utf-8')
-            const cookie = JSON.parse(cookie1)
-            browserPhone.setCookie(...cookie)
-        }
-
-        this.checkPage = await browserPhone.newPage()
-        await this.checkPage.goto(this.domain + '/sc', { waitUntil: 'networkidle2', timeout: 60 * 1000 })
-        let pcHtml = await this.checkPage.content()
-        if (/<button class=\"group active\">/.test(pcHtml)) {
-            console.log('元数据成人模式未开启,尝试打开成人模式');
-            await this.checkPage.evaluate(() => {
-                Base.setDisplay('A', '/sc');
-            })
-
-            await this.checkPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
-        }
-
-        pcHtml = await this.checkPage.content()
-
-        if (/<button class=\"group active\">/.test(pcHtml)) {
-            throw new Error('成人模式打开失败,退出任务')
-        }
-
-        this.set_cookie_nouser();
-
-        this.checkPage.close()
-
-        this.metaPage = await browserPhone.newPage()
+        this.metaPage = await browser.newPage()
+        this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
 
         await this.metaPage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search' }).catch(() => { })
-        await this.set_cookie_nouser()
+        await this.set_cookie()
 
         if (/ep\//.test(this.metaPage.url())) {
             await this.metaPage.locator('h1 a').click().catch(() => { })
             await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
             await delay(2000)
-            await this.set_cookie_nouser()
+            await this.set_cookie()
         }
 
         await delay(2000)
@@ -520,60 +468,142 @@ export default class Toomics {
         console.log('toomics-cookie更新成功', new Date().toLocaleString());
     }
 
-    async set_cookie_nouser() {
-        if (!browserPhone) return;
-        const cookies = await browserPhone.cookies()
-        fs.writeFileSync('toomics-cookies-nouser.json', JSON.stringify(cookies, null, 2));
-        console.log('toomics-cookie-nouser更新成功', new Date().toLocaleString());
-    }
-
-    // 以下为暂未使用的方法
-    // 元数据
-    // await this.page?.goto(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, {
-    //     waitUntil: 'networkidle2'
-    // })
-
-    get_chapters_pc() {
-        const chapterBoxs = this.html?.match(/(?<=normal_ep).+?(?=<\/li>)/gs) || [];
-        const chapters = chapterBoxs.map((box: string) => {
-            let index = box.match(/(?<=class=\"num\">)[^<]+/s)?.[0] || ''
-            index = index.trim()
-            let subName = box.match(/(?<=strong.+?>)[^<]+/s)?.[0] || ''
-            subName = subName.trim()
-            const name = index + ' ' + subName;
-            const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
-            const date = box.match(/(?<=datetime=\")[^\"]+/s)?.[0] || ''
-            const url = box.match(/\/sc\/webtoon\/detail[^\']+/)?.[0] || ''
-
-            let isFree = false
-            const freeTxt = box.match(/(?<=class=\"label.+\">)[^<]+/s)?.[0] || ''
-            if (freeTxt === '免费') {
-                isFree = true
+    /*
+        async get_html1(url: string) {
+            if (!browserPhone) {
+                return ''
             }
+    
+            let Base: any;
+    
+            if (fs.existsSync('toomics-cookies-nouser.json')) {
+                const cookie1 = fs.readFileSync('toomics-cookies-nouser.json', 'utf-8')
+                const cookie = JSON.parse(cookie1)
+                browserPhone.setCookie(...cookie)
+            }
+    
+            this.checkPage = await browserPhone.newPage()
+            await this.checkPage.goto(this.domain + '/sc', { waitUntil: 'networkidle2', timeout: 60 * 1000 })
+            let pcHtml = await this.checkPage.content()
+            if (/<button class=\"group active\">/.test(pcHtml)) {
+                console.log('元数据成人模式未开启,尝试打开成人模式');
+                await this.checkPage.evaluate(() => {
+                    Base.setDisplay('A', '/sc');
+                })
+    
+                await this.checkPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+            }
+    
+            pcHtml = await this.checkPage.content()
+    
+            if (/<button class=\"group active\">/.test(pcHtml)) {
+                throw new Error('成人模式打开失败,退出任务')
+            }
+    
+            this.set_cookie_nouser();
+    
+            this.checkPage.close()
+    
+            this.metaPage = await browserPhone.newPage()
+    
+            await this.metaPage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search' }).catch(() => { })
+            await this.set_cookie_nouser()
+    
+            if (/ep\//.test(this.metaPage.url())) {
+                await this.metaPage.locator('h1 a').click().catch(() => { })
+                await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+                await delay(2000)
+                await this.set_cookie_nouser()
+            }
+    
+            await delay(2000)
+            const html = await this.metaPage.content()
+    
+            await this.metaPage.close()
+            return html
+        }
+    
+        
+        async get_end_manga() {
+            const endMangaUrl = 'https://toomics.com/sc/webtoon/ranking/genre/2'
+            // const html = await get_html(endMangaUrl)
+            const endMangaBoxs = html.match(/(?<=<li>.+?<div class=\"visual\">).+?(?=<\/li>)/gs) || [];
+    
+            const endMangaList = endMangaBoxs.map((box: string) => {
+                let title = box.match(/(?<=title\">)[^<"]+/)?.[0] || ''
+                title = title.trim()
+                const endTxt = box.match(/(?<=ico_fin\">)[^<]+/s)?.[0] || ''
+                const isEnd = endTxt.trim() === 'End' ? true : false
+                const adultTxt = box.match(/(?<=ico_19plus\">)[^<]+/s)?.[0] || ''
+                const adult = adultTxt.trim() === '18+' ? true : false
+                let cover = box.match(/(?<=src=\")[^\"]+/)?.[0] || ''
+                if (!cover) cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
+                const url = box.match(/(?<=href=\")[^\"]+/)?.[0] || ''
+                const id = url.match(/(?<=toon\/)[0-9]+/s)?.[0] || ''
+                return { name: title, id, cover, url: this.domain + url, isEnd, adult }
+            })
+    
+            fs.writeFileSync('toomicsEnd.json', JSON.stringify(endMangaList, null, 2), 'utf-8')
+    
+        }
+        
+    
+        async set_cookie_nouser() {
+            if (!browserPhone) return;
+            const cookies = await browserPhone.cookies()
+            fs.writeFileSync('toomics-cookies-nouser.json', JSON.stringify(cookies, null, 2));
+            console.log('toomics-cookie-nouser更新成功', new Date().toLocaleString());
+        }
+    
+        // 以下为暂未使用的方法
+        // 元数据
+        // await this.page?.goto(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, {
+        //     waitUntil: 'networkidle2'
+        // })
+    
+        get_chapters_pc() {
+            const chapterBoxs = this.html?.match(/(?<=normal_ep).+?(?=<\/li>)/gs) || [];
+            const chapters = chapterBoxs.map((box: string) => {
+                let index = box.match(/(?<=class=\"num\">)[^<]+/s)?.[0] || ''
+                index = index.trim()
+                let subName = box.match(/(?<=strong.+?>)[^<]+/s)?.[0] || ''
+                subName = subName.trim()
+                const name = index + ' ' + subName;
+                const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
+                const date = box.match(/(?<=datetime=\")[^\"]+/s)?.[0] || ''
+                const url = box.match(/\/sc\/webtoon\/detail[^\']+/)?.[0] || ''
+    
+                let isFree = false
+                const freeTxt = box.match(/(?<=class=\"label.+\">)[^<]+/s)?.[0] || ''
+                if (freeTxt === '免费') {
+                    isFree = true
+                }
+    
+                return { name, cover, date, url: this.domain + url, isFree }
+            })
+    
+            // 更新元数据日期
+            this.meta.publishDate = chapters[0].date
+            this.meta.chapters = chapters;
+            return chapters;
+        }
+    
+        async get_cookie() {
+            if (!browser) return;
+            const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
+            const cookie = JSON.parse(cookie1)
+            browser.setCookie(...cookie)
+            this.page = await browser.newPage()
+            await this.page?.goto('https://toomics.com', {
+                waitUntil: 'networkidle2',
+                timeout: 60 * 1000,
+            })
+    
+            await delay(30 * 1000)
+    
+            const cookies = await browser.cookies();
+            fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
+        }
+    */
 
-            return { name, cover, date, url: this.domain + url, isFree }
-        })
-
-        // 更新元数据日期
-        this.meta.publishDate = chapters[0].date
-        this.meta.chapters = chapters;
-        return chapters;
-    }
-
-    async get_cookie() {
-        if (!browser) return;
-        const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
-        const cookie = JSON.parse(cookie1)
-        browser.setCookie(...cookie)
-        this.page = await browser.newPage()
-        await this.page?.goto('https://toomics.com', {
-            waitUntil: 'networkidle2',
-            timeout: 60 * 1000,
-        })
-
-        await delay(30 * 1000)
-
-        const cookies = await browser.cookies();
-        fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
-    }
 }
