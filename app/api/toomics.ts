@@ -1,7 +1,7 @@
 import Axios from 'axios'
 import * as fs from 'fs'
 
-const cookie = process.env.TOOMICS_COOKIE
+const cookie = process.env.TOOMICS_COOKIE_NOUSER
 
 export async function downloadImage(url: string, path: string, reTry: boolean = true) {
     try {
@@ -26,6 +26,8 @@ const axios = Axios.create({
     //   baseURL: 'https://manga.bilibili.com',
     timeout: 5000,
     headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        'Cookie': cookie,
         'Origin': 'https://toomics.com/',
         'Referer': 'https://toomics.com/',
     },
@@ -36,14 +38,20 @@ const axios = Axios.create({
 const axiosToomicsByPhone = Axios.create({
     baseURL: 'https://toomics.com',
     headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'Cookie': cookie,
+        'Origin': 'https://toomics.com/',
+        'Referer': 'https://toomics.com/',
     },
 })
 
 const axiosToomics = Axios.create({
     baseURL: 'https://toomics.com',
     headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        'Cookie': cookie,
+        'Origin': 'https://toomics.com/',
+        'Referer': 'https://toomics.com/',
     },
 })
 

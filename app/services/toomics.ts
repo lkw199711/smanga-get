@@ -5,11 +5,13 @@ import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
 import { delay, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
+import { browser, browserPhone } from '#api/browser';
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string
     private mangaId: number
     private mangaName: string
+    private mangaUrl: string = ''
     private downloadPath: string
     private downloadLockedMeta: boolean
     private downloadLockedChapter: boolean = false
@@ -18,13 +20,17 @@ export default class Toomics {
     private meta: any = null
     private chapters: any = null
     private adult: boolean = false
+    private mangaFolder: string = ''
+    private metaFolder: string = ''
+    private metaUpdate: boolean = false
+    private metaOverWrite: boolean = false
 
     public browser: puppeteer.Browser | null = null
     private page: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
-    private scrollStep: number = 200 // 滚动步长
-    private scrollDelay: number = 300 // 滚动延迟
+    private scrollStep: number = 1000 // 滚动步长
+    private scrollDelay: number = 500 // 滚动延迟
     constructor(params: subsribeType) {
         this.website = params.website
         this.mangaId = params.id
@@ -49,56 +55,27 @@ export default class Toomics {
         // 解析章节
         console.log(this.mangaName + ' 正在分析')
 
-        // 任务初始化
-        await this.init().catch((err) => {
-            console.error(this.mangaName + ' 任务初始化失败', 'toomics响应超时', err)
-            return
-        });
-
-        if (!this.browser) return
-
         // 获取元数据
         await this.get_meta()
 
         // 获取章节列表
         this.get_chapters()
 
-        // 漫画名删除特殊字符
-        const mangaName = this.meta.title.replaceAll(/[<>:"/\\|?*]/g, '')
-        // 创建元数据文件夹
-        const metaFolder = `${this.downloadPath}/${mangaName}-smanga-info`
-        if (!fs.existsSync(metaFolder)) await fs.promises.mkdir(metaFolder, { recursive: true })
-        const metaFile = `${metaFolder}/meta.json`
-        if (fs.existsSync(metaFile)) {
-            const rawData = fs.readFileSync(metaFile, 'utf-8')
-            const oldMetaData = JSON.parse(rawData)
+        await this.download_meta()
 
-            if (this.meta.finished && this.downloadLockedChapter) {
-                // 移除订阅链接
-                subscribe_remove({ website: this.website, id: this.mangaId })
-                console.log(this.mangaName + ' 已完结，已移除订阅链接')
-            }
-
-            if (oldMetaData.chapters.length !== this.chapters.length) {
-                await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
-            } else {
-                console.log(this.mangaName + ' 没有更新')
-            }
-        } else {
-            // 写入元数据
-            await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
-
-            // 封面图
-            await downloadImage(this.meta.cover, `${metaFolder}/cover.jpg`)
-            await downloadImage(this.meta.banner, `${metaFolder}/banner.jpg`)
-            await downloadImage(this.meta.bannerBackground, `${metaFolder}/bannerBackground.jpg`)
-        }
+        // 任务初始化
+        await this.init().catch((err) => {
+            console.error(this.mangaName + ' 任务初始化失败', 'toomics响应超时', err)
+            return
+        });
+        // return;
+        if (!this.browser) return
 
         // 下载章节
         for (let i = 0; i < this.chapters.length; i++) {
             const chapter = this.chapters[i]
             const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
-            const chapterFolder = `${this.downloadPath}/${mangaName}/${chapterName}`
+            const chapterFolder = `${this.downloadPath}/${this.mangaName}/${chapterName}`
             if (!chapter.isFree && !this.downloadLockedChapter) {
                 // 虽然未解锁 但是仍然下载封面 创建目录
                 if (this.downloadLockedMeta && !fs.existsSync(chapterFolder)) {
@@ -108,6 +85,7 @@ export default class Toomics {
                 continue
             }
 
+            console.log(`${this.mangaName} 正在下载章节 ${chapterName}`)
             // 已下载 跳过
             if (fs.existsSync(chapterFolder)) {
                 const files = fs.readdirSync(chapterFolder)
@@ -117,17 +95,13 @@ export default class Toomics {
                 await fs.promises.mkdir(chapterFolder, { recursive: true })
             }
 
-            console.log(`${mangaName} 正在下载章节 ${chapterName}`)
-            if (!fs.existsSync(`${chapterFolder}.jpg`)) {
-                await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
-            }
             await this.download_chapter(chapter.name, chapter.url, chapterFolder)
         }
 
         // 关闭浏览器 释放资源
         this.browser.close()
 
-        console.log(mangaName + ' 订阅完毕')
+        console.log(this.mangaName + ' 订阅完毕')
     }
 
     /**
@@ -138,7 +112,7 @@ export default class Toomics {
      */
     async init() {
         this.browser = await puppeteer.launch({
-            headless: true,
+            headless: false,
             timeout: 60 * 1000,
             args: ['--no-sandbox', '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
@@ -148,7 +122,6 @@ export default class Toomics {
                 '--disable-software-rasterizer',
                 '--lang=zh-CN,zh', // 设置浏览器语言
                 '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
-                //'--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
             ],
             defaultViewport: {
                 width: 1920,
@@ -208,7 +181,6 @@ export default class Toomics {
         })
 
         const homePageHtml = await this.page?.content()
-        //flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/
         if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
             write_log('[cookie]cookie过期，尝试重新登录')
 
@@ -256,7 +228,11 @@ export default class Toomics {
      * @returns 
      */
     async get_meta() {
-        this.html = await get_html(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, true)
+        console.log('正在获取元数据');
+
+        //this.html = await get_html(`https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`, true)
+        this.mangaUrl = `https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`
+        this.html = await this.get_html(this.mangaUrl)
 
         let title = this.html?.match(/(?<=<h2.+>)[^<]+/s)?.[0] || '';
         title = title.trim()
@@ -272,6 +248,73 @@ export default class Toomics {
 
         this.meta = {
             title, author, finished, audlt, describe, banner, cover, bannerBackground,
+        }
+
+        if (!finished) {
+            this.downloadPath = this.downloadPath + '-连载'
+        }
+
+        this.mangaName = title.replaceAll(/[<>:"/\\|?*]/g, '')
+    }
+
+    async download_meta() {
+        // 创建元数据文件夹
+        this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
+        this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
+        if (!fs.existsSync(this.metaFolder)) await fs.promises.mkdir(this.metaFolder, { recursive: true })
+        if (!fs.existsSync(this.mangaFolder)) await fs.promises.mkdir(this.mangaFolder, { recursive: true })
+
+        const metaFile = `${this.metaFolder}/meta.json`
+        if (fs.existsSync(metaFile)) {
+            const rawData = fs.readFileSync(metaFile, 'utf-8')
+            const oldMetaData = JSON.parse(rawData)
+
+            // 检查封面是否更新
+            if (this.meta.cover !== oldMetaData.cover) {
+
+                let newNum = 0;
+                while (oldMetaData['cover' + newNum]) {
+                    newNum++;
+                }
+
+                // 将就封面存为新建序号
+                this.meta['cover' + newNum] = oldMetaData.cover
+                fs.renameSync(`${this.metaFolder}/cover.jpg`, `${this.metaFolder}/cover${newNum}.jpg`)
+                this.metaUpdate = true
+            }
+
+            // 章节更新
+            if (oldMetaData.chapters.length !== this.chapters.length) {
+                this.metaUpdate = true
+            }
+
+            // 移除完结的订阅
+            if (this.meta.finished && this.downloadLockedChapter) {
+                subscribe_remove({ website: this.website, id: this.mangaId })
+                console.log(this.mangaName + ' 已完结，已移除订阅链接')
+            }
+        }
+
+        if (!fs.existsSync(metaFile) || this.metaOverWrite || this.metaUpdate) {
+            // 写入元数据
+            await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
+
+            // 封面图
+            await downloadImage(this.meta.cover, `${this.metaFolder}/cover.jpg`)
+            await downloadImage(this.meta.banner, `${this.metaFolder}/banner.jpg`)
+            await downloadImage(this.meta.bannerBackground, `${this.metaFolder}/bannerBackground.jpg`)
+        } else {
+            console.log(this.mangaName + ' 没有更新')
+        }
+
+        for (let i = 0; i < this.chapters.length; i++) {
+            const chapter = this.chapters[i]
+            const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
+            const chapterFolder = `${this.mangaFolder}/${chapterName}`
+            // 下载章节封面
+            if (this.metaOverWrite || !fs.existsSync(`${chapterFolder}.jpg`)) {
+                await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
+            }
         }
     }
 
@@ -333,15 +376,14 @@ export default class Toomics {
     async download_chapter(chapterName: string, url: string, downloadPath: string) {
         let errImgs = 0;
         if (!this.browser) return;
-        const chapterPage = await this.browser?.newPage()
+        const chapterPage = await this.browser.newPage()
         // 储存图片到内存
         chapterPage.on('response', async (response) => {
             const url = response.url();
             if (response.request().resourceType() === 'image') {
                 try {
                     const buffer = await response.buffer();
-                    const filename = url.split('/').pop() || url;
-                    this.chapterPageImages[filename] = buffer;
+                    this.chapterPageImages[url] = buffer;
                 } catch (e) { }
             }
         })
@@ -351,7 +393,8 @@ export default class Toomics {
 
         await chapterPage.goto(url, {
             waitUntil: 'networkidle2',
-            timeout: 60 * 1000
+            timeout: 60 * 1000,
+            referer: this.mangaUrl
         }).catch(() => { })
 
         // 获取最新cookie
@@ -375,7 +418,7 @@ export default class Toomics {
 
         // 等待图片网络请求完成
         await chapterPage.waitForNetworkIdle().catch(() => { })
-
+        const finishedImages = [];
         // 获取所有图片的url
         const imageUrls = await chapterPage.evaluate(() => {
             const els = document.querySelectorAll('img[id^="set_image_"]')
@@ -386,8 +429,7 @@ export default class Toomics {
         // 检测是否有图片加载失败
         for (let i = 0; i < imageUrls.length; i++) {
             const imageUrl = imageUrls[i]
-            const key = imageUrl.split('/').pop() || imageUrl
-            if (!this.chapterPageImages[key]) {
+            if (!this.chapterPageImages[imageUrl]) {
                 errImgs++
                 console.error('图片下载失败:', imageUrl)
             }
@@ -404,14 +446,11 @@ export default class Toomics {
                 const imageUrl = imageUrls[i]
                 const picName = i.toString().padStart(5, '0')
                 const localPath = `${downloadPath}/${picName}.jpg`
-                const key = imageUrl.split('/').pop() || imageUrl
-                if (this.chapterPageImages[key]) {
-                    fs.writeFileSync(localPath, this.chapterPageImages[key])
-                    console.log('下载图片:', localPath)
-                } else {
-                    console.error('图片下载失败:', imageUrl)
-                }
+
+                fs.writeFileSync(localPath, this.chapterPageImages[imageUrl])
             }
+
+            write_log(`[chapter download]${chapterName} 下载成功`)
         }
 
         this.chapterPageImages = {}
@@ -421,11 +460,70 @@ export default class Toomics {
 
     }
 
+    async get_html(url: string) {
+        if (!browserPhone) {
+            return ''
+        }
+
+        let Base: any, document: any, window: any;
+
+        if (fs.existsSync('toomics-cookies-nouser.json')) {
+            const cookie1 = fs.readFileSync('toomics-cookies-nouser.json', 'utf-8')
+            const cookie = JSON.parse(cookie1)
+            browserPhone.setCookie(...cookie)
+        }
+
+        const checkPage = await browserPhone.newPage()
+        await checkPage.goto(this.domain + '/sc', { waitUntil: 'networkidle2' })
+        let pcHtml = await checkPage.content()
+        if (/<button class=\"group active\">/.test(pcHtml)) {
+            console.log('元数据成人模式未开启,尝试打开成人模式');
+            await checkPage.evaluate(() => {
+                Base.setDisplay('A', '/sc');
+            })
+
+            await checkPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+        }
+
+        pcHtml = await checkPage.content()
+
+        if (/<button class=\"group active\">/.test(pcHtml)) {
+            throw new Error('成人模式打开失败,退出任务')
+        }
+
+        this.set_cookie_nouser();
+
+        const phonePage = await browserPhone.newPage()
+
+        await phonePage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search' }).catch(() => { })
+        await this.set_cookie_nouser()
+
+        if (/ep\//.test(phonePage.url())) {
+            await phonePage.locator('h1 a').click().catch(() => { })
+            await phonePage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+            await delay(2000)
+            await this.set_cookie_nouser()
+        }
+
+        await delay(2000)
+        const html = await phonePage.content()
+
+        await phonePage.close()
+        return html
+    }
+
     async set_cookie() {
         if (!this.browser) return;
         const cookies = await this.browser.cookies()
         fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
         console.log('toomics-cookie更新成功', new Date().toLocaleString());
+    }
+
+    async set_cookie_nouser() {
+        if (!browserPhone) return;
+        const cookies = await browserPhone.cookies()
+        fs.writeFileSync('toomics-cookies-nouser.json', JSON.stringify(cookies, null, 2));
+        console.log('toomics-cookie-nouser更新成功', new Date().toLocaleString());
     }
 
     // 以下为暂未使用的方法

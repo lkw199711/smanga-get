@@ -134,10 +134,11 @@ class ToomicsTask extends Task {
         }
 
         const toomics = new Toomics(task)
-        await toomics.start().catch((err) => {
-            toomics.browser?.close()
-            write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
-        })
+        await toomics.start()
+        //     .catch((err) => {
+        //     toomics.browser?.close()
+        //     write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        // })
 
         this.running = false
 

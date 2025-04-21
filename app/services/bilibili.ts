@@ -25,6 +25,7 @@ export default class Bilibili {
     private website: string
     private mangaId: number
     private mangaName: string
+    private mangaUrl: string = ''
     private downloadPath: string
     private downloadLockedMeta: boolean
     private useMoblie: boolean = false
@@ -59,7 +60,8 @@ export default class Bilibili {
         // 解析章节
 
         //https://manga.bilibili.com/detail/mc31006?from=manga_search
-        await this.page.goto(`${this.domain}/detail/mc${this.mangaId}`, { waitUntil: 'networkidle2', timeout: 60 * 1000 }).catch(() => { })
+        this.mangaUrl = `${this.domain}/detail/mc${this.mangaId}`
+        await this.page.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: this.domain, timeout: 60 * 1000 }).catch(() => { })
 
         // 等待获取元数据或timeout
 
@@ -94,6 +96,11 @@ export default class Bilibili {
                 // 将就封面存为新建序号
                 this.meta['verticalCover' + newNum] = oldMetaData.verticalCover
                 fs.renameSync(`${metaFolder}/cover.jpg`, `${metaFolder}/cover${newNum}.jpg`)
+                // 封面图
+                await downloadImage(this.meta.horizontalCover, `${metaFolder}/horizontalCover.jpg`)
+                await downloadImage(this.meta.squareCover, `${metaFolder}/squareCover.jpg`)
+                await downloadImage(this.meta.verticalCover, `${metaFolder}/verticalCover.jpg`)
+                await downloadImage(this.meta.verticalCover, `${metaFolder}/cover.jpg`)
                 this.metaUpdate = true
             }
 
@@ -141,7 +148,7 @@ export default class Bilibili {
                 continue
             }
 
-            
+
             // 已下载 跳过
             if (fs.existsSync(chapterFolder)) {
                 const files = fs.readdirSync(chapterFolder)
@@ -150,7 +157,7 @@ export default class Bilibili {
                 // 创建章节文件夹
                 await fs.promises.mkdir(chapterFolder, { recursive: true })
             }
-            
+
             // 下载封面
             if (!fs.existsSync(`${chapterFolder}.jpg`)) {
                 await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
@@ -255,7 +262,7 @@ export default class Bilibili {
 
         const url = `${this.domain}/mc${this.mangaId}/${chapter.targetId}?from=manga_detail`
 
-        await this.chapterPage.goto(url, { waitUntil: 'networkidle2' }).catch(() => { })
+        await this.chapterPage.goto(url, { waitUntil: 'networkidle2', referer: this.mangaUrl }).catch(() => { })
 
         await this.set_cookie();
 
@@ -394,5 +401,7 @@ export default class Bilibili {
             banners: data.horizontal_covers,
             chapters: this.chapters,
         }
+
+        this.mangaName = this.meta.title.replaceAll(/[<>:"/\\|?*]/g, '')
     }
 }
