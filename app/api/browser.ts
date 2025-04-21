@@ -1,5 +1,10 @@
 import puppeteer from "puppeteer";
 
+// 监听异常退出事件
+process.on('SIGINT', cleanup);   // Ctrl+C 退出
+process.on('SIGTERM', cleanup);  // 进程终止信号
+process.on('uncaughtException', cleanup); // 未捕获异常
+
 const browser = await puppeteer.launch({
     headless: true,
     timeout: 60 * 1000,
@@ -35,5 +40,10 @@ const browserPhone = await puppeteer.launch({
         height: 1440,
     },
 })
+
+async function cleanup() {
+    await browser.close();
+    await browserPhone.close();
+}
 
 export { browser, browserPhone }

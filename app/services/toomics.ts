@@ -15,7 +15,6 @@ export default class Toomics {
     private downloadPath: string
     private downloadLockedMeta: boolean
     private downloadLockedChapter: boolean = false
-    private useMoblie: boolean = false
     private html: string | null = null
     private meta: any = null
     private chapters: any = null
@@ -25,8 +24,10 @@ export default class Toomics {
     private metaUpdate: boolean = false
     private metaOverWrite: boolean = false
 
-    public browser: puppeteer.Browser | null = null
     private page: puppeteer.Page | null = null
+    private chapterPage: puppeteer.Page | null = null
+    private checkPage: puppeteer.Page | null = null
+    private metaPage: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
     private scrollStep: number = 1000 // 滚动步长
@@ -69,7 +70,7 @@ export default class Toomics {
             return
         });
         // return;
-        if (!this.browser) return
+        if (!browser) return
 
         // 下载章节
         for (let i = 0; i < this.chapters.length; i++) {
@@ -99,7 +100,10 @@ export default class Toomics {
         }
 
         // 关闭浏览器 释放资源
-        this.browser.close()
+        this.page?.close()
+        this.chapterPage?.close()
+        this.checkPage?.close()
+        this.metaPage?.close()
 
         console.log(this.mangaName + ' 订阅完毕')
     }
@@ -111,28 +115,11 @@ export default class Toomics {
      * @returns 
      */
     async init() {
-        this.browser = await puppeteer.launch({
-            headless: true,
-            timeout: 60 * 1000,
-            args: ['--no-sandbox', '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
-                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
-                '--disable-web-security',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--lang=zh-CN,zh', // 设置浏览器语言
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
-            ],
-            defaultViewport: {
-                width: 1920,
-                height: 1440,
-            },
-        });
 
         if (fs.existsSync('toomics-cookies.json')) {
             const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
             const cookie = JSON.parse(cookie1)
-            this.browser.setCookie(...cookie)
+            browser.setCookie(...cookie)
         } else {
             const cookieStr = process.env.TOOMICS_COOKIE || '';
             const cookies = cookieStr.split(';').map(pair => {
@@ -147,11 +134,11 @@ export default class Toomics {
                     httpOnly: false
                 };
             });
-            this.browser.setCookie(...cookies);
+            browser.setCookie(...cookies);
         }
 
 
-        this.page = await this.browser.newPage()
+        this.page = await browser.newPage()
 
         await this.page.setExtraHTTPHeaders({
             'Accept-Language': 'zh-CN,zh;q=0.9',
@@ -180,7 +167,7 @@ export default class Toomics {
             timeout: 60 * 1000,
         })
 
-        const homePageHtml = await this.page?.content()
+        const homePageHtml = await this.page.content()
         if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
             write_log('[cookie]cookie过期，尝试重新登录')
 
@@ -215,7 +202,6 @@ export default class Toomics {
 
             if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(await this.page?.content())) {
                 write_log('登录失败，请检查账号密码')
-                // await this.browser?.close()
                 return
             }
         }
@@ -374,11 +360,11 @@ export default class Toomics {
     }
 
     async download_chapter(chapterName: string, url: string, downloadPath: string) {
-        let errImgs = 0;
-        if (!this.browser) return;
-        const chapterPage = await this.browser.newPage()
+        let errImgs = 0, repeatImg = 0;
+        if (!browser) return;
+        this.chapterPage = await browser.newPage()
         // 储存图片到内存
-        chapterPage.on('response', async (response) => {
+        this.chapterPage.on('response', async (response) => {
             const url = response.url();
             if (response.request().resourceType() === 'image') {
                 try {
@@ -391,7 +377,7 @@ export default class Toomics {
         // 开始下载章节
         console.log('正在下载章节:', chapterName)
 
-        await chapterPage.goto(url, {
+        await this.chapterPage.goto(url, {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
             referer: this.mangaUrl
@@ -404,11 +390,11 @@ export default class Toomics {
         console.log('开始滚动页面,等待加载图片');
         let scrollY = -1;
         let window: any, document: any;
-        await chapterPage.mouse.move(1000, 1000)
+        await this.chapterPage.mouse.move(1000, 1000)
         while (1) {
-            await chapterPage.mouse.wheel({ deltaY: this.scrollStep })
+            await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep })
             await delay(this.scrollDelay)
-            const nowScrollY = await chapterPage.evaluate(() => window.scrollY)
+            const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY)
             if (nowScrollY === scrollY) break
             scrollY = nowScrollY
         }
@@ -417,10 +403,10 @@ export default class Toomics {
         await delay(3000)
 
         // 等待图片网络请求完成
-        await chapterPage.waitForNetworkIdle().catch(() => { })
-        const finishedImages = [];
+        await this.chapterPage.waitForNetworkIdle().catch(() => { })
+        const finishedImages: any = {};
         // 获取所有图片的url
-        const imageUrls = await chapterPage.evaluate(() => {
+        const imageUrls = await this.chapterPage.evaluate(() => {
             const els = document.querySelectorAll('img[id^="set_image_"]')
             const urls = Array.from(els).map((el: any) => el.src)
             return urls;
@@ -438,7 +424,7 @@ export default class Toomics {
         // 有错误图片则不进行下载 留空文件夹
         if (errImgs > 0) {
             write_log(`[chapter download]${chapterName} 下载失败,错误图片 ${errImgs} 张`)
-            await chapterPage.close()
+            await this.chapterPage.close()
             return
         } else {
             // 数量正确 进行下载
@@ -447,14 +433,27 @@ export default class Toomics {
                 const picName = i.toString().padStart(5, '0')
                 const localPath = `${downloadPath}/${picName}.jpg`
 
+                if (finishedImages[imageUrl]) {
+                    console.log('检测到重复图片', imageUrl);
+                    repeatImg++
+                    continue;
+                }
+
                 fs.writeFileSync(localPath, this.chapterPageImages[imageUrl])
+
+                finishedImages[imageUrl] = localPath
             }
 
-            write_log(`[chapter download]${chapterName} 下载成功`)
+            let repeatStr = '';
+            if (repeatImg > 0) {
+                repeatStr = `,重复图片 ${repeatImg} 张`;
+            }
+
+            write_log(`[chapter download]${chapterName} 下载完成 ${repeatStr}`)
         }
 
         this.chapterPageImages = {}
-        chapterPage.close()
+        this.chapterPage.close()
 
         await delay(3000)
 
@@ -465,7 +464,7 @@ export default class Toomics {
             return ''
         }
 
-        let Base: any, document: any, window: any;
+        let Base: any;
 
         if (fs.existsSync('toomics-cookies-nouser.json')) {
             const cookie1 = fs.readFileSync('toomics-cookies-nouser.json', 'utf-8')
@@ -473,19 +472,19 @@ export default class Toomics {
             browserPhone.setCookie(...cookie)
         }
 
-        const checkPage = await browserPhone.newPage()
-        await checkPage.goto(this.domain + '/sc', { waitUntil: 'networkidle2' })
-        let pcHtml = await checkPage.content()
+        this.checkPage = await browserPhone.newPage()
+        await this.checkPage.goto(this.domain + '/sc', { waitUntil: 'networkidle2', timeout: 60 * 1000 })
+        let pcHtml = await this.checkPage.content()
         if (/<button class=\"group active\">/.test(pcHtml)) {
             console.log('元数据成人模式未开启,尝试打开成人模式');
-            await checkPage.evaluate(() => {
+            await this.checkPage.evaluate(() => {
                 Base.setDisplay('A', '/sc');
             })
 
-            await checkPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+            await this.checkPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
         }
 
-        pcHtml = await checkPage.content()
+        pcHtml = await this.checkPage.content()
 
         if (/<button class=\"group active\">/.test(pcHtml)) {
             throw new Error('成人模式打开失败,退出任务')
@@ -493,28 +492,30 @@ export default class Toomics {
 
         this.set_cookie_nouser();
 
-        const phonePage = await browserPhone.newPage()
+        this.checkPage.close()
 
-        await phonePage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search' }).catch(() => { })
+        this.metaPage = await browserPhone.newPage()
+
+        await this.metaPage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search' }).catch(() => { })
         await this.set_cookie_nouser()
 
-        if (/ep\//.test(phonePage.url())) {
-            await phonePage.locator('h1 a').click().catch(() => { })
-            await phonePage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+        if (/ep\//.test(this.metaPage.url())) {
+            await this.metaPage.locator('h1 a').click().catch(() => { })
+            await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
             await delay(2000)
             await this.set_cookie_nouser()
         }
 
         await delay(2000)
-        const html = await phonePage.content()
+        const html = await this.metaPage.content()
 
-        await phonePage.close()
+        await this.metaPage.close()
         return html
     }
 
     async set_cookie() {
-        if (!this.browser) return;
-        const cookies = await this.browser.cookies()
+        if (!browser) return;
+        const cookies = await browser.cookies()
         fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
         console.log('toomics-cookie更新成功', new Date().toLocaleString());
     }
@@ -560,28 +561,11 @@ export default class Toomics {
     }
 
     async get_cookie() {
-        this.browser = await puppeteer.launch({
-            headless: false,
-            args: ['--no-sandbox', '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
-                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
-                '--disable-web-security',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--lang=zh-CN,zh', // 设置浏览器语言
-                //'--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
-                '--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
-            ],
-            defaultViewport: {
-                width: 1920,
-                height: 1920,
-            },
-        });
-
+        if (!browser) return;
         const cookie1 = fs.readFileSync('toomics-cookies.json', 'utf-8')
         const cookie = JSON.parse(cookie1)
-        this.browser.setCookie(...cookie)
-        this.page = await this.browser.newPage()
+        browser.setCookie(...cookie)
+        this.page = await browser.newPage()
         await this.page?.goto('https://toomics.com', {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
@@ -589,7 +573,7 @@ export default class Toomics {
 
         await delay(30 * 1000)
 
-        const cookies = await this.browser.cookies();
+        const cookies = await browser.cookies();
         fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
     }
 }
