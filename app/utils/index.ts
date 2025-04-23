@@ -61,3 +61,27 @@ export function write_log(logContent: string) {
   console.log(logContent);
   fs.appendFileSync('log.txt', `${new Date().toLocaleString()} ${logContent} \n`, 'utf-8');
 }
+
+/**
+ * 获取配置文件
+ * @description: 获取配置文件
+ * @returns 
+ */
+export function get_config() {
+  const configFile = 'config.json'
+  if (!fs.existsSync(configFile)) { 
+    return {}
+  }
+  const configStr = fs.readFileSync(configFile, 'utf-8')
+  const config = JSON.parse(configStr)
+  return config
+}
+
+
+export function end_app() {
+  const config = get_config()
+  if (config.endAfterSetCookie) {
+    console.log('程序结束')
+    process.exit(0)
+  }
+}

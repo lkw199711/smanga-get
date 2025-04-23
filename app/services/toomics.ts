@@ -3,9 +3,10 @@ import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
-import { delay, write_log } from '#utils/index';
+import { delay, end_app, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
 import useBrowser from '#api/browser';
+// const crypto = require('crypto');
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string
@@ -31,8 +32,9 @@ export default class Toomics {
     private metaPage: puppeteer.Page | null = null
     private chapterPageImages: any = {}
 
-    private scrollStep: number = 600 // 滚动步长
-    private scrollDelay: number = 1000 // 滚动延迟
+    private scrollStep: number = 1000 // 滚动步长
+    private scrollDelay: number = 500 // 滚动延迟
+    private uniqueImages = new Map();
     constructor(params: subsribeType) {
         this.website = params.website
         this.mangaId = params.id
@@ -342,10 +344,11 @@ export default class Toomics {
         this.chapterPage = await useBrowser.browser.newPage()
         // 储存图片到内存
         this.chapterPage.on('response', async (response) => {
-            const url = response.url();
             if (response.request().resourceType() === 'image') {
+                const url = response.url();
                 try {
                     const buffer = await response.buffer();
+                    // const hash = crypto.createHash('md5').update(buffer).digest('hex');
                     this.chapterPageImages[url] = buffer;
                 } catch (e) { }
             }
@@ -379,11 +382,12 @@ export default class Toomics {
             scrollY = nowScrollY
         }
 
+        // 等待图片网络请求完成
+        await this.chapterPage.waitForNetworkIdle().catch(() => { })
+
         // 等待三秒之后开始下载
         await delay(3000)
 
-        // 等待图片网络请求完成
-        await this.chapterPage.waitForNetworkIdle().catch(() => { })
         const finishedImages: any = {};
         // 获取所有图片的url
         const imageUrls = await this.chapterPage.evaluate(() => {
@@ -414,9 +418,8 @@ export default class Toomics {
                 const localPath = `${downloadPath}/${picName}.jpg`
 
                 if (finishedImages[imageUrl]) {
-                    console.log('检测到重复图片', imageUrl);
+                    write_log(`检测到重复图片,既有图片:${finishedImages[imageUrl]} 重复图片序号:${i} 链接:${imageUrl}`);
                     repeatImg++
-                    continue;
                 }
 
                 fs.writeFileSync(localPath, this.chapterPageImages[imageUrl])
@@ -431,7 +434,7 @@ export default class Toomics {
 
             write_log(`[chapter download]${chapterName} 下载完成 ${repeatStr}`)
         }
-
+        debugger;
         this.chapterPageImages = {}
         this.chapterPage.close()
 
@@ -469,6 +472,7 @@ export default class Toomics {
         const cookies = await useBrowser.browser.cookies()
         fs.writeFileSync('toomics-cookies.json', JSON.stringify(cookies, null, 2));
         console.log('toomics-cookie更新成功', new Date().toLocaleString());
+        end_app()
     }
 
     /*

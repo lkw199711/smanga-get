@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { downloadImage } from '#api/bilibili'
 import { subsribeType } from '#type/index.js'
-import { delay, saveBase64Image, write_log } from '#utils/index'
+import { delay, end_app, saveBase64Image, write_log } from '#utils/index'
 import puppeteer from 'puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
@@ -352,6 +352,7 @@ export default class Bilibili {
         const cookies = await this.browser.cookies()
         fs.writeFileSync('bilibili-cookies.json', JSON.stringify(cookies, null, 2));
         console.log('bilibili-cookie更新成功', new Date().toLocaleString());
+        end_app()
     }
 
     get_order(ord: number) {
