@@ -64,6 +64,13 @@ export function write_log(logContent: string) {
   fs.appendFileSync(logFile, `${new Date().toLocaleString()} ${logContent} \n`, 'utf-8');
 }
 
+export function get_log() {
+  return fs.readFileSync(logFile, 'utf-8');
+}
+
+export function clear_log() {
+  fs.writeFileSync(logFile, '', 'utf-8')
+}
 /**
  * 获取配置文件
  * @description: 获取配置文件

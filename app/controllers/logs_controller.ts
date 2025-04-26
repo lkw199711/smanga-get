@@ -1,11 +1,9 @@
 // import type { HttpContext } from '@adonisjs/core/http'
-import fs from 'fs'
-const logFile = 'log.txt';
-
+import { get_log, clear_log } from '#utils/index'
 export default class LogsController {
     clear() {
         // 清空日志
-        fs.writeFileSync(logFile, '', 'utf-8')
+        clear_log();
         return {
             code: 200,
             message: 'Log cleared successfully',
@@ -14,7 +12,7 @@ export default class LogsController {
 
     get() {
         // 获取日志
-        const content = fs.readFileSync(logFile, 'utf-8');
+        const content = get_log();
         const lines = content.split(/\r?\n/); // 处理不同系统的换行符
 
         // 移除最后的空行（如果有）
