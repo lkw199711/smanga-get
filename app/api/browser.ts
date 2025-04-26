@@ -21,6 +21,7 @@ class UseBrowser {
                 '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
                 '--disable-web-security',
                 '--disable-gpu',
+                // '--single-process',
                 '--disable-software-rasterizer',
                 '--lang=zh-CN,zh', // 设置浏览器语言
                 '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
