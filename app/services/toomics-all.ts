@@ -119,7 +119,7 @@ export default class ToomicsAll {
         }
 
         console.log('[toomics all] 扫描完成');
-        
+        toomicsBrowser.clear_buffs();
         page.close().catch(() => { })
     }
 }
