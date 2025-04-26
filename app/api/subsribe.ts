@@ -1,7 +1,6 @@
 import fs from 'fs'
-import path from 'path'
 
-const subscribeFile = process.cwd() + '/subscribe.json'
+const subscribeFile = 'data/subscribe.json'
 /**
  * 读取订阅文件
  * @description: 读取订阅文件

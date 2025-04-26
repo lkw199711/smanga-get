@@ -6,9 +6,11 @@
  * @FilePath: \manga-get\app\utils\index.ts
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
-import sharp from 'sharp';
 import Axios from 'axios'
 import * as fs from 'fs'
+
+const configFile = 'data/config.json'
+const logFile = 'data/log.txt'
 export async function downloadImage(url: string, path: string): Promise<void> {
   const response = await Axios({
     method: 'get',
@@ -59,7 +61,7 @@ export function saveBase64Image(base64Data: any, filepath: string) {
  */
 export function write_log(logContent: string) {
   console.log(logContent);
-  fs.appendFileSync('log.txt', `${new Date().toLocaleString()} ${logContent} \n`, 'utf-8');
+  fs.appendFileSync(logFile, `${new Date().toLocaleString()} ${logContent} \n`, 'utf-8');
 }
 
 /**
@@ -68,7 +70,6 @@ export function write_log(logContent: string) {
  * @returns 
  */
 export function get_config() {
-  const configFile = 'config.json'
   if (!fs.existsSync(configFile)) {
     return {}
   }
@@ -82,7 +83,6 @@ export function get_config() {
  * @param config 配置文件内容
  */
 export function set_config(config: any) {
-  const configFile = 'config.json'
   if (!fs.existsSync(configFile)) {
     fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf-8')
   } else {

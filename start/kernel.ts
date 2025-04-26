@@ -53,13 +53,14 @@ import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation } from './init.js'
 import { demo, get_all_img } from '#services/test'
-
+import ToomicsAll from '#services/toomics-all'
 // demo();
 // create_scan_cron();
 
 // console.log(get_all_img("M:\\manga\\toomics-连载"));
 
 task_allocation();
+// new ToomicsAll().start();
 /*
 const toomics = new Toomics({
   "website": "toomics",

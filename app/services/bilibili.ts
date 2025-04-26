@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { downloadImage } from '#api/bilibili'
 import { subsribeType } from '#type/index.js'
-import { delay, end_app, saveBase64Image, write_log } from '#utils/index'
+import { delay, end_app, saveBase64Image, write_log, get_config } from '#utils/index'
 import puppeteer from 'puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
@@ -22,29 +22,30 @@ type chapterType = {
 
 export default class Bilibili {
     private domain = 'https://manga.bilibili.com'
-    private website: string
+    private website: string = 'bilibili'
     private mangaId: number
     private mangaName: string
     private mangaUrl: string = ''
     private downloadPath: string
     private downloadLockedMeta: boolean
-    private useMoblie: boolean = false
     public browser: puppeteer.Browser | null = null
     private page: puppeteer.Page | null = null
     private chapterPage: puppeteer.Page | null = null
     private meta: any = null
     private metaUpdate: boolean = false
     private chapters: any = null
+    private cookieFile: string
+    private scrollStep: number
+    private scrollDelay: number
     constructor(params: subsribeType) {
-        this.website = params.website
+        const config = get_config().bilibili
         this.mangaId = params.id
         this.mangaName = params.name
-        this.downloadLockedMeta = false
-        if (process.env.DOWNLOAD_PATH) {
-            this.downloadPath = path.join(process.env.DOWNLOAD_PATH, this.website);
-        } else {
-            this.downloadPath = path.join(process.cwd(), this.website);
-        }
+        this.downloadLockedMeta = config.downloadLockedMeta
+        this.cookieFile = config?.cookieFile
+        this.scrollStep = config?.scrollStep || 1000
+        this.scrollDelay = config?.scrollDelay || 500
+        this.downloadPath = path.join(config?.downloadPath || '', this.website);
     }
 
     /**
@@ -189,8 +190,8 @@ export default class Bilibili {
             },
         });
 
-        if (fs.existsSync('bilibili_cookie.json')) {
-            const cookies = JSON.parse(fs.readFileSync('bilibili_cookie.json', 'utf-8'));
+        if (fs.existsSync(this.cookieFile)) {
+            const cookies = JSON.parse(fs.readFileSync(this.cookieFile, 'utf-8'));
             await this.browser.setCookie(...cookies);
         } else {
             // 示例：将字符串 "session=abc; user=123" 转为 Puppeteer 所需格式
@@ -275,8 +276,6 @@ export default class Bilibili {
         await delay(1000)
 
         let scrollTop = -1;
-        const scrollStep = 1200; // 滚动步长
-        const scrollDelay = 500; // 滚动延迟（毫秒）
 
         //.ps--active-y
         // 不断滚动 直到页面底部
@@ -290,7 +289,7 @@ export default class Bilibili {
         while (1) {
             const scrollFloat = Math.floor(Math.random() * 201) - 100 // 随机滚动范围
             await this.chapterPage.locator('.ps--active-y').scroll({
-                scrollTop: scrollTop + scrollStep + scrollFloat,
+                scrollTop: scrollTop + this.scrollStep + scrollFloat,
             }).catch(() => { scrollTop -= 100 })
 
             // 获取当前滚动位置
@@ -300,7 +299,7 @@ export default class Bilibili {
 
             scrollTop = newScrollTop
             const delayFloat = Math.floor(Math.random() * 101) - 50 // 随机延迟范围
-            await delay(scrollDelay + delayFloat)
+            await delay(this.scrollDelay + delayFloat)
         }
 
         await delay(1000)
@@ -350,7 +349,7 @@ export default class Bilibili {
     async set_cookie() {
         if (!this.browser) return;
         const cookies = await this.browser.cookies()
-        fs.writeFileSync('bilibili-cookies.json', JSON.stringify(cookies, null, 2));
+        fs.writeFileSync(this.cookieFile, JSON.stringify(cookies, null, 2));
         console.log('bilibili-cookie更新成功', new Date().toLocaleString());
         end_app()
     }
