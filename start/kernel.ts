@@ -47,20 +47,20 @@ router.use([() => import('@adonisjs/core/bodyparser_middleware')])
  */
 export const middleware = router.named({})
 
-import { read_json } from '#utils/index'
-import { subsribeType } from '#type/index.js'
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation } from './init.js'
 import { demo, get_all_img } from '#services/test'
 import ToomicsAll from '#services/toomics-all'
+import ToomicsDayUpdate from '#services/toomics-day-update'
 // demo();
 // create_scan_cron();
 
 // console.log(get_all_img("M:\\manga\\toomics-连载"));
+// await new ToomicsAll().start();
+await new ToomicsDayUpdate().start();
+// task_allocation();
 
-task_allocation();
-// new ToomicsAll().start();
 /*
 const toomics = new Toomics({
   "website": "toomics",

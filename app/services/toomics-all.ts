@@ -1,59 +1,29 @@
 
-import useBrowser from '#api/browser';
+import { toomicsBrowser } from '#api/browser';
 import fs from 'fs';
-import { end_app, delay, read_json } from '#utils/index';
+import { delay, read_json } from '#utils/index';
 export default class ToomicsAll {
-    private buffs: any = {}
     private coverPath: string = 'data/toomics-covers'
     private jsonFile: string = 'data/toomics-all.json'
     private scrollStep: number = 400 // 滚动的步长
     private scrollDelay: number = 500 // 滚动的延迟时间
-    private cookieFile: string = 'data/toomics-cookies.json'
+    constructor() { }
     async start() {
-        if (!useBrowser.browser?.connected) {
-            await useBrowser.init()
+        console.log('[toomics all] 开始扫描所有漫画')
+        if (!toomicsBrowser.browser?.connected) {
+            await toomicsBrowser.init()
         }
 
-        if (!useBrowser.browser) return;
+        if (!toomicsBrowser.browser) return;
 
-        if (fs.existsSync(this.cookieFile)) {
-            const cookie1 = fs.readFileSync(this.cookieFile, 'utf-8')
-            const cookie = JSON.parse(cookie1)
-            useBrowser.browser.setCookie(...cookie)
-        } else {
-            const cookieStr = process.env.TOOMICS_COOKIE || '';
-            const cookies = cookieStr.split(';').map(pair => {
-                const [name, value] = pair.trim().split('=');
-                return {
-                    name: name,
-                    value: value,
-                    domain: '.toomics.com', // 替换为目标网站主域名
-                    path: '/',
-                    secure: false,
-                    sameParty: false,
-                    httpOnly: false
-                };
-            });
-            useBrowser.browser.setCookie(...cookies);
-        }
+        await toomicsBrowser.get_cookie();
 
-        const page = await useBrowser.browser.newPage()
-
-        // 储存图片到内存
-        page.on('response', async (response) => {
-            if (response.request().resourceType() === 'image') {
-                const url = response.url();
-                try {
-                    const buffer = await response.buffer();
-                    // const hash = crypto.createHash('md5').update(buffer).digest('hex');
-                    this.buffs[url] = buffer;
-                } catch (e) { }
-            }
-        })
+        const page = await toomicsBrowser.new_page();
+        if (!page) return
 
         await page.goto('https://toomics.com/sc/webtoon/ranking', { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/' }).catch(() => { })
         await page.waitForSelector('.list_wrap').catch(() => { });
-        this.set_cookie()
+        await toomicsBrowser.save_cookie()
         // 不断滚动 直到页面底部
         console.log('开始滚动页面,等待加载图片');
         let scrollY = -1;
@@ -76,27 +46,36 @@ export default class ToomicsAll {
         await delay(2000)
 
         const mangas = await page.evaluate(() => {
-            const lis = document.querySelectorAll('.list_wrap li')
-            return Array.from(lis).map((li: any) => {
-                const website = 'toomics'
-                const name = li.querySelector('h4')?.innerText.trim()
-                const url = 'https://toomics.com' + li.querySelector('a')?.getAttribute('href')
-                const id = url.split('/').pop()
-                const cover = li.querySelector('img')?.getAttribute('src')
-                const describe = li.querySelector('.text')?.innerHTML
-                let chapterCount = li.querySelector('.section_remai')?.innerText.trim()
-                chapterCount = chapterCount.split('/')[1] || chapterCount.split('/')[0]
-                return {
-                    website,
-                    name,
-                    url,
-                    id: Number(id),
-                    cover,
-                    covers: [cover],
-                    describe,
-                    chapterCount: Number(chapterCount),
-                }
-            })
+            function get_end() {
+                const lis = document.querySelectorAll('.list_wrap li')
+                return Array.from(lis).map((li: any) => {
+                    const website = 'toomics'
+                    const name = li.querySelector('h4')?.innerText.trim()
+                    const url = 'https://toomics.com' + li.querySelector('a')?.getAttribute('href')
+                    const id = url.split('/').pop()
+                    const cover = li.querySelector('img')?.getAttribute('src')
+                    const describe = li.querySelector('.text')?.innerHTML
+                    const audlt = /18\+/.test(li.innerHTML)
+                    const finsihed = /End/.test(li.innerHTML)
+                    let chapterCount = li.querySelector('.section_remai')?.innerText.trim()
+                    chapterCount = chapterCount.split('/')[1] || chapterCount.split('/')[0]
+
+                    return {
+                        website,
+                        name,
+                        url,
+                        id: Number(id),
+                        cover,
+                        covers: [cover],
+                        describe,
+                        chapterCount: Number(chapterCount),
+                        audlt,
+                        finsihed,
+                    }
+                })
+            }
+
+            return get_end()
         })
 
         let json: any = []
@@ -132,20 +111,15 @@ export default class ToomicsAll {
                 continue
             }
 
-            if (this.buffs[manga.cover]) {
-                fs.writeFileSync(coverPath, this.buffs[manga.cover])
+            if (toomicsBrowser.buffs[manga.cover]) {
+                fs.writeFileSync(coverPath, toomicsBrowser.buffs[manga.cover])
             } else {
                 console.error('没有找到图片', manga.cover)
             }
         }
-        // toomics-covers
-    }
 
-    async set_cookie() {
-        if (!useBrowser.browser) return;
-        const cookies = await useBrowser.browser.cookies()
-        fs.writeFileSync(this.cookieFile, JSON.stringify(cookies, null, 2));
-        console.log('toomics-cookie更新成功', new Date().toLocaleString());
-        end_app()
+        console.log('[toomics all] 扫描完成');
+        
+        page.close().catch(() => { })
     }
 }

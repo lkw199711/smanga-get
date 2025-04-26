@@ -5,7 +5,7 @@ import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
 import { delay, end_app, get_config, read_json, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
-import useBrowser from '#api/browser';
+import { toomicsBrowser } from '#api/browser';
 // const crypto = require('crypto');
 export default class Toomics {
     private domain = 'https://toomics.com';
@@ -30,23 +30,19 @@ export default class Toomics {
     private chapterPage: puppeteer.Page | null = null
     private checkPage: puppeteer.Page | null = null
     private metaPage: puppeteer.Page | null = null
-    private chapterPageImages: any = {}
-    private chapterMetaImages: any = {}
     private retry: number = 0 // 重试次数
 
     private scrollStep: number = 800 // 滚动步长
     private scrollDelay: number = 500 // 滚动延迟
-    private cookieFile: string
-    private userName: string | undefined = process.env.TOOMICS_USER || undefined
-    private passWord: string | undefined = process.env.TOOMICS_PASS || undefined
+    private userName: string
+    private passWord: string
     constructor(params: subsribeType) {
         const config = get_config()?.toomics || {}
         this.mangaId = params.id
         this.mangaName = params.name
         this.downloadLockedMeta = config?.downloadLockedMeta
-        this.cookieFile = config?.cookieFile
-        this.userName = config?.userName || this.userName
-        this.passWord = config?.passWord || this.passWord
+        this.userName = config?.userName || ''
+        this.passWord = config?.passWord || ''
         this.scrollStep = config?.scrollStep || this.scrollStep
         this.scrollDelay = config?.scrollDelay || this.scrollDelay
         this.downloadPath = path.join(config?.downloadPath || '', this.website);
@@ -121,57 +117,17 @@ export default class Toomics {
      */
     async init() {
 
-        if (!useBrowser.browser?.connected) {
-            await useBrowser.init()
+        if (!toomicsBrowser.browser?.connected) {
+            await toomicsBrowser.init()
         }
 
-        if (!useBrowser.browser) return;
+        if (!toomicsBrowser.browser) return;
 
-        if (fs.existsSync(this.cookieFile)) {
-            const cookie1 = fs.readFileSync(this.cookieFile, 'utf-8')
-            const cookie = JSON.parse(cookie1)
-            useBrowser.browser.setCookie(...cookie)
-        } else {
-            const cookieStr = process.env.TOOMICS_COOKIE || '';
-            const cookies = cookieStr.split(';').map(pair => {
-                const [name, value] = pair.trim().split('=');
-                return {
-                    name: name,
-                    value: value,
-                    domain: '.toomics.com', // 替换为目标网站主域名
-                    path: '/',
-                    secure: false,
-                    sameParty: false,
-                    httpOnly: false
-                };
-            });
-            useBrowser.browser.setCookie(...cookies);
-        }
+        // 获取cookie
+        await toomicsBrowser.get_cookie()
 
-
-        this.page = await useBrowser.browser.newPage()
-
-        await this.page.setExtraHTTPHeaders({
-            'Accept-Language': 'zh-CN,zh;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Sec-CH-UA-Platform': '"Windows"', // 新版指纹头‌:ml-citation{ref="3" data="citationList"}
-            'Upgrade-Insecure-Requests': '1'
-        });
-
-        let navigator: any;
-        // 消除navigator.webdriver属性‌:ml-citation{ref="3" data="citationList"}
-        await this.page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
-        });
-
-        // 覆盖plugins属性
-        await this.page.evaluate(() => {
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3] // 返回非空数组
-            });
-        });
+        this.page = await toomicsBrowser.new_page()
+        if (!this.page) return
 
         await this.page.goto(this.domain + '/sc', {
             waitUntil: 'networkidle2',
@@ -199,9 +155,9 @@ export default class Toomics {
             await delay(2000)
 
             // 填充用户名与密码
-            await this.page.locator('input[name="user_id"]').fill(this.userName || '').catch(() => { })
+            await this.page.locator('input[name="user_id"]').fill(this.userName).catch(() => { })
             await delay(1000)
-            await this.page.locator('input[name="user_pw"]').fill(this.passWord || '').catch(() => { })
+            await this.page.locator('input[name="user_pw"]').fill(this.passWord).catch(() => { })
             await delay(1000)
 
             // 点击登录按钮
@@ -218,7 +174,7 @@ export default class Toomics {
             }
         }
 
-        await this.set_cookie();
+        await toomicsBrowser.save_cookie();
     }
 
     /**
@@ -227,69 +183,11 @@ export default class Toomics {
      */
     async get_meta() {
         console.log('正在获取元数据');
-        if (!useBrowser.browser) {
+        if (!toomicsBrowser.browser) {
             return ''
         }
 
-        this.metaPage = await useBrowser.browser.newPage()
-        this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
-        // 储存图片到内存
-        this.metaPage.on('response', async (response) => {
-            if (response.request().resourceType() === 'image') {
-                const url = response.url();
-                try {
-                    const buffer = await response.buffer();
-                    // const hash = crypto.createHash('md5').update(buffer).digest('hex');
-                    this.chapterMetaImages[url] = buffer;
-                } catch (e) { }
-            }
-        })
-        this.mangaUrl = `https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`
-        await this.metaPage.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search', timeout: 180 * 1000 }).catch(() => { })
-        await this.set_cookie()
-
-        if (/ep\//.test(this.metaPage.url())) {
-            await this.metaPage.locator('h1 a').click().catch(() => { })
-            await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
-            await delay(2000)
-            await this.set_cookie()
-        }
-
-        // 不断滚动 直到页面底部
-        console.log('开始滚动页面,等待加载图片');
-        let scrollY = -1;
-        let window: any;
-        await this.metaPage.mouse.move(1000, 1000)
-
-        // 向上滚动到顶部
-        while (1) {
-            let protocolError = false
-            await this.metaPage.mouse.wheel({ deltaY: -this.scrollStep }).catch(() => { protocolError = true })
-            await delay(this.scrollDelay)
-            const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-            if (protocolError) continue
-
-            if (nowScrollY === 0) break
-            scrollY = nowScrollY
-        }
-
-        // 向下滚动到底部
-        while (1) {
-            let protocolError = false
-            await this.metaPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
-            await delay(this.scrollDelay)
-            const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-            if (protocolError) continue
-
-            if (nowScrollY === scrollY) break
-            scrollY = nowScrollY
-        }
-
-        await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
-        await delay(1000)
-        this.metaPageHtml = await this.metaPage.content()
-
-        await this.metaPage.close()
+        await this.get_meta_html();
 
         let title = this.metaPageHtml?.match(/(?<=<h2.+>)[^<]+/s)?.[0] || '';
         title = title.trim()
@@ -316,17 +214,17 @@ export default class Toomics {
         // 获取章节列表
         this.get_chapters()
         let downloadMetaError = false
-        if (!this.chapterMetaImages[banner]) {
+        if (!toomicsBrowser.buffs[banner]) {
             console.log('横幅图片下载失败');
             downloadMetaError = true
         }
-        if (!this.chapterMetaImages[bannerBackground]) {
+        if (!toomicsBrowser.buffs[bannerBackground]) {
             console.log('横幅背景图片下载失败');
             downloadMetaError = true
         }
 
         this.chapters.forEach((chapter: any) => {
-            if (!this.chapterMetaImages[chapter.cover]) {
+            if (!toomicsBrowser.buffs[chapter.cover]) {
                 console.log('章节封面图片下载失败', chapter.cover);
                 downloadMetaError = true
             }
@@ -342,7 +240,7 @@ export default class Toomics {
             await this.get_meta()
         } else {
             this.downloadMetaError = false
-            this.chapterMetaImages = {}
+            toomicsBrowser.clear_buffs()
         }
     }
 
@@ -431,9 +329,9 @@ export default class Toomics {
             await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
 
             // 封面图
-            // fs.writeFileSync(`${this.metaFolder}/cover.jpg`, this.chapterMetaImages[this.meta.cover])
-            fs.writeFileSync(`${this.metaFolder}/banner.jpg`, this.chapterMetaImages[this.meta.banner])
-            fs.writeFileSync(`${this.metaFolder}/bannerBackground.jpg`, this.chapterMetaImages[this.meta.bannerBackground])
+            // fs.writeFileSync(`${this.metaFolder}/cover.jpg`, toomicsBrowser.buffs[this.meta.cover])
+            fs.writeFileSync(`${this.metaFolder}/banner.jpg`, toomicsBrowser.buffs[this.meta.banner])
+            fs.writeFileSync(`${this.metaFolder}/bannerBackground.jpg`, toomicsBrowser.buffs[this.meta.bannerBackground])
         } else {
             console.log(this.mangaName + ' 没有更新')
         }
@@ -446,7 +344,7 @@ export default class Toomics {
             const chapterCover = `${this.mangaFolder}/${chapterName}.jpg`
             // 下载章节封面
             if (!fs.existsSync(chapterCover)) {
-                fs.writeFileSync(chapterCover, this.chapterMetaImages[chapter.cover])
+                fs.writeFileSync(chapterCover, toomicsBrowser.buffs[chapter.cover])
             }
         }
     }
@@ -466,6 +364,58 @@ export default class Toomics {
         };
 
         fs.copyFileSync(imagePath, localPath)
+    }
+
+    async get_meta_html() {
+        this.metaPage = await toomicsBrowser.new_page();
+        if (!this.metaPage) return
+        this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
+        this.mangaUrl = `https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`
+        await this.metaPage.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search', timeout: 180 * 1000 }).catch(() => { })
+        await toomicsBrowser.save_cookie();
+
+        if (/ep\//.test(this.metaPage.url())) {
+            await this.metaPage.locator('h1 a').click().catch(() => { })
+            await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+            await delay(2000)
+            await toomicsBrowser.save_cookie();
+        }
+
+        // 不断滚动 直到页面底部
+        console.log('开始滚动页面,等待加载图片');
+        let scrollY = -1;
+        let window: any;
+        await this.metaPage.mouse.move(1000, 1000)
+
+        // 向上滚动到顶部
+        while (1) {
+            let protocolError = false
+            await this.metaPage.mouse.wheel({ deltaY: -this.scrollStep }).catch(() => { protocolError = true })
+            await delay(this.scrollDelay)
+            const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
+            if (protocolError) continue
+
+            if (nowScrollY === 0) break
+            scrollY = nowScrollY
+        }
+
+        // 向下滚动到底部
+        while (1) {
+            let protocolError = false
+            await this.metaPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
+            await delay(this.scrollDelay)
+            const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
+            if (protocolError) continue
+
+            if (nowScrollY === scrollY) break
+            scrollY = nowScrollY
+        }
+
+        await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+        await delay(1000)
+        this.metaPageHtml = await this.metaPage.content()
+
+        await this.metaPage.close()
     }
 
     /**
@@ -491,19 +441,9 @@ export default class Toomics {
         } else {
             this.retry = 0
         }
-        if (!useBrowser.browser) return;
-        this.chapterPage = await useBrowser.browser.newPage()
-        // 储存图片到内存
-        this.chapterPage.on('response', async (response) => {
-            if (response.request().resourceType() === 'image') {
-                const url = response.url();
-                try {
-                    const buffer = await response.buffer();
-                    // const hash = crypto.createHash('md5').update(buffer).digest('hex');
-                    this.chapterPageImages[url] = buffer;
-                } catch (e) { }
-            }
-        })
+        if (!toomicsBrowser.browser) return;
+        this.chapterPage = await toomicsBrowser.new_page();
+        if (!this.chapterPage) return
 
         // 开始下载章节
         console.log('正在下载章节:', chapterName)
@@ -515,7 +455,7 @@ export default class Toomics {
         }).catch(() => { })
 
         // 获取最新cookie
-        await this.set_cookie()
+        await toomicsBrowser.save_cookie();
 
         // 不断滚动 直到页面底部
         console.log('开始滚动页面,等待加载图片');
@@ -558,21 +498,21 @@ export default class Toomics {
             }
 
             // 记录错误图片
-            if (!this.chapterPageImages[imageUrl]) {
+            if (!toomicsBrowser.buffs[imageUrl]) {
                 errImgs.push(i)
                 continue
             }
 
             // 记录干扰图片
-            if (this.chapterPageImages[imageUrl].length < 500) {
+            if (toomicsBrowser.buffs[imageUrl].length < 500) {
                 interfereImages.push(i)
                 continue
             }
 
-            fs.writeFileSync(localPath, this.chapterPageImages[imageUrl])
+            fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])
         }
 
-        this.chapterPageImages = {}
+        toomicsBrowser.clear_buffs()
         this.chapterPage.close()
 
         if (interfereImages.length > 0) {
@@ -588,79 +528,5 @@ export default class Toomics {
         await delay(3000)
 
         end_app();
-    }
-
-    async get_meta_html(url: string) {
-        if (!useBrowser.browser) {
-            return ''
-        }
-
-        this.metaPage = await useBrowser.browser.newPage()
-        this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
-        // 储存图片到内存
-        this.metaPage.on('response', async (response) => {
-            if (response.request().resourceType() === 'image') {
-                const url = response.url();
-                try {
-                    const buffer = await response.buffer();
-                    // const hash = crypto.createHash('md5').update(buffer).digest('hex');
-                    this.chapterMetaImages[url] = buffer;
-                } catch (e) { }
-            }
-        })
-        await this.metaPage.goto(url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search', timeout: 180 * 1000 }).catch(() => { })
-        await this.set_cookie()
-
-        if (/ep\//.test(this.metaPage.url())) {
-            await this.metaPage.locator('h1 a').click().catch(() => { })
-            await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
-            await delay(2000)
-            await this.set_cookie()
-        }
-
-        // 不断滚动 直到页面底部
-        console.log('开始滚动页面,等待加载图片');
-        let scrollY = -1;
-        let window: any;
-        await this.metaPage.mouse.move(1000, 1000)
-
-        // 向上滚动到顶部
-        while (1) {
-            let protocolError = false
-            await this.metaPage.mouse.wheel({ deltaY: -this.scrollStep }).catch(() => { protocolError = true })
-            await delay(this.scrollDelay)
-            const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-            if (protocolError) continue
-
-            if (nowScrollY === 0) break
-            scrollY = nowScrollY
-        }
-
-        // 向下滚动到底部
-        while (1) {
-            let protocolError = false
-            await this.metaPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
-            await delay(this.scrollDelay)
-            const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-            if (protocolError) continue
-
-            if (nowScrollY === scrollY) break
-            scrollY = nowScrollY
-        }
-
-        await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
-        await delay(1000)
-        const html = await this.metaPage.content()
-
-        await this.metaPage.close()
-        return html
-    }
-
-    async set_cookie() {
-        if (!useBrowser.browser) return;
-        const cookies = await useBrowser.browser.cookies()
-        fs.writeFileSync(this.cookieFile, JSON.stringify(cookies, null, 2));
-        console.log('toomics-cookie更新成功', new Date().toLocaleString());
-        end_app()
     }
 }
