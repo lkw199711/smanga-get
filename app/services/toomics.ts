@@ -3,7 +3,7 @@ import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
-import { delay, end_app, write_log } from '#utils/index';
+import { delay, end_app, get_config, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
 import useBrowser from '#api/browser';
 // const crypto = require('crypto');
@@ -31,8 +31,9 @@ export default class Toomics {
     private checkPage: puppeteer.Page | null = null
     private metaPage: puppeteer.Page | null = null
     private chapterPageImages: any = {}
+    private retry: number = 0 // 重试次数
 
-    private scrollStep: number = 1000 // 滚动步长
+    private scrollStep: number = 800 // 滚动步长
     private scrollDelay: number = 500 // 滚动延迟
     private uniqueImages = new Map();
     constructor(params: subsribeType) {
@@ -101,6 +102,13 @@ export default class Toomics {
         await this.metaPage?.close().catch(() => { })
 
         console.log(this.mangaName + ' 订阅完毕')
+        // 自动移除订阅链接
+        if (get_config().autoRemoveSubscribe) {
+            subscribe_remove({ website: this.website, id: this.mangaId })
+            console.log(this.mangaName + ' 已移除订阅链接')
+        }
+        // 自动结束程序
+        end_app()
     }
 
     /**
@@ -338,8 +346,29 @@ export default class Toomics {
         return chapters;
     }
 
-    async download_chapter(chapterName: string, url: string, downloadPath: string) {
-        let errImgs = 0, repeatImg = 0;
+    /**
+     * 下载章节
+     * @description: 下载章节 通过浏览器模拟下载 图片下载失败有两种 一种是请求失败 无图片 另一种是图片请求成功 但是图片内容为空
+     * 重试三次后还未成功 打印错误 下载则跳过
+     * @param chapterName 章节名称
+     * @param url 章节链接
+     * @param downloadPath 下载路径
+     * @param reloadImageindexs 重试图片
+     * @returns 
+     */
+    async download_chapter(chapterName: string, url: string, downloadPath: string, reloadImageindexs: number[] = []) {
+        const errImgs: number[] = []
+        const interfereImages: number[] = [];
+        if (reloadImageindexs.length > 0) {
+            this.retry++
+            if (this.retry > 3) {
+                write_log(`[chapter download]${chapterName} 重试次数过多,跳过`)
+                this.retry = 0
+                return
+            }
+        } else {
+            this.retry = 0
+        }
         if (!useBrowser.browser) return;
         this.chapterPage = await useBrowser.browser.newPage()
         // 储存图片到内存
@@ -388,7 +417,6 @@ export default class Toomics {
         // 等待三秒之后开始下载
         await delay(3000)
 
-        const finishedImages: any = {};
         // 获取所有图片的url
         const imageUrls = await this.chapterPage.evaluate(() => {
             const els = document.querySelectorAll('img[id^="set_image_"]')
@@ -396,50 +424,56 @@ export default class Toomics {
             return urls;
         })
 
-        // 检测是否有图片加载失败
+        // 数量正确 进行下载
         for (let i = 0; i < imageUrls.length; i++) {
             const imageUrl = imageUrls[i]
+            const picName = i.toString().padStart(5, '0')
+            const localPath = `${downloadPath}/${picName}.jpg`
+
+            // 如果为重试模式 仅下载指定图片
+            if (reloadImageindexs.length > 0 && !reloadImageindexs.includes(i)) {
+                continue;
+            }
+
+            // 记录错误图片
             if (!this.chapterPageImages[imageUrl]) {
-                errImgs++
-                console.error('图片下载失败:', imageUrl)
+                errImgs.push(i)
+                continue
             }
+
+            // 记录干扰图片
+            if (this.chapterPageImages[imageUrl].length < 500) {
+                interfereImages.push(i)
+                continue
+            }
+
+            fs.writeFileSync(localPath, this.chapterPageImages[imageUrl])
+
+            /* 检测重复图片 暂时无用 因为重复图都是空白图
+            if (finishedImages[imageUrl]) {
+                write_log(`[chapter download]检测到重复图片,既有图片:${finishedImages[imageUrl]} 重复图片序号:${i} 链接:${imageUrl}`);
+                repeatImg++
+            }
+            // finishedImages[imageUrl] = localPath
+            */            
         }
 
-        // 有错误图片则不进行下载 留空文件夹
-        if (errImgs > 0) {
-            write_log(`[chapter download]${chapterName} 下载失败,错误图片 ${errImgs} 张`)
-            await this.chapterPage.close()
-            return
-        } else {
-            // 数量正确 进行下载
-            for (let i = 0; i < imageUrls.length; i++) {
-                const imageUrl = imageUrls[i]
-                const picName = i.toString().padStart(5, '0')
-                const localPath = `${downloadPath}/${picName}.jpg`
-
-                if (finishedImages[imageUrl]) {
-                    write_log(`检测到重复图片,既有图片:${finishedImages[imageUrl]} 重复图片序号:${i} 链接:${imageUrl}`);
-                    repeatImg++
-                }
-
-                fs.writeFileSync(localPath, this.chapterPageImages[imageUrl])
-
-                finishedImages[imageUrl] = localPath
-            }
-
-            let repeatStr = '';
-            if (repeatImg > 0) {
-                repeatStr = `,重复图片 ${repeatImg} 张`;
-            }
-
-            write_log(`[chapter download]${chapterName} 下载完成 ${repeatStr}`)
-        }
-        debugger;
         this.chapterPageImages = {}
         this.chapterPage.close()
 
+        if (interfereImages.length > 0) {
+            const interfereStr = interfereImages.length > 0 ? `, 检测到干扰图片:${interfereImages}` : ''
+            const errorStr = errImgs.length > 0 ? `, 请求失败图片:${errImgs}` : ''
+            write_log(`[chapter download]${chapterName}下载失败${interfereStr}${errorStr},进行重新下载`);
+            await this.download_chapter(chapterName, url, downloadPath, interfereImages.concat(errImgs))
+            return
+        }
+
+        write_log(`[chapter download]${chapterName} 下载完成.`)
+
         await delay(3000)
 
+        end_app();
     }
 
     async get_html(url: string) {

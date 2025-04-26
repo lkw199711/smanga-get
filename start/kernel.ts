@@ -52,10 +52,12 @@ import { subsribeType } from '#type/index.js'
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation } from './init.js'
-import demo from '#services/test'
+import { demo, get_all_img } from '#services/test'
 
 // demo();
 // create_scan_cron();
+
+// console.log(get_all_img("M:\\manga\\toomics-连载"));
 
 task_allocation();
 /*

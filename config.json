@@ -1,3 +1,4 @@
 {
-    "endAfterSetCookie": false
+  "endAfterSetCookie": false,
+  "autoRemoveSubscribe": true
 }

@@ -69,7 +69,7 @@ export function write_log(logContent: string) {
  */
 export function get_config() {
   const configFile = 'config.json'
-  if (!fs.existsSync(configFile)) { 
+  if (!fs.existsSync(configFile)) {
     return {}
   }
   const configStr = fs.readFileSync(configFile, 'utf-8')
@@ -77,10 +77,27 @@ export function get_config() {
   return config
 }
 
+/**
+ * 
+ * @param config 配置文件内容
+ */
+export function set_config(config: any) {
+  const configFile = 'config.json'
+  if (!fs.existsSync(configFile)) {
+    fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf-8')
+  } else {
+    const configStr = fs.readFileSync(configFile, 'utf-8')
+    const oldConfig = JSON.parse(configStr)
+    const newConfig = { ...oldConfig, ...config }
+    fs.writeFileSync(configFile, JSON.stringify(newConfig, null, 2), 'utf-8')
+  }
+}
+
 
 export function end_app() {
   const config = get_config()
   if (config.endAfterSetCookie) {
+    set_config({ endAfterSetCookie: false })
     console.log('程序结束')
     process.exit(0)
   }
