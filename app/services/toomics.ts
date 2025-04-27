@@ -98,7 +98,7 @@ export default class Toomics {
         // 移除完结的订阅
         if (get_config().autoRemoveSubscribe || this.meta.finished) {
             subscribe_remove({ website: this.website, id: this.mangaId })
-            console.log(this.mangaName + ' 已移除订阅链接')
+            write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
         }
 
         // 自动结束程序
@@ -114,7 +114,7 @@ export default class Toomics {
     async init() {
 
         if (!toomicsBrowser.browser?.connected) {
-            await toomicsBrowser.init()
+            await toomicsBrowser.init('toomics')
         }
 
         if (!toomicsBrowser.browser) return;

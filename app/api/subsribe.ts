@@ -1,12 +1,18 @@
 import fs from 'fs'
+import { get_os } from '#utils/index'
 
-const subscribeFile = 'data/subscribe.json'
+const linuxStr = get_os() === 'Linux' ? '/' : ''
+const subscribeFile = linuxStr + 'data/subscribe.json'
 /**
  * 读取订阅文件
  * @description: 读取订阅文件
  * @returns 
  */
 export function subscribe_read() {
+    if (!fs.existsSync(subscribeFile)) {
+        return []
+    }
+
     const jsonStr = fs.readFileSync(subscribeFile, 'utf-8')
     const json = JSON.parse(jsonStr)
     return json;
@@ -38,7 +44,7 @@ export function subscribe_add({ website, id, name }: { website: string, name: st
 export function subscribe_remove({ website, id }: { website: string, id: number }) {
     const subscribe = subscribe_read()
     const index = subscribe.findIndex((item: any) => item.website === website && Number(item.id) === Number(id))
-    
+
     if (index !== -1) {
         subscribe.splice(index, 1)
         subscribe_write(subscribe)
@@ -50,6 +56,6 @@ export function subscribe_remove({ website, id }: { website: string, id: number 
  * @description: 清空订阅
  * @returns
  */
-export function subscribe_clear() { 
+export function subscribe_clear() {
     subscribe_write([])
 }

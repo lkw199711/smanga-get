@@ -11,7 +11,7 @@ export default class ToomicsAll {
     async start() {
         console.log('[toomics all] 开始扫描所有漫画')
         if (!toomicsBrowser.browser?.connected) {
-            await toomicsBrowser.init()
+            await toomicsBrowser.init('toomics')
         }
 
         if (!toomicsBrowser.browser) return;

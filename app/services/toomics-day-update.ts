@@ -5,7 +5,7 @@ export default class ToomicsDayUpdate {
     constructor() { }
     async start() {
         if (!toomicsBrowser.browser?.connected) {
-            await toomicsBrowser.init()
+            await toomicsBrowser.init('toomics')
         }
 
         if (!toomicsBrowser.browser) return;

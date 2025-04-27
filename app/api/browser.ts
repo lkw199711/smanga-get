@@ -6,16 +6,17 @@ type configType = {
     cookieFile: string
 }
 
-const config = get_config();
 class UseBrowser {
     public browser: puppeteer.Browser | null = null;
     public buffs: any = {}
-    private cookieFile: string
-    constructor(config: configType) {
-        this.cookieFile = config.cookieFile
-    }
+    private cookieFile: string = ''
+    constructor() { }
 
-    async init() {
+    async init(website: string) {
+        const config = get_config()
+        const websiteConfig: configType = config[website]
+        this.cookieFile = websiteConfig.cookieFile || 'data/cookies.json'
+        
         this.browser = await puppeteer.launch({
             headless: config.headless,
             timeout: 60 * 1000,
@@ -118,7 +119,7 @@ class UseBrowser {
     }
 }
 
-const toomicsBrowser = new UseBrowser(config.toomics);
-const bilibiliBrowser = new UseBrowser(config.bilibili);
+const toomicsBrowser = new UseBrowser();
+const bilibiliBrowser = new UseBrowser();
 
 export { toomicsBrowser, bilibiliBrowser };

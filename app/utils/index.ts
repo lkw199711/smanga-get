@@ -1,16 +1,22 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-09-30 10:48:36
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-11-17 18:09:56
- * @FilePath: \manga-get\app\utils\index.ts
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 import Axios from 'axios'
 import * as fs from 'fs'
+import * as os from 'os'
 
-const configFile = 'data/config.json'
-const logFile = 'data/log.txt'
+const liunxStr = get_os() === 'Linux' ? '/' : ''
+const configFile = liunxStr + 'data/config.json'
+const logFile = liunxStr + 'data/log.txt'
+
+export function get_os() {
+  const platform = os.platform()
+  if (platform === 'win32') {
+    return 'Windows'
+  } else if (platform === 'linux') {
+    return 'Linux'
+  } else {
+    return 'Other'
+  }
+}
+
 export async function downloadImage(url: string, path: string): Promise<void> {
   const response = await Axios({
     method: 'get',
@@ -78,7 +84,7 @@ export function clear_log() {
  */
 export function get_config() {
   if (!fs.existsSync(configFile)) {
-    return {}
+    return null
   }
   const configStr = fs.readFileSync(configFile, 'utf-8')
   const config = JSON.parse(configStr)
