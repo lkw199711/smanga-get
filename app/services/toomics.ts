@@ -38,7 +38,7 @@ export default class Toomics {
     private passWord: string
     constructor(params: subsribeType) {
         const config = get_config()?.toomics || {}
-        this.mangaId = params.id
+        this.mangaId = Number(params.id)
         this.mangaName = params.name
         this.downloadLockedMeta = config?.downloadLockedMeta
         this.userName = config?.userName || ''
@@ -61,11 +61,6 @@ export default class Toomics {
 
         // 获取元数据
         await this.get_meta()
-
-        // 获取章节列表
-        this.get_chapters()
-
-        await this.download_meta()
 
         // 下载章节
         for (let i = 0; i < this.chapters.length; i++) {
@@ -100,11 +95,12 @@ export default class Toomics {
         await this.metaPage?.close().catch(() => { })
 
         console.log(this.mangaName + ' 订阅完毕')
-        // 自动移除订阅链接
-        if (get_config().autoRemoveSubscribe) {
+        // 移除完结的订阅
+        if (get_config().autoRemoveSubscribe || this.meta.finished) {
             subscribe_remove({ website: this.website, id: this.mangaId })
             console.log(this.mangaName + ' 已移除订阅链接')
         }
+
         // 自动结束程序
         end_app()
     }
@@ -187,6 +183,7 @@ export default class Toomics {
             return ''
         }
 
+        // 获取元数据页html
         await this.get_meta_html();
 
         let title = this.metaPageHtml?.match(/(?<=<h2.+>)[^<]+/s)?.[0] || '';
@@ -213,6 +210,7 @@ export default class Toomics {
 
         // 获取章节列表
         this.get_chapters()
+        
         let downloadMetaError = false
         if (!toomicsBrowser.buffs[banner]) {
             console.log('横幅图片下载失败');
@@ -299,12 +297,6 @@ export default class Toomics {
             // 章节更新
             if (oldMetaData.chapters.length !== this.chapters.length) {
                 this.metaUpdate = true
-            }
-
-            // 移除完结的订阅
-            if (this.meta.finished && this.downloadLockedChapter) {
-                subscribe_remove({ website: this.website, id: this.mangaId })
-                console.log(this.mangaName + ' 已完结，已移除订阅链接')
             }
         }
 

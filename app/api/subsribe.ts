@@ -37,7 +37,7 @@ export function subscribe_add({ website, id, name }: { website: string, name: st
  */
 export function subscribe_remove({ website, id }: { website: string, id: number }) {
     const subscribe = subscribe_read()
-    const index = subscribe.findIndex((item: any) => item.website === website && item.id === id)
+    const index = subscribe.findIndex((item: any) => item.website === website && Number(item.id) === Number(id))
     
     if (index !== -1) {
         subscribe.splice(index, 1)
