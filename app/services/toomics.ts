@@ -463,12 +463,9 @@ export default class Toomics {
         let window: any, document: any;
         await this.chapterPage.mouse.move(1000, 1000)
         while (1) {
-            let protocolError = false
-            await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
+            await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { })
             await delay(this.scrollDelay)
-            const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-            if (protocolError) continue
-
+            const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => { })
             if (nowScrollY === scrollY) break
             scrollY = nowScrollY
         }
