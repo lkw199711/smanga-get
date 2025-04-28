@@ -19,7 +19,7 @@ export function create_config() {
     if (!fs.existsSync(dataPath)) {
         fs.mkdirSync(dataPath, { recursive: true })
     }
-    
+
     if (get_config()) return;
 
     set_config({
@@ -48,10 +48,12 @@ export function create_config() {
 }
 
 export function create_scan_cron() {
+    const config = get_config().cron;
+    if (!config?.enable) return;
     // 停止旧扫描任务
     subsribeCron.stop()
     // 获取配置
-    const scanInterval = get_config().cronInterval || "0 0 0,12 * * *" // 每天0点和12点执行一次
+    const scanInterval = config.interval || "0 0 0,12 * * *" // 每天0点和12点执行一次
     // 定时扫描任务
     subsribeCron = cron.schedule(scanInterval, async () => {
         await new ToomicsAll().start()
