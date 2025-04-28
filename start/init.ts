@@ -24,7 +24,10 @@ export function create_config() {
 
     set_config({
         "headless": true,
-        "cronInterval": "0 0 10,22 * * *",
+        "cron": {
+            "enable": true,
+            "interval": "0 0 11,23 * * *"
+        },
         "endAfterSetCookie": false,
         "autoRemoveSubscribe": true,
         "toomics": {
