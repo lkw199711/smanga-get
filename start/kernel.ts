@@ -65,10 +65,10 @@ create_scan_cron();
 // console.log(get_all_img("M:\\manga\\toomics-连载"));
 
 // 获取全部漫画信息 并存储封面
-// await new ToomicsAll().start();
+await new ToomicsAll().start();
 
 // 更新今天 昨天的漫画
-// await new ToomicsDayUpdate().start();
+await new ToomicsDayUpdate().start();
 
 // 执行订阅
 task_allocation();

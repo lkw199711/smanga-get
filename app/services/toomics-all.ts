@@ -1,13 +1,18 @@
 
 import { toomicsBrowser } from '#api/browser';
 import fs from 'fs';
-import { delay, read_json, write_log } from '#utils/index';
+import { delay, get_config, get_os, read_json, write_log } from '#utils/index';
+
+const linuxStr = get_os() === 'Linux' ? '/' : '';
 export default class ToomicsAll {
-    private coverPath: string = 'data/toomics-covers'
-    private jsonFile: string = 'data/toomics-all.json'
+    private coverPath: string = linuxStr + 'data/toomics-covers'
+    private jsonFile: string = linuxStr + 'data/toomics-all.json'
     private scrollStep: number = 400 // 滚动的步长
     private scrollDelay: number = 500 // 滚动的延迟时间
-    constructor() { }
+    constructor() {
+        const config = get_config().toomics;
+        this.coverPath = config.coverCache;
+    }
     async start() {
         write_log('[toomics all] 开始扫描所有漫画')
         if (!toomicsBrowser.browser?.connected) {
