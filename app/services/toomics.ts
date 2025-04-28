@@ -128,7 +128,7 @@ export default class Toomics {
         await this.page.goto(this.domain + '/sc', {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
-        })
+        }).catch(() => { })
 
         const homePageHtml = await this.page.content()
         if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
