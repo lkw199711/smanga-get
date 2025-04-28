@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer";
-import fs from "fs";
-import { end_app, get_config } from "#utils/index";
+import fs, { write } from "fs";
+import { end_app, get_config, write_log } from "#utils/index";
 
 type configType = {
     cookieFile: string
@@ -16,7 +16,7 @@ class UseBrowser {
         const config = get_config()
         const websiteConfig: configType = config[website]
         this.cookieFile = websiteConfig.cookieFile || 'data/cookies.json'
-        
+
         this.browser = await puppeteer.launch({
             headless: config.headless,
             timeout: 60 * 1000,
@@ -63,7 +63,11 @@ class UseBrowser {
 
     async save_cookie() {
         if (!this.browser) return;
-        const cookies = await this.browser.cookies()
+        const cookies = await this.browser.cookies().catch(() => null);
+        if (!cookies) {
+            write_log('[cookie]获取cookie失败')
+            return;
+        };
         fs.writeFileSync(this.cookieFile, JSON.stringify(cookies, null, 2));
         console.log('cookie更新成功', new Date().toLocaleString());
         end_app()
