@@ -25,7 +25,7 @@ export function create_config() {
     set_config({
         "headless": true,
         "cron": {
-            "enable": true,
+            "enable": false,
             "interval": "0 0 11,23 * * *"
         },
         "endAfterSetCookie": false,
