@@ -1,7 +1,7 @@
 
 import { toomicsBrowser } from '#api/browser';
 import fs from 'fs';
-import { delay, get_config, get_os, read_json } from '#utils/index';
+import { delay, get_config, get_os, read_json, write_log } from '#utils/index';
 
 const linuxStr = get_os() === 'Linux' ? '/' : '';
 export default class ToomicsAll {
@@ -14,7 +14,7 @@ export default class ToomicsAll {
         this.coverPath = config.coverCache;
     }
     async start() {
-        console.log('[toomics all] 开始扫描所有漫画')
+        write_log('[toomics all] 开始扫描所有漫画')
         if (!toomicsBrowser.browser?.connected) {
             await toomicsBrowser.init('toomics')
         }
@@ -123,7 +123,7 @@ export default class ToomicsAll {
             }
         }
 
-        console.log('[toomics all] 扫描完成');
+        write_log('[toomics all] 扫描完成');
         toomicsBrowser.clear_buffs();
         page.close().catch(() => { })
     }
