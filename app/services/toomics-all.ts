@@ -1,7 +1,7 @@
 
 import { toomicsBrowser } from '#api/browser';
 import fs from 'fs';
-import { delay, read_json } from '#utils/index';
+import { delay, read_json, write_log } from '#utils/index';
 export default class ToomicsAll {
     private coverPath: string = 'data/toomics-covers'
     private jsonFile: string = 'data/toomics-all.json'
@@ -9,7 +9,7 @@ export default class ToomicsAll {
     private scrollDelay: number = 500 // 滚动的延迟时间
     constructor() { }
     async start() {
-        console.log('[toomics all] 开始扫描所有漫画')
+        write_log('[toomics all] 开始扫描所有漫画')
         if (!toomicsBrowser.browser?.connected) {
             await toomicsBrowser.init('toomics')
         }
@@ -118,7 +118,7 @@ export default class ToomicsAll {
             }
         }
 
-        console.log('[toomics all] 扫描完成');
+        write_log('[toomics all] 扫描完成');
         toomicsBrowser.clear_buffs();
         page.close().catch(() => { })
     }

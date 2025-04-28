@@ -1,9 +1,11 @@
 import { toomicsBrowser } from "#api/browser";
 import { toomicsTask } from "#api/task";
+import { write_log } from "#utils/index";
 export default class ToomicsDayUpdate {
     private url = 'https://toomics.com/sc/webtoon/ongoing_all'
     constructor() { }
     async start() {
+        write_log('[toomics update] 开始扫描漫画更新')
         if (!toomicsBrowser.browser?.connected) {
             await toomicsBrowser.init('toomics')
         }
@@ -67,7 +69,7 @@ export default class ToomicsDayUpdate {
             toomicsTask.add(manga) // 添加到任务队列
         })
 
-        console.log('[toomics update]', mangas.length, '部漫画更新');
+        write_log(`[toomics update], ${mangas.length} 部漫画更新`);
 
         page.close().catch(() => { })
     }

@@ -66,7 +66,8 @@ class UseBrowser {
         const cookies = await this.browser.cookies().catch(() => null);
         if (!cookies) {
             write_log('[cookie]获取cookie失败')
-            return;
+            this.browser?.close()
+            throw new Error('获取cookie失败')
         };
         fs.writeFileSync(this.cookieFile, JSON.stringify(cookies, null, 2));
         console.log('cookie更新成功', new Date().toLocaleString());
