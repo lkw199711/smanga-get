@@ -63,7 +63,9 @@ export default class Bilibili {
         //https://manga.bilibili.com/detail/mc31006?from=manga_search
         this.mangaUrl = `${this.domain}/detail/mc${this.mangaId}`
         await this.page.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: this.domain, timeout: 60 * 1000 }).catch(() => { })
+        await delay(1000)
 
+        this.get_meta(this.ComicDetailResponse)
         // 等待获取元数据或timeout
 
         // 漫画名删除特殊字符
@@ -163,7 +165,13 @@ export default class Bilibili {
             if (!fs.existsSync(`${chapterFolder}.jpg`)) {
                 await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
             }
-            await this.download_chapter(chapter, chapterFolder)
+
+            // 下载章节
+            if (this.meta.isPaginated) {
+                await this.download_chapter_paged(chapter, chapterFolder)
+            } else {
+                await this.download_chapter(chapter, chapterFolder)
+            }
         }
 
         this.chapterPage?.close()
@@ -174,7 +182,7 @@ export default class Bilibili {
 
     async init() {
         this.browser = await puppeteer.launch({
-            headless: true,
+            headless: false,
             args: ['--no-sandbox', '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
                 '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
@@ -217,9 +225,7 @@ export default class Bilibili {
         this.page = await this.browser.newPage()
         this.page.on('response', async response => {
             if (/ComicDetail/.test(response.url())) {
-                const ComicDetailResponse = await response.json()
-                // 获取章节列表与漫画元数据
-                this.get_meta(ComicDetailResponse)
+                this.ComicDetailResponse = await response.json()
             }
         });
 
@@ -346,6 +352,151 @@ export default class Bilibili {
         write_log(`[chapter download] ${this.meta.title} ${chapter.title} 下载完成`)
     }
 
+    async download_chapter_paged(chapter: chapterType, downloadPath: string, reloadPages: number[] = []) {
+        console.log(`${this.meta.title} 正在下载章节 ${this.get_order(chapter.ord)} ${chapter.title}`)
+        //'https://manga.bilibili.com/mc31006/693731?from=manga_detail'
+        if (!this.browser) return
+        if (!this.chapterPage) return
+
+        if (reloadPages.length > 0) {
+            this.retry++
+            if (this.retry > 3) {
+                write_log(`[chapter download]${chapter.title} 重试次数过多,跳过`)
+                this.retry = 0
+                return
+            }
+        } else {
+            this.retry = 0
+        }
+
+        let document: any;
+        let errPages: number[] = []
+
+        const url = `${this.domain}/mc${this.mangaId}/${chapter.targetId}?from=manga_detail`
+
+        await this.chapterPage.setViewport({ width: 1920, height: 1080 })
+
+        await this.chapterPage.goto(url, { waitUntil: 'networkidle2', referer: this.mangaUrl }).catch(() => { })
+
+        await this.set_cookie();
+
+        await this.chapterPage.locator('.view-container').wait().catch(() => {
+            write_log(`[chapter download] ${this.meta.title} ${chapter.title} 加载失败`)
+            this.download_chapter_paged(chapter, downloadPath)
+            return
+        })
+
+        await this.chapterPage.mouse.move(1000, 500)
+
+        await delay(1000)
+
+        console.log('开始翻动页面,等待加载图片');
+
+        let beforePage = 0;
+
+        while (1) {
+            let waittingTimes = 0;
+            if (beforePage > 0) {
+                // 键盘翻页
+                await this.chapterPage.locator('.view-container').click();
+                await this.chapterPage.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => { })
+            }
+
+            const [currentPage, totalPage] = await this.chapterPage.evaluate(() => {
+                const progress = document.querySelector('.progress-indicator').innerHTML;
+                const [currentPage, totalPage] = progress.split('/').map((i: string) => parseInt(i));
+                return [currentPage, totalPage];
+            }).catch(() => {
+                write_log(`[chapter download] ${this.meta.title} ${chapter.title} 滚动条加载失败`)  
+                return [null, null]
+            })
+
+            if (!currentPage || !totalPage) { 
+                this.download_chapter_paged(chapter, downloadPath)
+                return;
+            }
+
+            if (currentPage === beforePage) {
+                throw new Error(`章节 ${chapter.title} 第 ${currentPage} 页加载失败`)
+            } else {
+                waittingTimes = 0
+                beforePage = currentPage
+            }
+            // 判断加载状态
+            while (true) {
+                const isLoading = await this.chapterPage.$('.view-container .loading-hinter');
+                if (!isLoading) {
+                    waittingTimes = 0
+                    break;
+                }
+                if (waittingTimes > 10) {
+                    errPages.push(currentPage)
+                    break
+                }
+                waittingTimes++
+                await delay(1000)
+            }
+
+            const canvas = await this.chapterPage.$$('.view-container canvas');
+            let pageImages: any = [];
+            for (let i = canvas.length - 1; i > -1; i--) {
+                const canvasElement = canvas[i];
+
+                // 获取 PNG 格式的数据 URL
+                const canvasDataURL = await this.chapterPage.evaluate(canvas => {
+                    var iframe2 = document.createElement('iframe');
+                    document.body.appendChild(iframe2);
+                    return iframe2.contentWindow.HTMLCanvasElement.prototype.toDataURL.call(canvas);
+                }, canvasElement);
+
+                if (reloadPages.length > 0 && !reloadPages.includes(currentPage)) {
+                    continue
+                } else if (errPages.includes(currentPage)) {
+                    pageImages.push(null);
+                } else {
+                    pageImages.push(canvasDataURL);
+                }
+            }
+
+            this.chapterPagesImages[currentPage - 1] = pageImages;
+            // 判断是否是最后一页
+            if (currentPage === totalPage) {
+                break;
+            }
+        }
+
+        await delay(1000)
+        let picNum = 0;
+
+        for (let i = 0; i < this.chapterPagesImages.length; i++) {
+            const canvasDataURLs = this.chapterPagesImages[i];
+            if (!canvasDataURLs) continue
+
+            for (let j = 0; j < canvasDataURLs.length; j++) {
+                const canvasDataURL = canvasDataURLs[j];
+                if (!canvasDataURL) continue
+
+                const picName = picNum.toString().padStart(5, '0') + '.jpg'
+
+                // 定义图片保存路径
+                const imagePath = path.join(downloadPath, picName);
+
+                // 保存图片
+                saveBase64Image(canvasDataURL, imagePath);
+                picNum++;
+            }
+        }
+
+        if (errPages.length > 0) {
+            this.download_chapter_paged(chapter, downloadPath, errPages);
+            return;
+        } else {
+            this.chapterPagesImages = []
+        }
+
+        write_log(`[chapter download] ${this.meta.title} ${chapter.title} 下载完成`)
+    }
+
     async set_cookie() {
         if (!this.browser) return;
         const cookies = await this.browser.cookies()
@@ -385,6 +536,7 @@ export default class Bilibili {
         this.meta = {
             targetId: data.id,
             title: data.title,
+            isPaginated: data.comic_type === 1,
             horizontalCover: data.horizontal_cover,
             squareCover: data.square_cover,
             verticalCover: data.vertical_cover,
