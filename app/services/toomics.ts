@@ -197,7 +197,7 @@ export default class Toomics {
         const bannerBackground = this.metaPageHtml?.match(/(?<=<!-- pc bg -->.+src=\")[^\"]+/s)?.[0] || '';
         const cover = this.metaPageHtml?.match(/(?<=<!-- mobile -->.+src=\")[^\"]+/s)?.[0] || '';
         const finishedTxt = this.metaPageHtml?.match(/(?<=text-3xs font-bold text-gray-900\">)[^<]+/s)?.[0] || '';
-        const finished = finishedTxt.trim() === '完结' ? true : false
+        const finished = ['完结', '完結'].includes(finishedTxt.trim()) ? true : false
         const audlt = this.adult;
 
         this.meta = {

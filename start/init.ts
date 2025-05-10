@@ -8,7 +8,7 @@ import { bilibiliTask, toomicsTask } from '#api/task';
 import { subsribeType } from '#type/index.js'
 import { get_config, set_config, get_os } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'
-import ToomicsDayUpdate from '#services/toomics-day-update'
+import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
 let subsribeCron: any = { stop: () => { } }
 

@@ -52,23 +52,23 @@ import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation, create_config } from './init.js'
 import { demo, get_all_img } from '#services/test'
 import ToomicsAll from '#services/toomics-all'
-import ToomicsDayUpdate from '#services/toomics-day-update'
+import ToomicsDayUpdate from '#services/toomics-update'
 
 // 创建配置文件
 create_config();
 
 
 // 定时任务
-create_scan_cron();
+// create_scan_cron();
 
 // 查询干扰图片
-// console.log(get_all_img("M:\\manga\\toomics-连载"));
+// console.log(get_all_img("M:\\manga\\toomics"));
 
 // 获取全部漫画信息 并存储封面
-await new ToomicsAll().start();
+// await new ToomicsAll().start();
 
 // 更新今天 昨天的漫画
-await new ToomicsDayUpdate().start();
+// await new ToomicsDayUpdate().start();
 
 // 执行订阅
 task_allocation();
