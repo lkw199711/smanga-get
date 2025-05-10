@@ -36,6 +36,7 @@ export default class Toomics {
     private scrollDelay: number = 500 // 滚动延迟
     private userName: string
     private passWord: string
+    private langTag: string = 'sc'
     constructor(params: subsribeType) {
         const config = get_config()?.toomics || {}
         this.mangaId = Number(params.id)
@@ -46,7 +47,8 @@ export default class Toomics {
         this.scrollStep = config?.scrollStep || this.scrollStep
         this.scrollDelay = config?.scrollDelay || this.scrollDelay
         this.downloadPath = path.join(config?.downloadPath || '', this.website);
-        this.adult = params.adult || false
+        this.adult = params.adult || false;
+        if (params.langTag) this.langTag = params.langTag
     }
 
     /**
@@ -125,7 +127,7 @@ export default class Toomics {
         this.page = await toomicsBrowser.new_page()
         if (!this.page) return
 
-        await this.page.goto(this.domain + '/sc', {
+        await this.page.goto(this.domain + `/sc`, {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
         }).catch(() => { })
@@ -210,7 +212,7 @@ export default class Toomics {
 
         // 获取章节列表
         this.get_chapters()
-        
+
         let downloadMetaError = false
         if (!toomicsBrowser.buffs[banner]) {
             console.log('横幅图片下载失败');
@@ -256,7 +258,7 @@ export default class Toomics {
             const name = index + ' ' + subName;
             const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
             const date = box.match(/(?<=text-muted\">)[^<]+/s)?.[0] || ''
-            const url = box.match(/\/sc\/webtoon\/detail[^\']+/)?.[0] || ''
+            const url = box.match(/\/(sc|tc)\/webtoon\/detail[^\']+/)?.[0] || ''
 
             let isFree = false
             const freeTxt = box.match(/(?<=class=\"label.+\">)[^<]+/s)?.[0] || ''
@@ -362,8 +364,8 @@ export default class Toomics {
         this.metaPage = await toomicsBrowser.new_page();
         if (!this.metaPage) return
         this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
-        this.mangaUrl = `https://toomics.com/sc/webtoon/episode/toon/${this.mangaId}`
-        await this.metaPage.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/webtoon/search', timeout: 180 * 1000 }).catch(() => { })
+        this.mangaUrl = `https://toomics.com/${this.langTag}/webtoon/episode/toon/${this.mangaId}`
+        await this.metaPage.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/webtoon/search`, timeout: 180 * 1000 }).catch(() => { })
         await toomicsBrowser.save_cookie();
 
         if (/ep\//.test(this.metaPage.url())) {
@@ -493,9 +495,8 @@ export default class Toomics {
             }
 
             // 记录干扰图片
-            if (toomicsBrowser.buffs[imageUrl].length < 500) {
+            if (toomicsBrowser.buffs[imageUrl].length < 250) {
                 interfereImages.push(i)
-                continue
             }
 
             fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])

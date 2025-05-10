@@ -4,6 +4,7 @@ type subsribeType = {
     name: string
     adult?: boolean
     finished?: boolean
+    langTag?: string
 }
 
 export type { subsribeType }
