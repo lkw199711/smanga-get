@@ -1,5 +1,5 @@
 
-import { toomicsBrowser } from '#api/browser';
+import { toomicsBrowser, toomicsBrowserNoUser } from '#api/browser';
 import fs from 'fs';
 import { delay, get_config, get_os, read_json, write_log } from '#utils/index';
 
@@ -9,26 +9,28 @@ export default class ToomicsAll {
     private jsonFile: string = linuxStr + 'data/toomics-all.json'
     private scrollStep: number = 400 // 滚动的步长
     private scrollDelay: number = 500 // 滚动的延迟时间
-    constructor() {
+    public browser: any
+    constructor(nouser = false) {
         const config = get_config().toomics;
         this.coverPath = config.coverCache;
+        this.browser = nouser ? toomicsBrowserNoUser : toomicsBrowser
     }
     async start() {
         write_log('[toomics all] 开始扫描所有漫画')
-        if (!toomicsBrowser.browser?.connected) {
-            await toomicsBrowser.init('toomics')
+        if (!this.browser.browser?.connected) {
+            await this.browser.init()
         }
 
-        if (!toomicsBrowser.browser) return;
+        if (!this.browser.browser) return;
 
-        await toomicsBrowser.get_cookie();
+        await this.browser.get_cookie();
 
-        const page = await toomicsBrowser.new_page();
+        const page = await this.browser.new_page();
         if (!page) return
 
         await page.goto('https://toomics.com/sc/webtoon/ranking', { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/' }).catch(() => { })
         await page.waitForSelector('.list_wrap').catch(() => { });
-        await toomicsBrowser.save_cookie()
+        await this.browser.save_cookie()
         // 不断滚动 直到页面底部
         console.log('开始滚动页面,等待加载图片');
         let scrollY = -1;
@@ -116,15 +118,15 @@ export default class ToomicsAll {
                 continue
             }
 
-            if (toomicsBrowser.buffs[manga.cover]) {
-                fs.writeFileSync(coverPath, toomicsBrowser.buffs[manga.cover])
+            if (this.browser.buffs[manga.cover]) {
+                fs.writeFileSync(coverPath, this.browser.buffs[manga.cover])
             } else {
                 console.error('没有找到图片', manga.cover)
             }
         }
 
         write_log('[toomics all] 扫描完成');
-        toomicsBrowser.clear_buffs();
+        this.browser.clear_buffs();
         page.close().catch(() => { })
     }
 }

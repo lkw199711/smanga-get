@@ -4,21 +4,34 @@ import { end_app, get_config, write_log } from "#utils/index";
 
 type configType = {
     cookieFile: string
+    cookieFileNoUser: string
+}
+
+const defaultParams = {
+    nouser: false,
+    website: 'toomics'
 }
 
 class UseBrowser {
     public browser: puppeteer.Browser | null = null;
     public buffs: any = {}
     private cookieFile: string = ''
-    constructor() { }
+    private config: any
+    private websiteConfig: configType
+    constructor({ nouser, website }: any = defaultParams) {
+        this.config = get_config()
+        this.websiteConfig = this.config[website]
 
-    async init(website: string) {
-        const config = get_config()
-        const websiteConfig: configType = config[website]
-        this.cookieFile = websiteConfig.cookieFile || 'data/cookies.json'
+        if (nouser) {
+            this.cookieFile = this.websiteConfig.cookieFileNoUser || 'data/cookies.json'
+        } else {
+            this.cookieFile = this.websiteConfig.cookieFile || 'data/cookies.json'
+        }
+    }
 
+    async init() {
         this.browser = await puppeteer.launch({
-            headless: config.headless,
+            headless: this.config.headless,
             timeout: 60 * 1000,
             args: ['--no-sandbox', '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
@@ -125,6 +138,7 @@ class UseBrowser {
 }
 
 const toomicsBrowser = new UseBrowser();
-const bilibiliBrowser = new UseBrowser();
+const bilibiliBrowser = new UseBrowser({ website: 'bilibili' });
+const toomicsBrowserNoUser = new UseBrowser({ nouser: true, website: 'toomics' })
 
-export { toomicsBrowser, bilibiliBrowser };
+export { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser };

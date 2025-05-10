@@ -116,7 +116,7 @@ export default class Toomics {
     async init() {
 
         if (!toomicsBrowser.browser?.connected) {
-            await toomicsBrowser.init('toomics')
+            await toomicsBrowser.init()
         }
 
         if (!toomicsBrowser.browser) return;
@@ -204,11 +204,21 @@ export default class Toomics {
             title, author, finished, audlt, describe, banner, cover, bannerBackground,
         }
 
-        if (!finished) {
-            this.downloadPath = this.downloadPath + '-连载'
-        }
-
         this.mangaName = title.replaceAll(/[<>:"/\\|?*]/g, '')
+        this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
+        this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
+
+        const updateDownloadPath = this.downloadPath + '-连载';
+        if (finished) {
+            if (fs.existsSync(`${updateDownloadPath}/${this.mangaName}`)) {
+                this.downloadPath = updateDownloadPath
+                write_log(`[toomics update] ${this.mangaName}已完结。`)
+                subscribe_remove({ website: this.website, id: this.mangaId })
+                write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
+            }
+        } else {
+            this.downloadPath = updateDownloadPath
+        }
 
         // 获取章节列表
         this.get_chapters()
@@ -286,8 +296,6 @@ export default class Toomics {
         }
 
         // 创建元数据文件夹
-        this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
-        this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
         if (!fs.existsSync(this.metaFolder)) await fs.promises.mkdir(this.metaFolder, { recursive: true })
         if (!fs.existsSync(this.mangaFolder)) await fs.promises.mkdir(this.mangaFolder, { recursive: true })
 
