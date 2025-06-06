@@ -115,3 +115,11 @@ export function end_app() {
     process.exit(0)
   }
 }
+
+export function s_delete(file: string) {
+  try {
+    fs.rmSync(file, { force: true, recursive: true })
+  } catch (err) {
+    console.error(err.message)
+  }
+}

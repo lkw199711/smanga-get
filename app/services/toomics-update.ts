@@ -6,12 +6,12 @@ export default class ToomicsDayUpdate {
     private updateOnlyDay: boolean;
     constructor() {
         const config = get_config()?.toomics || {}
-        this.updateOnlyDay = config?.updateOnlyDay || true;
+        this.updateOnlyDay = config?.updateOnlyDay;
     }
     async start() {
         write_log('[toomics update] 开始扫描漫画更新')
         if (!toomicsBrowser.browser?.connected) {
-            await toomicsBrowser.init('toomics')
+            await toomicsBrowser.init()
         }
 
         if (!toomicsBrowser.browser) return;

@@ -37,8 +37,11 @@ export default class Toomics {
     private userName: string
     private passWord: string
     private langTag: string = 'sc'
+    private jumpExist = true // 是否跳过已存在的manga
+    private config: any
     constructor(params: subsribeType) {
         const config = get_config()?.toomics || {}
+        this.config = config
         this.mangaId = Number(params.id)
         this.mangaName = params.name
         this.downloadLockedMeta = config?.downloadLockedMeta
@@ -48,6 +51,7 @@ export default class Toomics {
         this.scrollDelay = config?.scrollDelay || this.scrollDelay
         this.downloadPath = path.join(config?.downloadPath || '', this.website);
         this.adult = params.adult || false;
+        this.jumpExist = config?.jumpExist
         if (params.langTag) this.langTag = params.langTag
     }
 
@@ -57,6 +61,15 @@ export default class Toomics {
     async start() {
         // 解析章节
         console.log(this.mangaName + ' 正在分析')
+
+        if (this.jumpExist && fs.existsSync(`${this.downloadPath}/${this.mangaName}`)) {
+            write_log(`[toomics] ${this.mangaName} 已存在,跳过`)
+            return
+        }
+
+        if (this.config?.jumpMangas && this.config.jumpMangas.includes(this.mangaName)) {
+            write_log(`[toomics] ${this.mangaName} 在跳过列表中,跳过`)
+        }
 
         // 任务初始化
         await this.init()
@@ -204,11 +217,13 @@ export default class Toomics {
             title, author, finished, audlt, describe, banner, cover, bannerBackground,
         }
 
-        this.mangaName = title.replaceAll(/[<>:"/\\|?*]/g, '')
-        this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
-        this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
+        let updateDownloadPath = '';
+        if (/连载/.test(this.downloadPath)) {
+            updateDownloadPath = this.downloadPath
+        } else {
+            updateDownloadPath = this.downloadPath + '-连载';
+        }
 
-        const updateDownloadPath = this.downloadPath + '-连载';
         if (finished) {
             if (fs.existsSync(`${updateDownloadPath}/${this.mangaName}`)) {
                 this.downloadPath = updateDownloadPath
@@ -219,6 +234,10 @@ export default class Toomics {
         } else {
             this.downloadPath = updateDownloadPath
         }
+
+        this.mangaName = title.replaceAll(/[<>:"/\\|?*]/g, '')
+        this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
+        this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
 
         // 获取章节列表
         this.get_chapters()
@@ -345,7 +364,7 @@ export default class Toomics {
             const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
             const chapterCover = `${this.mangaFolder}/${chapterName}.jpg`
             // 下载章节封面
-            if (!fs.existsSync(chapterCover)) {
+            if (!fs.existsSync(chapterCover) && toomicsBrowser.buffs[chapter.cover]) {
                 fs.writeFileSync(chapterCover, toomicsBrowser.buffs[chapter.cover])
             }
         }
@@ -359,7 +378,7 @@ export default class Toomics {
         if (!overWrite && fs.existsSync(localPath)) {
             return
         };
-        const imagePath = `data/toomics-covers/${this.mangaId}-${imageName}`
+        const imagePath = `${this.config.coverCache}/${this.mangaId}-${imageName}`
         if (!fs.existsSync(imagePath)) {
             console.error('封面图片不存在,请检查全部漫画获取程序', imagePath)
             return
@@ -450,7 +469,7 @@ export default class Toomics {
         // 开始下载章节
         console.log('正在下载章节:', chapterName)
 
-        await this.chapterPage.goto(url, {
+        await this.chapterPage.goto(url + '/viewer/S', {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
             referer: this.mangaUrl
@@ -458,6 +477,34 @@ export default class Toomics {
 
         // 获取最新cookie
         await toomicsBrowser.save_cookie();
+        /*
+        // await delay(10000)
+
+        // while (await this.chapterPage.$('.viewer-footer-cross') && !await this.chapterPage.$('.viewer-method a')) { 
+        //     await delay(2000)
+        // }
+
+        while (!await this.chapterPage.$('.viewer-method a')) {
+            await delay(2000)
+        }
+
+        // 翻页模式切换为条漫
+        const viewerMethodLink = await this.chapterPage.$('.viewer-method a')
+        if (viewerMethodLink) {
+            await this.chapterPage.evaluate((el: any) => { 
+                el.click()
+            }, viewerMethodLink).catch(() => { })
+            
+            await this.chapterPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+            while (await this.chapterPage.$('.viewer-footer-cross').catch(() => { }) || await this.chapterPage.$('.viewer-method a').catch(() => { })) {
+                await delay(5000)
+            }
+            await this.chapterPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+
+            await toomicsBrowser.save_cookie();
+        }
+*/
+
 
         // 不断滚动 直到页面底部
         console.log('开始滚动页面,等待加载图片');
@@ -505,6 +552,7 @@ export default class Toomics {
             // 记录干扰图片
             if (toomicsBrowser.buffs[imageUrl].length < 250) {
                 interfereImages.push(i)
+                continue
             }
 
             fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])

@@ -89,5 +89,25 @@ function get_all_img(dir: string) {
     return imgFiles;
 }
 
+function get_all_file(dir: string) {
+    const files = fs.readdirSync(dir);
+    const imgFiles: string[] = [];
 
-export { demo, get_all_img }
+    files.forEach((file, index) => {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.isDirectory()) {
+            imgFiles.push(...get_all_file(filePath)); // 递归获取子目录中的图片
+        } else if (stat.size < 1048576 && /\.(zip|rar|7z|cbz|cbr)$/i.test(file)) {
+            imgFiles.push(filePath); // 添加图片文件路径
+        }
+    });
+
+    // if (imgFiles.length > 0) {
+    //     console.log(imgFiles);
+    // }
+
+    return imgFiles;
+}
+
+export { demo, get_all_img, get_all_file }
