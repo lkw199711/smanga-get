@@ -56,7 +56,7 @@ export function create_scan_cron() {
     // 停止旧扫描任务
     subsribeCron.stop()
     // 获取配置
-    const scanInterval = config.interval || "0 0 0,12 * * *" // 每天0点和12点执行一次
+    const scanInterval = config.interval || "0 0 2,14 * * *" // 每天0点和12点执行一次
     // 定时扫描任务
     subsribeCron = cron.schedule(scanInterval, async () => {
         await new ToomicsAll().start()
