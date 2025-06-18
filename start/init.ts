@@ -59,8 +59,10 @@ export function create_scan_cron() {
     const scanInterval = config.interval || "0 0 2,14 * * *" // 每天0点和12点执行一次
     // 定时扫描任务
     subsribeCron = cron.schedule(scanInterval, async () => {
-        await new ToomicsAll().start()
-        await new ToomicsDayUpdate().start()
+        await new ToomicsAll('sc').start()
+        await new ToomicsAll('tc').start()
+        await new ToomicsDayUpdate('sc').start()
+        await new ToomicsDayUpdate('tc').start()
         const subsribe = subscribe_read()
         for (let i = 0; i < subsribe.length; i++) {
             const item: subsribeType = subsribe[i]
