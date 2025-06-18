@@ -69,6 +69,7 @@ export default class Toomics {
 
         if (this.config?.jumpMangas && this.config.jumpMangas.includes(this.mangaName)) {
             write_log(`[toomics] ${this.mangaName} 在跳过列表中,跳过`)
+            return
         }
 
         // 任务初始化
