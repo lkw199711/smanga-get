@@ -270,7 +270,7 @@ export default class Toomics {
             this.retry++;
             await this.get_meta()
         } else {
-            if(this.retry >= 3){
+            if (this.retry >= 3) {
                 write_log(`[meta]${this.mangaName} 任务失败`)
                 throw new Error("任务失败")
             }
@@ -587,8 +587,11 @@ export default class Toomics {
         const maxImgName = path.basename(maxImg);
         const maxImgNum = parseInt(maxImgName);
 
-        if (maxImgNum > imgs.length + 1) {
+        if (maxImgNum + 1 > imgs.length) {
             write_log(`[chapter download]${chapterName} 下载完成,但是图片序号不连续,最大序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`);
+            // 如果图片序号不连续 重新下载
+            await this.download_chapter(chapterName, url, downloadPath, Array.from({ length: maxImgNum + 1 }, (_, i) => i))
+
         } else {
             write_log(`[chapter download]${chapterName} 下载完成.`)
         }

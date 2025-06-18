@@ -113,7 +113,7 @@ function check_img_num(dir: string) {
     const maxImgNum = parseInt(maxImgName);
     // console.log(`${imgs[imgs.length - 1]} 目录 ${dir} 最大图片序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`);
 
-    maxImgNum > imgs.length + 1 ? console.log(`目录 ${dir} 图片数量异常, 最大图片序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`) : null;
+    maxImgNum + 1 > imgs.length ? console.log(`目录 ${dir} 图片数量异常, 最大图片序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`) : null;
 }
 
 function get_all_file(dir: string) {
