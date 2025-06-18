@@ -50,7 +50,7 @@ export const middleware = router.named({})
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation, create_config } from './init.js'
-import { demo, get_all_img, get_all_file } from '#services/test'
+import { demo, get_all_img, get_all_file, check_img_num } from '#services/test'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import ToZip from '#services/tozip'
@@ -65,7 +65,9 @@ create_config();
 create_scan_cron();
 
 // 查询干扰图片
-// console.log(get_all_img("M:\\manga\\toomics"));
+// console.log(check_img_num("M:\\manga\\toomics"));
+// console.log('执行完毕');
+// process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
 // 获取全部漫画信息 并存储封面

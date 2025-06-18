@@ -89,6 +89,33 @@ function get_all_img(dir: string) {
     return imgFiles;
 }
 
+function check_img_num(dir: string) {
+    const files = fs.readdirSync(dir);
+    let imgs: any = [];
+
+    files.forEach((file, index) => {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.isDirectory()) {
+            check_img_num(filePath); // 递归获取子目录中的图片数量
+        } else if (/\.(jpg|jpeg|png|gif)$/i.test(file)) {
+            imgs.push(filePath); // 添加图片文件路径
+        }
+    });
+
+    if (imgs.length === 0) {
+        return;
+    }
+
+    imgs = imgs.sort((a, b) => a - b);
+    const maxImg = imgs[imgs.length - 1];
+    const maxImgName = path.basename(maxImg);
+    const maxImgNum = parseInt(maxImgName);
+    // console.log(`${imgs[imgs.length - 1]} 目录 ${dir} 最大图片序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`);
+
+    maxImgNum > imgs.length + 1 ? console.log(`目录 ${dir} 图片数量异常, 最大图片序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`) : null;
+}
+
 function get_all_file(dir: string) {
     const files = fs.readdirSync(dir);
     const imgFiles: string[] = [];
@@ -110,4 +137,4 @@ function get_all_file(dir: string) {
     return imgFiles;
 }
 
-export { demo, get_all_img, get_all_file }
+export { demo, get_all_img, get_all_file, check_img_num }
