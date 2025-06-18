@@ -52,6 +52,10 @@ export default class Toomics {
         this.downloadPath = path.join(config?.downloadPath || '', this.website);
         this.adult = params.adult || false;
         this.jumpExist = config?.jumpExist
+        if (params?.url && /tc/.test(params.url)) {
+            this.langTag = 'tc';
+            this.downloadPath = this.downloadPath + '-tc';
+        }
         if (params.langTag) this.langTag = params.langTag
     }
 
@@ -141,7 +145,7 @@ export default class Toomics {
         this.page = await toomicsBrowser.new_page()
         if (!this.page) return
 
-        await this.page.goto(this.domain + `/sc`, {
+        await this.page.goto(this.domain + `/${this.langTag}`, {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
         }).catch(() => { })

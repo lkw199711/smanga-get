@@ -5,12 +5,14 @@ import { delay, get_config, get_os, read_json, write_log } from '#utils/index';
 
 const linuxStr = get_os() === 'Linux' ? '/' : '';
 export default class ToomicsAll {
+    private langTag: string = 'sc' // 语言标签
     private coverPath: string = linuxStr + 'data/toomics-covers'
     private jsonFile: string = linuxStr + 'data/toomics-all.json'
     private scrollStep: number = 400 // 滚动的步长
     private scrollDelay: number = 500 // 滚动的延迟时间
     public browser: any
-    constructor(nouser = false) {
+    constructor(langTag = 'sc', nouser = false) {
+        this.langTag = langTag || 'sc'; // 默认为简体中文
         const config = get_config().toomics;
         this.coverPath = config.coverCache;
         this.browser = nouser ? toomicsBrowserNoUser : toomicsBrowser
@@ -28,7 +30,7 @@ export default class ToomicsAll {
         const page = await this.browser.new_page();
         if (!page) return
 
-        await page.goto('https://toomics.com/sc/webtoon/ranking', { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/' }).catch(() => { })
+        await page.goto(`https://toomics.com/${this.langTag}/webtoon/ranking`, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/` }).catch(() => { })
         await page.waitForSelector('.list_wrap').catch(() => { });
         await this.browser.save_cookie()
         // 不断滚动 直到页面底部

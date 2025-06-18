@@ -5,6 +5,7 @@ type subsribeType = {
     adult?: boolean
     finished?: boolean
     langTag?: string
+    url?: string
 }
 
 export type { subsribeType }

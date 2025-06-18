@@ -2,9 +2,12 @@ import { toomicsBrowser } from "#api/browser";
 import { toomicsTask } from "#api/task";
 import { write_log, get_config } from "#utils/index";
 export default class ToomicsDayUpdate {
+    private langTag; // 语言标签
     private url = 'https://toomics.com/sc/webtoon/ongoing_all'
     private updateOnlyDay: boolean;
-    constructor() {
+    constructor(langTag?: string) {
+        this.langTag = langTag || 'sc'; // 默认为简体中文
+        this.url = `https://toomics.com/${langTag}/webtoon/ongoing_all`
         const config = get_config()?.toomics || {}
         this.updateOnlyDay = config?.updateOnlyDay;
     }
@@ -21,7 +24,7 @@ export default class ToomicsDayUpdate {
         const page = await toomicsBrowser.new_page();
         if (!page) return
 
-        await page.goto(this.url, { waitUntil: 'networkidle2', referer: 'https://toomics.com/sc/' }).catch(() => { })
+        await page.goto(this.url, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/` }).catch(() => { })
         await page.waitForSelector('.list_wrap').catch(() => { });
         await toomicsBrowser.save_cookie();
 
