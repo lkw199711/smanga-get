@@ -569,7 +569,23 @@ export default class Toomics {
             return
         }
 
-        write_log(`[chapter download]${chapterName} 下载完成.`)
+        // 检测图片序号连续性
+        let imgs = fs.readdirSync(downloadPath).filter(file => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+        imgs.sort((a, b) => {
+            const numA = parseInt(a.split('.')[0], 10);
+            const numB = parseInt(b.split('.')[0], 10);
+            return numA - numB;
+        })
+
+        const maxImg = imgs[imgs.length - 1];
+        const maxImgName = path.basename(maxImg);
+        const maxImgNum = parseInt(maxImgName);
+
+        if (maxImgNum > imgs.length + 1) {
+            write_log(`[chapter download]${chapterName} 下载完成,但是图片序号不连续,最大序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`);
+        } else {
+            write_log(`[chapter download]${chapterName} 下载完成.`)
+        }
 
         await delay(3000)
 
