@@ -264,11 +264,16 @@ export default class Toomics {
         await this.download_meta()
 
         // 检测到错误图片 重新下载元数据
-        if (downloadMetaError) {
+        if (downloadMetaError && this.retry < 3) {
             write_log(`[meta]${this.mangaName} 下载元数据失败,重新执行元数据获取`)
             this.downloadMetaError = true
+            this.retry++;
             await this.get_meta()
         } else {
+            if(this.retry >= 3){
+                write_log(`[meta]${this.mangaName} 任务失败`)
+                throw new Error("任务失败")
+            }
             this.downloadMetaError = false
             toomicsBrowser.clear_buffs()
         }
