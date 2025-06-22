@@ -584,6 +584,10 @@ export default class Toomics {
 
         // 检测图片序号连续性
         let imgs = fs.readdirSync(downloadPath).filter(file => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+        if (imgs.length === 0) {
+            write_log(`[chapter download]${chapterName} 下载完成,没有图片`);
+            return;
+        }
         imgs.sort((a, b) => {
             const numA = parseInt(a.split('.')[0], 10);
             const numB = parseInt(b.split('.')[0], 10);

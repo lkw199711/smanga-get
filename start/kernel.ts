@@ -73,10 +73,12 @@ create_scan_cron();
 // 获取全部漫画信息 并存储封面
 await new ToomicsAll('sc').start();
 await new ToomicsAll('tc').start();
+await new ToomicsAll('en').start();
 
 // 更新今天 昨天的漫画
 await new ToomicsUpdate('sc').start();
 await new ToomicsUpdate('tc').start();
+await new ToomicsUpdate('en').start();
 
 // 执行订阅
 task_allocation();
