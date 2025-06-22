@@ -55,6 +55,9 @@ export default class Toomics {
         if (params?.url && /tc/.test(params.url)) {
             this.langTag = 'tc';
             this.downloadPath = this.downloadPath + '-tc';
+        } else if (params?.url && /en/.test(params.url)) {
+            this.langTag = 'en';
+            this.downloadPath = this.downloadPath + '-en';
         }
         if (params.langTag) this.langTag = params.langTag
     }
@@ -215,7 +218,7 @@ export default class Toomics {
         const bannerBackground = this.metaPageHtml?.match(/(?<=<!-- pc bg -->.+src=\")[^\"]+/s)?.[0] || '';
         const cover = this.metaPageHtml?.match(/(?<=<!-- mobile -->.+src=\")[^\"]+/s)?.[0] || '';
         const finishedTxt = this.metaPageHtml?.match(/(?<=text-3xs font-bold text-gray-900\">)[^<]+/s)?.[0] || '';
-        const finished = ['完结', '完結'].includes(finishedTxt.trim()) ? true : false
+        const finished = ['完结', '完結', 'End'].includes(finishedTxt.trim()) ? true : false
         const audlt = this.adult;
 
         this.meta = {
