@@ -71,14 +71,14 @@ create_scan_cron();
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
 // 获取全部漫画信息 并存储封面
-await new ToomicsAll('sc').start();
-await new ToomicsAll('tc').start();
-await new ToomicsAll('en').start();
+// await new ToomicsAll('sc').start();
+// await new ToomicsAll('tc').start();
+// await new ToomicsAll('en').start();
 
 // 更新今天 昨天的漫画
-await new ToomicsUpdate('sc').start();
-await new ToomicsUpdate('tc').start();
-await new ToomicsUpdate('en').start();
+// await new ToomicsUpdate('sc').start();
+// await new ToomicsUpdate('tc').start();
+// await new ToomicsUpdate('en').start();
 
 // 执行订阅
 task_allocation();

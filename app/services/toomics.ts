@@ -300,7 +300,7 @@ export default class Toomics {
             const name = index + ' ' + subName;
             const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
             const date = box.match(/(?<=text-muted\">)[^<]+/s)?.[0] || ''
-            const url = box.match(/\/(sc|tc)\/webtoon\/detail[^\']+/)?.[0] || ''
+            const url = box.match(/\/(sc|tc|en)\/webtoon\/detail[^\']+/)?.[0] || ''
 
             let isFree = false
             const freeTxt = box.match(/(?<=class=\"label.+\">)[^<]+/s)?.[0] || ''
@@ -544,6 +544,8 @@ export default class Toomics {
             const urls = Array.from(els).map((el: any) => el.src)
             return urls;
         })
+
+        console.log(imageUrls);
 
         // 数量正确 进行下载
         for (let i = 0; i < imageUrls.length; i++) {
