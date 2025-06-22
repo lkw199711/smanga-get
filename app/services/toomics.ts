@@ -145,7 +145,7 @@ export default class Toomics {
         this.page = await toomicsBrowser.new_page()
         if (!this.page) return
 
-        await this.page.goto(this.domain + `/${this.langTag}`, {
+        await this.page.goto(this.domain + `/sc`, {
             waitUntil: 'networkidle2',
             timeout: 60 * 1000,
         }).catch(() => { })
@@ -600,7 +600,7 @@ export default class Toomics {
             write_log(`[chapter download]${chapterName} 下载完成.`)
         }
 
-        await delay(3000)
+        await delay(1000)
 
         end_app();
     }
