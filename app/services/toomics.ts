@@ -545,8 +545,6 @@ export default class Toomics {
             return urls;
         })
 
-        console.log(imageUrls);
-
         // 数量正确 进行下载
         for (let i = 0; i < imageUrls.length; i++) {
             const imageUrl = imageUrls[i]
