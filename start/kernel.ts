@@ -55,6 +55,9 @@ import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import OmegaScansUpdate from '#services/omegascans-update'
 import ToZip from '#services/tozip'
+import { get_config } from '#utils/index'
+
+const immediately = get_config().immediately ?? 0;
 
 // 创建配置文件
 // create_config();
@@ -71,17 +74,20 @@ import ToZip from '#services/tozip'
 // process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
-// 获取全部漫画信息 并存储封面
-// await new ToomicsAll('sc').start();
-// await new ToomicsAll('tc').start();
-// await new ToomicsAll('en').start();
+if (immediately) { 
+  // 获取全部漫画信息 并存储封面
+  await new ToomicsAll('sc').start();
+  await new ToomicsAll('tc').start();
+  // await new ToomicsAll('en').start();
 
-// 更新今天 昨天的漫画
-// await new ToomicsUpdate('sc').start();
-// await new ToomicsUpdate('tc').start();
-// await new ToomicsUpdate('en').start();
+  // 更新今天 昨天的漫画
+  await new ToomicsUpdate('sc').start();
+  await new ToomicsUpdate('tc').start();
+  // await new ToomicsUpdate('en').start();
 
-await new OmegaScansUpdate({}).start();
+  await new OmegaScansUpdate({}).start();
+}
+
 
 // 执行订阅
 // task_allocation();
