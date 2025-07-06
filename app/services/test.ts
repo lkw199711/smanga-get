@@ -104,6 +104,7 @@ function check_img_num(dir: string) {
     });
 
     if (imgs.length === 0) {
+        console.log(`目录 ${dir} 没有图片文件`);
         return;
     }
 
@@ -137,4 +138,27 @@ function get_all_file(dir: string) {
     return imgFiles;
 }
 
+function move_end_file(sourceDir: string, outputDir: string) {
+    const files = fs.readdirSync(sourceDir);
+    const endFiles: string[] = [];
+
+    files.forEach((file, index) => {
+        const filePath = path.join(sourceDir, file);
+        if (/smanga-info/.test(file)) return; // 跳过 smanga-info 目录
+        const metaFile = `${filePath}-smanga-info\\meta.json`;
+        if (!fs.existsSync(metaFile)) return; // 如果没有元数据文件则跳过
+        const meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+        if (meta.status !== 'Completed') return; // 只处理已完成的漫画
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+        
+    });
+
+    if (endFiles.length > 0) {
+        console.log(endFiles);
+    }
+
+    return endFiles;
+}
 export { demo, get_all_img, get_all_file, check_img_num }

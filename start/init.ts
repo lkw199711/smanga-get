@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url)
 const cron = require('node-cron');
 
 import { subscribe_read } from '#api/subsribe';
-import { bilibiliTask, toomicsTask } from '#api/task';
+import { bilibiliTask, omegascansTask, toomicsTask } from '#api/task';
 import { subsribeType } from '#type/index.js'
 import { get_config, set_config, get_os } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'
@@ -85,6 +85,8 @@ export function task_allocation() {
             toomicsTask.add(item)
         } else if (item.website === 'bilibili') {
             bilibiliTask.add(item)
+        } else if (item.website === 'omegascans') { 
+            omegascansTask.add(item)
         } else {
             continue;
         }

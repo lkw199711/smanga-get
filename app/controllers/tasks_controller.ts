@@ -1,5 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { bilibiliTask, toomicsTask } from '#api/task'
+import { bilibiliTask, omegascansTask, toomicsTask } from '#api/task'
 import { write_log } from '#utils/index'
 
 export default class TasksController {
@@ -30,6 +30,7 @@ export default class TasksController {
         return {
             bilibili: bilibiliTask.get(),
             toomics: toomicsTask.get(),
+            omegascans: omegascansTask.get(),
         }
     }
 

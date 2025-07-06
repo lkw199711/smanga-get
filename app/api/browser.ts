@@ -121,12 +121,16 @@ class UseBrowser {
          * * 这里的图片是指漫画封面图，可能会有其他图片也会被保存
          */
         page.on('response', async (response) => {
-            if (response.request().resourceType() === 'image') {
+            // if (response.request().resourceType() === 'image')
+            const contentType = response.headers()['content-type'];
+            // console.log(contentType, response.url());
+            if (/image/i.test(contentType)) {
                 const url = response.url();
                 try {
                     const buffer = await response.buffer();
                     this.buffs[url] = buffer;
-                } catch (e) { }
+                } catch (e) { 
+                }
             }
         })
         return page
@@ -140,5 +144,6 @@ class UseBrowser {
 const toomicsBrowser = new UseBrowser();
 const bilibiliBrowser = new UseBrowser({ website: 'bilibili' });
 const toomicsBrowserNoUser = new UseBrowser({ nouser: true, website: 'toomics' })
+const omegascansBrowser = new UseBrowser({ website: 'omegascans' });
 
-export { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser };
+export { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser };

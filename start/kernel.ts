@@ -53,19 +53,20 @@ import { create_scan_cron, task_allocation, create_config } from './init.js'
 import { demo, get_all_img, get_all_file, check_img_num } from '#services/test'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
+import OmegaScansUpdate from '#services/omegascans-update'
 import ToZip from '#services/tozip'
 
 // 创建配置文件
-create_config();
+// create_config();
 
 // 压缩漫画
-// await new ToZip('M:\\manga\\toomics-连载').start();
+// await new ToZip('M:\\manga\\omegascans-ongoing').start();
 
 // 定时任务
-create_scan_cron();
+// create_scan_cron();
 
 // 查询干扰图片
-// console.log(check_img_num("M:\\manga\\toomics"));
+// console.log(check_img_num("M:\\manga\\omegascans"));
 // console.log('执行完毕');
 // process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
@@ -80,8 +81,10 @@ create_scan_cron();
 // await new ToomicsUpdate('tc').start();
 // await new ToomicsUpdate('en').start();
 
+await new OmegaScansUpdate({}).start();
+
 // 执行订阅
-task_allocation();
+// task_allocation();
 
 /*
 const toomics = new Toomics({

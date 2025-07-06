@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module'
-import { s_delete } from "#utils/index";
+import { s_delete, copy_folder, read_json, end_app } from "#utils/index";
 const require = createRequire(import.meta.url)
 const archiver = require('archiver');
 
@@ -12,7 +12,7 @@ class ToZip {
     outFloder: string = '';
     constructor(mangaFloder: string) {
         this.mangaFloder = mangaFloder;
-        this.outFloder = 'M:\\manga\\00cloud-sync\\toomics-update';
+        this.outFloder = 'M:\\manga\\omegascans';
     }
 
     async start() {
@@ -21,13 +21,14 @@ class ToZip {
             const fileName = items[i];
             const filePath = path.join(this.mangaFloder, fileName);
             const outMangaPath = path.join(this.outFloder, fileName);
-            
-            if (/zip/.test(fileName)) { 
+
+            if (/zip/.test(fileName)) {
                 console.log('跳过压缩包', fileName);
                 continue;
             } else if (/smanga-info/.test(fileName)) {
                 // s_delete(filePath);
-                await zip_directory(filePath, `${this.outFloder}\\${fileName}.zip`);
+                // copy_folder(filePath, `${this.outFloder}\\${fileName}`);
+                // await zip_directory(filePath, `${this.outFloder}\\${fileName}.zip`);
             } else {
                 /*
                 const files = fs.readdirSync(filePath);
@@ -38,13 +39,22 @@ class ToZip {
                     const filePath1 = path.join(filePath, file);
                     s_delete(filePath1);
                 })*/
+                const metaFile = `${filePath}-smanga-info\\meta.json`;
+                if (!fs.existsSync(metaFile)) continue;
+                const meta = read_json(metaFile);
+                if (meta.status !== 'Completed') continue; // 只处理已完成的漫画
+
                 if (!fs.existsSync(outMangaPath)) {
                     fs.mkdirSync(outMangaPath, { recursive: true });
                 }
-                await zip_jpg(filePath, `${this.outFloder}\\${fileName}-covers.zip`);
+
+                // 复制元数据文件夹
+                copy_folder(`${filePath}-smanga-info`, `${this.outFloder}\\${fileName}-smanga-info`);
+                // await zip_jpg(filePath, `${this.outFloder}\\${fileName}-covers.zip`);
                 await zipAndRemoveFolders(filePath, `${this.outFloder}\\${fileName}`);
+                end_app()
             }
-            
+
         }
     }
 
@@ -195,17 +205,26 @@ async function zipAndRemoveFolders(sourceDir: string, outputPath: string) {
         const items = fs.readdirSync(sourceDir, { withFileTypes: true });
 
         // 筛选出子文件夹
-        const folders = items.filter(item => item.isDirectory());
+        // const folders = items.filter(item => item.isDirectory());
 
-        if (folders.length === 0) {
-            console.log('没有找到任何子文件夹', sourceDir);
-            return;
-        }
+        // if (folders.length === 0) {
+        //     console.log('没有找到任何子文件夹', sourceDir);
+        //     return;
+        // }
 
         // 处理每个子文件夹
-        for (const folder of folders) {
-            const folderPath = path.join(sourceDir, folder.name);
-            const zipPath = path.join(outputPath, `${folder.name}.zip`);
+        for (const item of items) {
+            // 文件直接复制
+            if (!item.isDirectory()) {
+                const sourceFile = path.join(sourceDir, item.name);
+                const outputFile = path.join(outputPath, item.name);
+                fs.copyFileSync(sourceFile, outputFile);
+                continue;
+            }
+
+            // 目录打包zip
+            const folderPath = path.join(sourceDir, item.name);
+            const zipPath = path.join(outputPath, `${item.name}.zip`);
 
             // 检查是否存在 zip 文件 存在则跳过
             if (fs.existsSync(zipPath)) {
@@ -251,7 +270,7 @@ function zipAndRemoveFoldersSync(directoryPath: string) {
             // 使用Promise确保同步完成
             const zipPromise = new Promise((resolve, reject) => {
                 output.on('close', () => {
-                    console.log(`${folder.name}.zip 创建完成 (${archive.pointer()} bytes)`);
+                    console.log(`${folder.name} 创建完成 (${archive.pointer()} bytes)`);
                     resolve();
                 });
 

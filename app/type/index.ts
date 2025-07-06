@@ -6,6 +6,9 @@ type subsribeType = {
     finished?: boolean
     langTag?: string
     url?: string
+    series_slug?: string
+    cover?: string
+    status?: string
 }
 
 export type { subsribeType }

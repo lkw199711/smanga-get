@@ -1,6 +1,7 @@
 import Axios from 'axios'
 import * as fs from 'fs'
 import * as os from 'os'
+import * as path from 'path'
 
 const liunxStr = get_os() === 'Linux' ? '/' : ''
 const configFile = liunxStr + 'data/config.json'
@@ -122,4 +123,35 @@ export function s_delete(file: string) {
   } catch (err) {
     console.error(err.message)
   }
+}
+
+export function copy_folder(source: string, target: string) {
+  let files = [];
+
+  // 确保目标文件夹存在
+  if (!fs.existsSync(target)) {
+    fs.mkdirSync(target, { recursive: true });
+  }
+
+  // 读取源文件夹中的所有文件和子文件夹
+  if (fs.existsSync(source)) {
+    files = fs.readdirSync(source);
+    files.forEach(function (file) {
+      let srcPath = path.join(source, file);
+      let destPath = path.join(target, file);
+      let stat = fs.statSync(srcPath);
+
+      if (stat.isDirectory()) {
+        // 如果是目录，则递归复制
+        copy_folder(srcPath, destPath);
+      } else {
+        // 如果是文件，则直接复制
+        fs.copyFileSync(srcPath, destPath);
+      }
+    });
+  }
+}
+
+export function make_can_be_floder(name: string): string {
+  return name.replace(/[\\/\\\\:*?\"<>|]/g, '').trimStart().trimEnd();
 }

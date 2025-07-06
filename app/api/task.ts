@@ -52,7 +52,7 @@ export function task_remove({ website, id }: { website: string, id: number }) {
 
 class Task {
     tasks: subsribeType[] = []
-    running: boolean = false
+    running: boolean | number = false
 
     constructor(tasks: subsribeType[]) {
         this.tasks = tasks
@@ -84,6 +84,7 @@ class Task {
 
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
+import Omegascans from '#services/omegascans'
 import { write_log } from '#utils/index';
 class BilibiliTask extends Task {
     constructor(tasks: subsribeType[]) {
@@ -147,7 +148,43 @@ class ToomicsTask extends Task {
     }
 }
 
+class OmegascansTask extends Task {
+    running = 0;
+    private concurrency: number = 1;
+    constructor(tasks: subsribeType[]) {
+        super(tasks)
+    }
+
+    async run() {
+        if (this.tasks.length === 0) return;
+        if (this.running >= this.concurrency) {
+            return;
+        }
+
+        this.running++;
+        const task = this.tasks.shift()
+
+        if (!task) {
+            this.running--
+            return
+        }
+
+        const omegascans = new Omegascans(task)
+        await omegascans.start()
+            .catch((err) => {
+                write_log(`[Omegascans] ${task.id} ${task.name} 任务执行失败: ${err?.message}`)
+                // 任务放到末尾再次执行
+                this.tasks.push(task)
+            })
+
+        this.running--;
+
+        this.run()
+    }
+}
+
 const bilibiliTask = new BilibiliTask([])
 const toomicsTask = new ToomicsTask([])
+const omegascansTask = new OmegascansTask([])
 
-export { bilibiliTask, toomicsTask }
+export { bilibiliTask, toomicsTask, omegascansTask }
