@@ -120,7 +120,7 @@ export default class ToomicsAll {
                 continue
             }
 
-            if (this.browser.buffs[manga.cover]) {
+            if (this.browser.buffs[manga.cover] && this.browser.buffs[manga.cover].length > 250) {
                 fs.writeFileSync(coverPath, this.browser.buffs[manga.cover])
             } else {
                 console.error('没有找到图片', manga.cover)
