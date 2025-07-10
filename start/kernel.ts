@@ -90,7 +90,7 @@ if (immediately) {
 
 
 // 执行订阅
-// task_allocation();
+task_allocation();
 
 /*
 const toomics = new Toomics({
