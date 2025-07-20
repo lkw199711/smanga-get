@@ -10,6 +10,7 @@ import { get_config, set_config, get_os } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
+import OmegaScansUpdate from '#services/omegascans-update'
 let subsribeCron: any = { stop: () => { } }
 
 const linuxStr = get_os() === 'Linux' ? '/' : ''
@@ -63,6 +64,7 @@ export function create_scan_cron() {
         await new ToomicsAll('tc').start()
         await new ToomicsDayUpdate('sc').start()
         await new ToomicsDayUpdate('tc').start()
+        await new OmegaScansUpdate({}).start();
         const subsribe = subscribe_read()
         for (let i = 0; i < subsribe.length; i++) {
             const item: subsribeType = subsribe[i]

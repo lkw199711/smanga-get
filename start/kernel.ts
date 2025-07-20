@@ -60,13 +60,13 @@ import { get_config } from '#utils/index'
 const immediately = get_config().immediately ?? 0;
 
 // 创建配置文件
-// create_config();
+create_config();
 
 // 压缩漫画
 // await new ToZip('M:\\manga\\omegascans-ongoing').start();
 
 // 定时任务
-// create_scan_cron();
+create_scan_cron();
 
 // 查询干扰图片
 // console.log(check_img_num("M:\\manga\\omegascans"));
@@ -90,7 +90,7 @@ if (immediately) {
 
 
 // 执行订阅
-task_allocation();
+// task_allocation();
 
 /*
 const toomics = new Toomics({
