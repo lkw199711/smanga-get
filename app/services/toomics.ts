@@ -194,6 +194,9 @@ export default class Toomics {
         }
 
         await toomicsBrowser.save_cookie();
+
+        // 关闭页面 避免页面过多
+        await this.page.close().catch(() => { })
     }
 
     /**
