@@ -266,7 +266,7 @@ export default class Toomics {
         this.chapters.forEach((chapter: any) => {
             if (!toomicsBrowser.buffs[chapter.cover]) {
                 console.log('章节封面图片下载失败', chapter.cover);
-                downloadMetaError = true
+                // downloadMetaError = true
             }
         })
 
