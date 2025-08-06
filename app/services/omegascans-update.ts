@@ -1,7 +1,7 @@
 
 import { end_app, read_json, write_log, delay, make_can_be_floder, get_config } from "#utils/index";
 import { omegascansBrowser } from "#api/browser";
-import { omegascansTask } from "#api/task";
+import { mangaTask, omegascansTask } from "#api/task";
 import fs, { writeFileSync } from "fs";
 
 export default class OmegaScansUpdate {
@@ -58,7 +58,7 @@ export default class OmegaScansUpdate {
                 website: 'omegascans',
             }
             // console.log(params)
-            omegascansTask.add(params)
+            mangaTask.add(params)
         })
     }
 
