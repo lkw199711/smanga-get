@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url)
 const cron = require('node-cron');
 
 import { subscribe_read } from '#api/subsribe';
-import { bilibiliTask, omegascansTask, toomicsTask } from '#api/task';
+import { bilibiliTask, mangaTask, omegascansTask, toomicsTask } from '#api/task';
 import { subsribeType } from '#type/index.js'
 import { get_config, set_config, get_os } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'
@@ -68,13 +68,7 @@ export function create_scan_cron() {
         const subsribe = subscribe_read()
         for (let i = 0; i < subsribe.length; i++) {
             const item: subsribeType = subsribe[i]
-            if (item.website === 'toomics') {
-                toomicsTask.add(item)
-            } else if (item.website === 'bilibili') {
-                bilibiliTask.add(item)
-            } else {
-                continue;
-            }
+            mangaTask.add(item)
         }
     });
 }
@@ -83,14 +77,6 @@ export function task_allocation() {
     const subsribe = subscribe_read()
     for (let i = 0; i < subsribe.length; i++) {
         const item: subsribeType = subsribe[i]
-        if (item.website === 'toomics') {
-            toomicsTask.add(item)
-        } else if (item.website === 'bilibili') {
-            bilibiliTask.add(item)
-        } else if (item.website === 'omegascans') { 
-            omegascansTask.add(item)
-        } else {
-            continue;
-        }
+        mangaTask.add(item)
     }
 }

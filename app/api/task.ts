@@ -1,5 +1,6 @@
 import { subsribeType } from '#type/index.js';
 import fs from 'fs'
+import { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser } from '#api/browser';
 
 const taskFile = process.cwd() + '/task.json'
 /**
@@ -48,6 +49,13 @@ export function task_remove({ website, id }: { website: string, id: number }) {
         task.splice(index, 1)
         task_write(task)
     }
+}
+
+export async function close_all_browsers() { 
+    await toomicsBrowser.browser?.close();
+    await bilibiliBrowser.browser?.close();
+    await toomicsBrowserNoUser.browser?.close();
+    await omegascansBrowser.browser?.close();
 }
 
 class Task {
@@ -183,8 +191,58 @@ class OmegascansTask extends Task {
     }
 }
 
+class MangaTask extends Task { 
+    constructor(tasks: subsribeType[]) {
+        super(tasks)
+    }
+
+    async run() {
+        if (this.tasks.length === 0) return;
+        if (this.running) return;
+
+        this.running = true
+        const task = this.tasks.shift()
+
+        if (!task) {
+            this.running = false
+            await close_all_browsers();
+            write_log('[MangaTask] 所有任务执行完毕')
+            return
+        }
+
+        let taskService;
+        switch (task.website) {
+            case 'toomics':
+                taskService = new Toomics(task);
+                break;
+            case 'bilibili':
+                taskService = new Bilibili(task);
+                break;
+            case 'omegascans':
+                taskService = new Omegascans(task);
+                break;
+            default:
+                write_log(`[MangaTask] 未知网站: ${task.website}`);
+                this.running = false;
+                return;
+        }
+
+        await taskService.start()
+            .catch((err) => {
+                write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+                // 任务放到末尾再次执行
+                this.tasks.push(task)
+            })
+
+        this.running = false
+
+        this.run()
+    }
+}
+
 const bilibiliTask = new BilibiliTask([])
 const toomicsTask = new ToomicsTask([])
 const omegascansTask = new OmegascansTask([])
+const mangaTask = new MangaTask([])
 
-export { bilibiliTask, toomicsTask, omegascansTask }
+export { bilibiliTask, toomicsTask, omegascansTask, mangaTask }
