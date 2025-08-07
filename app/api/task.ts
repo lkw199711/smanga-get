@@ -197,16 +197,20 @@ class MangaTask extends Task {
     }
 
     async run() {
-        if (this.tasks.length === 0) return;
+        
         if (this.running) return;
+
+        if (this.tasks.length === 0) {
+            await close_all_browsers();
+            write_log('[MangaTask] 所有任务执行完毕')
+            return
+        };
 
         this.running = true
         const task = this.tasks.shift()
 
         if (!task) {
             this.running = false
-            await close_all_browsers();
-            write_log('[MangaTask] 所有任务执行完毕')
             return
         }
 
