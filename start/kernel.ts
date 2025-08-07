@@ -85,7 +85,7 @@ if (immediately) {
   await new ToomicsUpdate('tc').start();
   // await new ToomicsUpdate('en').start();
 
-  await new OmegaScansUpdate({}).start();
+  // await new OmegaScansUpdate({}).start();
 }
 
 

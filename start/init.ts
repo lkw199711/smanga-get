@@ -68,6 +68,13 @@ export function create_scan_cron() {
     const scanInterval = config.interval || "0 0 2,14 * * *" // 每天0点和12点执行一次
     // 定时扫描任务
     subsribeCron = cron.schedule(scanInterval, async () => {
+        // 获取全部漫画信息 并存储封面
+        await new ToomicsAll('sc').start();
+        await new ToomicsAll('tc').start();
+
+        // 更新今天 昨天的漫画
+        await new ToomicsDayUpdate('sc').start();
+        await new ToomicsDayUpdate('tc').start();
         await new OmegaScansUpdate({}).start();
         const subsribe = subscribe_read()
         for (let i = 0; i < subsribe.length; i++) {
@@ -75,26 +82,27 @@ export function create_scan_cron() {
             mangaTask.add(item)
         }
     });
-
-    // Toomics 全部封面扫描任务
-    toomicsScAllCoversCron = cron.schedule(config.toomicsScAllCoversInterval, async () => { 
-        await new ToomicsAll('sc').start()
-    })
-
-    // Toomics 全部封面扫描任务
-    toomicsTcAllCoversCron = cron.schedule(config.toomicsTcAllCoversInterval, async () => {
-        await new ToomicsAll('tc').start()
-    })
-
-    // Toomics 更新扫描任务
-    toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
-        await new ToomicsDayUpdate('sc').start()
-    })
-
-    // Toomics 更新扫描任务
-    toomicsTcUpdateCron = cron.schedule(config.toomicsTcUpdateInterval, async () => {
-        await new ToomicsDayUpdate('tc').start()
-    })
+    /*
+        // Toomics 全部封面扫描任务
+        toomicsScAllCoversCron = cron.schedule(config.toomicsScAllCoversInterval, async () => { 
+            await new ToomicsAll('sc').start()
+        })
+    
+        // Toomics 全部封面扫描任务
+        toomicsTcAllCoversCron = cron.schedule(config.toomicsTcAllCoversInterval, async () => {
+            await new ToomicsAll('tc').start()
+        })
+    
+        // Toomics 更新扫描任务
+        toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
+            await new ToomicsDayUpdate('sc').start()
+        })
+    
+        // Toomics 更新扫描任务
+        toomicsTcUpdateCron = cron.schedule(config.toomicsTcUpdateInterval, async () => {
+            await new ToomicsDayUpdate('tc').start()
+        })
+            */
 }
 
 export function task_allocation() {
