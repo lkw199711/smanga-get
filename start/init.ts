@@ -77,22 +77,22 @@ export function create_scan_cron() {
     });
 
     // Toomics 全部封面扫描任务
-    toomicsScAllCoversCron = cron.schedule(config.cron?.toomicsScAllCoversInterval, async () => { 
+    toomicsScAllCoversCron = cron.schedule(config.toomicsScAllCoversInterval, async () => { 
         await new ToomicsAll('sc').start()
     })
 
     // Toomics 全部封面扫描任务
-    toomicsTcAllCoversCron = cron.schedule(config.cron?.toomicsTcAllCoversInterval, async () => {
+    toomicsTcAllCoversCron = cron.schedule(config.toomicsTcAllCoversInterval, async () => {
         await new ToomicsAll('tc').start()
     })
 
     // Toomics 更新扫描任务
-    toomicsScUpdateCron = cron.schedule(config.cron?.toomicsScUpdateInterval, async () => {
+    toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
         await new ToomicsDayUpdate('sc').start()
     })
 
     // Toomics 更新扫描任务
-    toomicsTcUpdateCron = cron.schedule(config.cron?.toomicsTcUpdateInterval, async () => {
+    toomicsTcUpdateCron = cron.schedule(config.toomicsTcUpdateInterval, async () => {
         await new ToomicsDayUpdate('tc').start()
     })
 }
