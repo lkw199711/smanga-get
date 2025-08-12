@@ -14,6 +14,8 @@ export default class ToomicsAll {
     constructor(langTag = 'sc', nouser = false) {
         this.langTag = langTag || 'sc'; // 默认为简体中文
         const config = get_config().toomics;
+        if(config.scrollStep) this.scrollStep = config.scrollStep;
+        if(config.scrollDelay) this.scrollDelay = config.scrollDelay;
         this.coverPath = config.coverCache;
         this.browser = nouser ? toomicsBrowserNoUser : toomicsBrowser
     }
