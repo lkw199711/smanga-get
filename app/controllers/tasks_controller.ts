@@ -1,5 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { bilibiliTask, omegascansTask, toomicsTask } from '#api/task'
+import { bilibiliTask, mangaTask, omegascansTask, toomicsTask } from '#api/task'
 import { write_log } from '#utils/index'
 
 export default class TasksController {
@@ -7,16 +7,7 @@ export default class TasksController {
     add({ request }: HttpContext) {
         const { website, id, name } = request.all()
 
-        if (website === 'toomics') {
-            toomicsTask.add({ website, id, name })
-        } else if (website === 'bilibili') {
-            bilibiliTask.add({ website, id, name })
-        } else {
-            return {
-                code: 400,
-                message: 'Invalid website',
-            }
-        }
+        mangaTask.add({ website, id, name })
 
         write_log(`[task]${website} ${id} ${name} 任务添加成功`)
 
@@ -31,6 +22,7 @@ export default class TasksController {
             bilibili: bilibiliTask.get(),
             toomics: toomicsTask.get(),
             omegascans: omegascansTask.get(),
+            manga: mangaTask.get(),
         }
     }
 

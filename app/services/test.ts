@@ -2,7 +2,7 @@ import puppeteer from "puppeteer";
 import fs from 'fs';
 import path from "path";
 import { fileURLToPath } from 'url';
-import { delay } from "#utils/index";
+import { delay, s_delete } from "#utils/index";
 // 获取当前文件的目录
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -152,7 +152,7 @@ function move_end_file(sourceDir: string, outputDir: string) {
         if (!fs.existsSync(outputDir)) {
             fs.mkdirSync(outputDir, { recursive: true });
         }
-        
+
     });
 
     if (endFiles.length > 0) {
@@ -161,4 +161,40 @@ function move_end_file(sourceDir: string, outputDir: string) {
 
     return endFiles;
 }
-export { demo, get_all_img, get_all_file, check_img_num }
+
+function delete_err_cover(dir: string) {
+    const files = fs.readdirSync(dir);
+
+    files.forEach((file, index) => {
+        const filePath = path.join(dir, file);
+        if (/smanga-info/.test(filePath)) {
+            info_covers(filePath)
+        }
+    });
+
+    console.log('处理完毕!');
+
+}
+
+function info_covers(dir: string) {
+    const files = fs.readdirSync(dir);
+    let coverFile: string[] = []
+    files.forEach((file, index) => {
+        if (!/cover/.test(file)) return;
+
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.size < 512) {
+            s_delete(filePath);
+            return;
+        } // 删除小于512字节的文件
+        else {
+            coverFile.push(filePath);
+        }
+    });
+
+    coverFile.forEach((file: string, index) => {
+        fs.renameSync(file, `${path.dirname(file)}/cover${index == 0 ? '' : index}.jpg`); // 将所有的 .jpg 文件改为 .png
+    })
+}
+export { demo, get_all_img, get_all_file, check_img_num, delete_err_cover }

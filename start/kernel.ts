@@ -50,7 +50,7 @@ export const middleware = router.named({})
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation, create_config } from './init.js'
-import { demo, get_all_img, get_all_file, check_img_num } from '#services/test'
+import { demo, get_all_img, get_all_file, check_img_num, delete_err_cover } from '#services/test'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import OmegaScansUpdate from '#services/omegascans-update'
@@ -66,6 +66,10 @@ create_config();
 // 压缩漫画
 // await new ToZip('M:\\manga\\omegascans-ongoing').start();
 
+// 删除错误黑封面
+// delete_err_cover('A:\\02manga\\02压缩处理\\toomics');
+// delete_err_cover('M:\\manga\\toomics');
+
 // 定时任务
 create_scan_cron();
 
@@ -74,9 +78,10 @@ create_scan_cron();
 // console.log('执行完毕');
 // process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
+// console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
 if (immediately) {
-  
+
   // 获取全部漫画信息 并存储封面
   await new ToomicsAll('sc').start();
   await new ToomicsAll('tc').start();

@@ -405,6 +405,11 @@ export default class Toomics {
             console.error('封面图片不存在,请检查全部漫画获取程序', imagePath)
             return
         };
+        const stat = fs.statSync(imagePath)
+        if (stat.size < 1000) {
+            console.error('封面图片大小异常,请检查全部漫画获取程序', imagePath)
+            return
+        }
 
         fs.copyFileSync(imagePath, localPath)
     }

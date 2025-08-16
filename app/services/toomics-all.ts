@@ -104,9 +104,12 @@ export default class ToomicsAll {
                 json.push(manga)
             } else {
                 let covers = json[mangaIndex]?.covers || []
-                if (!covers.includes(manga.cover)) {
+                if (/^https?:\/\//i.test(manga.cover) && !covers.includes(manga.cover)) {
                     covers.push(manga.cover)
                 }
+                // 非http开头移除
+                covers = covers.filter((cover: string) => /^https?:\/\//i.test(cover));
+                
                 manga.covers = covers
                 json[mangaIndex] = manga
             }
