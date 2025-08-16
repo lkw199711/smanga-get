@@ -3,10 +3,9 @@ import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe';
 import path from 'path';
-import { delay, end_app, get_config, read_json, write_log } from '#utils/index';
+import { delay, end_app, get_config, read_json, s_delete, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
 import { toomicsBrowser } from '#api/browser';
-// const crypto = require('crypto');
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string = 'toomics'
@@ -144,6 +143,13 @@ export default class Toomics {
 
         // 获取cookie
         await toomicsBrowser.get_cookie()
+
+        // 清除旧的章节缓存
+        const chapterCahceImages = fs.readdirSync(this.config.chapterCache);
+        chapterCahceImages.forEach((file) => {
+            const filePath = path.join(this.config.chapterCache, file);
+            fs.unlinkSync(filePath);
+        });
 
         this.page = await toomicsBrowser.new_page()
         if (!this.page) return

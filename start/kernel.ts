@@ -55,7 +55,8 @@ import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import OmegaScansUpdate from '#services/omegascans-update'
 import ToZip from '#services/tozip'
-import { get_config } from '#utils/index'
+import { delay, get_config } from '#utils/index'
+import { toomicsBrowser } from '#api/browser'
 
 const immediately = get_config().immediately ?? 0;
 
@@ -74,7 +75,8 @@ create_scan_cron();
 // process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
-if (immediately) { 
+if (immediately) {
+  
   // 获取全部漫画信息 并存储封面
   await new ToomicsAll('sc').start();
   await new ToomicsAll('tc').start();
@@ -83,14 +85,10 @@ if (immediately) {
   // 更新今天 昨天的漫画
   await new ToomicsUpdate('sc').start();
   await new ToomicsUpdate('tc').start();
-  // await new ToomicsUpdate('en').start();
 
-  // await new OmegaScansUpdate({}).start();
+  // 执行订阅
+  task_allocation();
 }
-
-
-// 执行订阅
-// task_allocation();
 
 /*
 const toomics = new Toomics({

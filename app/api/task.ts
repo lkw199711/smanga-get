@@ -121,7 +121,7 @@ class BilibiliTask extends Task {
 
         this.running = false
 
-        this.run()
+        await this.run()
     }
 }
 
@@ -152,7 +152,7 @@ class ToomicsTask extends Task {
 
         this.running = false
 
-        this.run()
+        await this.run()
     }
 }
 
@@ -187,7 +187,7 @@ class OmegascansTask extends Task {
 
         this.running--;
 
-        this.run()
+        await this.run()
     }
 }
 
@@ -240,7 +240,7 @@ class MangaTask extends Task {
 
         this.running = false
 
-        this.run()
+        await this.run()
     }
 }
 
