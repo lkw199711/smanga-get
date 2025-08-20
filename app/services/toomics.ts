@@ -195,8 +195,15 @@ export default class Toomics {
             if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(await this.page?.content())) {
                 write_log('登录失败，请检查账号密码')
                 throw new Error('登录失败，请检查账号密码')
-                return
             }
+
+            let Base: any;
+            await this.page.evaluate(() => { 
+                // 切换成人模式
+                Base.setDisplay('A', '/sc');
+            }).catch(() => { })
+
+            await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
         }
 
         await toomicsBrowser.save_cookie();
