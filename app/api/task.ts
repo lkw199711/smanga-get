@@ -198,15 +198,19 @@ class MangaTask extends Task {
 
     async run() {
         
-        if (this.running) return;
+        if (this.running) {
+            write_log('[MangaTask] 任务正在运行，请稍后再试')
+            return;
+        }
 
         this.running = true
+        write_log('[MangaTask] 开始执行任务 running = true')
         const task = this.tasks.shift()
 
         if (!task) {
+            write_log('[MangaTask] 所有任务执行完毕')
             this.running = false
             await close_all_browsers();
-            write_log('[MangaTask] 所有任务执行完毕')
             return
         }
 
@@ -235,6 +239,7 @@ class MangaTask extends Task {
             })
 
         this.running = false
+        write_log('[MangaTask] 任务执行完毕，准备执行下一个任务 running = false')
 
         await this.run()
     }
