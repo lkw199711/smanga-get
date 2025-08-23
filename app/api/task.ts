@@ -94,6 +94,8 @@ import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import Omegascans from '#services/omegascans'
 import { end_app, write_log } from '#utils/index';
+import ToomicsDayUpdate from '#services/toomics-update';
+import ToomicsAll from '#services/toomics-all';
 class BilibiliTask extends Task {
     constructor(tasks: subsribeType[]) {
         super(tasks)
@@ -204,17 +206,16 @@ class MangaTask extends Task {
         }
 
         this.running = true
-        write_log('[MangaTask] 开始执行任务 running = true')
         const task = this.tasks.shift()
 
         if (this.tasks.length === 0) { 
-            write_log('[MangaTask] 所有任务执行完毕')
-            await close_all_browsers()
             this.running = false
             return;
         }
 
         if (!task) {
+            write_log('[MangaTask] 所有任务执行完毕')
+            await close_all_browsers()
             this.running = false
             return
         }
@@ -230,6 +231,18 @@ class MangaTask extends Task {
             case 'omegascans':
                 taskService = new Omegascans(task);
                 break;
+            case 'toomics-update-sc':
+                taskService = new ToomicsDayUpdate('sc');
+                break;
+            case 'toomics-update-tc':
+                taskService = new ToomicsDayUpdate('tc');
+                break;
+            case 'toomics-covers-sc':
+                taskService = new ToomicsAll('sc');
+                break;
+            case 'toomics-covers-tc':
+                taskService = new ToomicsAll('tc');
+                break;
             default:
                 write_log(`[MangaTask] 未知网站: ${task.website}`);
                 this.running = false;
@@ -242,12 +255,9 @@ class MangaTask extends Task {
                 // 任务放到末尾再次执行
                 this.tasks.push(task)
             })
-
-        this.running = false
-        write_log('[MangaTask] 任务执行完毕，准备执行下一个任务 running = false')
-
+        
         end_app();
-
+        this.running = false
         await this.run()
     }
 }

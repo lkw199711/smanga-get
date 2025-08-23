@@ -67,6 +67,7 @@ export function create_scan_cron() {
     // 获取配置
     const scanInterval = config.interval || "0 0 2,14 * * *" // 每天0点和12点执行一次
     // 定时扫描任务
+    /*
     subsribeCron = cron.schedule(scanInterval, async () => {
         // 获取全部漫画信息 并存储封面
         await new ToomicsAll('sc').start();
@@ -82,27 +83,20 @@ export function create_scan_cron() {
             mangaTask.add(item)
         }
     });
-    /*
-        // Toomics 全部封面扫描任务
-        toomicsScAllCoversCron = cron.schedule(config.toomicsScAllCoversInterval, async () => { 
-            await new ToomicsAll('sc').start()
-        })
-    
-        // Toomics 全部封面扫描任务
-        toomicsTcAllCoversCron = cron.schedule(config.toomicsTcAllCoversInterval, async () => {
-            await new ToomicsAll('tc').start()
-        })
-    
-        // Toomics 更新扫描任务
-        toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
-            await new ToomicsDayUpdate('sc').start()
-        })
-    
-        // Toomics 更新扫描任务
-        toomicsTcUpdateCron = cron.schedule(config.toomicsTcUpdateInterval, async () => {
-            await new ToomicsDayUpdate('tc').start()
-        })
-            */
+    */
+
+    // Toomics 更新扫描任务
+    toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
+        await new ToomicsAll('sc').start()
+        await new ToomicsDayUpdate('sc').start()
+    })
+
+    // Toomics 更新扫描任务
+    toomicsTcUpdateCron = cron.schedule(config.toomicsTcUpdateInterval, async () => {
+        await new ToomicsAll('tc').start()
+        await new ToomicsDayUpdate('tc').start()
+    })
+
 }
 
 export function task_allocation() {
