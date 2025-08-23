@@ -14,8 +14,8 @@ export default class ToomicsAll {
     constructor(langTag = 'sc', nouser = false) {
         this.langTag = langTag || 'sc'; // 默认为简体中文
         const config = get_config().toomics;
-        if(config.scrollStep) this.scrollStep = config.scrollStep;
-        if(config.scrollDelay) this.scrollDelay = config.scrollDelay;
+        if (config.scrollStep) this.scrollStep = config.scrollStep;
+        if (config.scrollDelay) this.scrollDelay = config.scrollDelay;
         this.coverPath = config.coverCache;
         this.browser = nouser ? toomicsBrowserNoUser : toomicsBrowser
     }
@@ -34,6 +34,14 @@ export default class ToomicsAll {
 
         await page.goto(`https://toomics.com/${this.langTag}/webtoon/ranking`, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/` }).catch(() => { })
         await page.waitForSelector('.list_wrap').catch(() => { });
+
+        let Base: any, location: any;
+        await page.evaluate(() => {
+            // 切换成人模式
+            Base.setDisplay('A', location.pathname);
+        }).catch(() => { })
+        await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
+
         await this.browser.save_cookie()
         // 不断滚动 直到页面底部
         console.log('开始滚动页面,等待加载图片');
@@ -109,7 +117,7 @@ export default class ToomicsAll {
                 }
                 // 非http开头移除
                 covers = covers.filter((cover: string) => /^https?:\/\//i.test(cover));
-                
+
                 manga.covers = covers
                 json[mangaIndex] = manga
             }
