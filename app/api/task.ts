@@ -93,7 +93,7 @@ class Task {
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import Omegascans from '#services/omegascans'
-import { write_log } from '#utils/index';
+import { end_app, write_log } from '#utils/index';
 class BilibiliTask extends Task {
     constructor(tasks: subsribeType[]) {
         super(tasks)
@@ -207,8 +207,14 @@ class MangaTask extends Task {
         write_log('[MangaTask] 开始执行任务 running = true')
         const task = this.tasks.shift()
 
-        if (!task) {
+        if (this.tasks.length === 0) { 
             write_log('[MangaTask] 所有任务执行完毕')
+            await close_all_browsers()
+            this.running = false
+            return;
+        }
+
+        if (!task) {
             this.running = false
             return
         }
@@ -239,6 +245,8 @@ class MangaTask extends Task {
 
         this.running = false
         write_log('[MangaTask] 任务执行完毕，准备执行下一个任务 running = false')
+
+        end_app();
 
         await this.run()
     }

@@ -1,5 +1,5 @@
 import { toomicsBrowser } from "#api/browser";
-import { toomicsTask } from "#api/task";
+import { mangaTask } from "#api/task";
 import { write_log, get_config, delay } from "#utils/index";
 export default class ToomicsDayUpdate {
     private langTag; // 语言标签
@@ -115,7 +115,7 @@ export default class ToomicsDayUpdate {
 
 
         mangas.forEach((manga: any) => {
-            toomicsTask.add(manga) // 添加到任务队列
+            mangaTask.add(manga) // 添加到任务队列
         })
 
         write_log(`[toomics update], ${mangas.length} 部漫画更新`);
