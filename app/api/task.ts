@@ -210,7 +210,6 @@ class MangaTask extends Task {
         if (!task) {
             write_log('[MangaTask] 所有任务执行完毕')
             this.running = false
-            await close_all_browsers();
             return
         }
 

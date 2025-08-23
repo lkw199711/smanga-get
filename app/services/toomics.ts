@@ -6,6 +6,7 @@ import path from 'path';
 import { delay, end_app, get_config, read_json, s_delete, write_log } from '#utils/index';
 import puppeteer from 'puppeteer';
 import { toomicsBrowser } from '#api/browser';
+import { close_all_browsers, mangaTask } from '#api/task';
 export default class Toomics {
     private domain = 'https://toomics.com';
     private website: string = 'toomics'
@@ -123,6 +124,11 @@ export default class Toomics {
             write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
         }
 
+        // 关闭浏览器
+        if (mangaTask.tasks.length === 0) {
+            await close_all_browsers()
+        }
+
         // 自动结束程序
         end_app()
     }
@@ -198,7 +204,7 @@ export default class Toomics {
             }
 
             let Base: any;
-            await this.page.evaluate(() => { 
+            await this.page.evaluate(() => {
                 // 切换成人模式
                 Base.setDisplay('A', '/sc');
             }).catch(() => { })
