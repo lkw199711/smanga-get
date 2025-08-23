@@ -124,11 +124,6 @@ export default class Toomics {
             write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
         }
 
-        // 关闭浏览器
-        if (mangaTask.tasks.length === 0) {
-            await close_all_browsers()
-        }
-
         // 自动结束程序
         end_app()
     }
