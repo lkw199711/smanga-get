@@ -38,6 +38,10 @@ export function read_json(file: string) {
   return JSON.parse(fs.readFileSync(file, 'utf-8'))
 }
 
+export function write_json(file: string, json: any) { 
+  fs.writeFileSync(file, JSON.stringify(json, null, 2), 'utf-8')
+}
+
 /**
  * 
  * @param ms 延迟的时间，单位为毫秒

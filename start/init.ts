@@ -6,7 +6,7 @@ const cron = require('node-cron');
 import { subscribe_read } from '#api/subsribe';
 import { bilibiliTask, mangaTask, omegascansTask, toomicsTask } from '#api/task';
 import { subsribeType } from '#type/index.js'
-import { get_config, set_config, get_os } from '#utils/index';
+import { get_config, set_config, get_os, write_json } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
@@ -67,8 +67,10 @@ export function create_scan_cron() {
     // 获取配置
     const scanInterval = config.interval || "0 0 2,14 * * *" // 每天0点和12点执行一次
     // 定时扫描任务
-    /*
+    
     subsribeCron = cron.schedule(scanInterval, async () => {
+        // 清空cookie记录
+        write_json('data/toomics-cookie.json', [])
         // 获取全部漫画信息 并存储封面
         await new ToomicsAll('sc').start();
         await new ToomicsAll('tc').start();
@@ -83,8 +85,8 @@ export function create_scan_cron() {
             mangaTask.add(item)
         }
     });
-    */
-
+    
+/*
     // Toomics 更新扫描任务
     toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
         await new ToomicsAll('sc').start()
@@ -96,7 +98,7 @@ export function create_scan_cron() {
         await new ToomicsAll('tc').start()
         await new ToomicsDayUpdate('tc').start()
     })
-
+*/
 }
 
 export function task_allocation() {
