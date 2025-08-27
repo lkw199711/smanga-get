@@ -92,7 +92,8 @@ if (immediately) {
     await new ToomicsUpdate('sc').start();
     await new ToomicsUpdate('tc').start();
   */
-
+ 
+  // 订阅简体漫画
   mangaTask.add({
     "website": 'toomics-covers-sc',
     "id": 0,
@@ -103,6 +104,8 @@ if (immediately) {
     "id": 0,
     "name": ''
   })
+
+  // 订阅繁体漫画
   mangaTask.add({
     "website": 'toomics-covers-tc',
     "id": 0,
@@ -115,6 +118,24 @@ if (immediately) {
   })
   // 执行订阅
   task_allocation();
+
+
+  /*  
+   mangaTask.add({
+          "website": "toomics",
+          "name": "新都市外送員",
+          "url": "https://toomics.com/tc/webtoon/episode/toon/7146",
+          "id": 7146,
+          "cover": "https://thumb-g2.toomics.com/upload/thumbnail/20240327100145/2024_04_03_17121144258499.jpg",
+          "covers": [
+              "https://thumb-g2.toomics.com/upload/thumbnail/20240327100145/2024_04_03_17121144258499.jpg"
+          ],
+          "describe": "<!--  -->",
+          "chapterCount": 47,
+          "audlt": true,
+          "finsihed": false
+      })
+          */
 }
 
 /*
