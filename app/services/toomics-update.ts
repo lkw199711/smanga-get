@@ -113,6 +113,8 @@ export default class ToomicsDayUpdate {
             })
         }
 
+        // 数组乱序
+        mangas.sort(() => Math.random() - 0.5)
 
         mangas.forEach((manga: any) => {
             mangaTask.add(manga) // 添加到任务队列

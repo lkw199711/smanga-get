@@ -27,9 +27,23 @@ class ToZip {
                 console.log('跳过压缩包', fileName);
                 continue;
             } else if (/smanga-info/.test(fileName)) {
-
+                // s_delete(filePath);
+                // copy_folder(filePath, `${this.outFloder}\\${fileName}`);
+                // await zip_directory(filePath, `${this.outFloder}\\${fileName}.zip`);
             } else {
+                /*
+                const files = fs.readdirSync(filePath);
+                const jpgFiles = files.filter(file => {
+                    return /(.jpg|.webp)/.test(file);
+                });
+                jpgFiles.forEach(file => { 
+                    const filePath1 = path.join(filePath, file);
+                    s_delete(filePath1);
+                })*/
                 const metaFile = `${filePath}-smanga-info\\meta.json`;
+                if (!fs.existsSync(metaFile)) continue;
+                const meta = read_json(metaFile);
+                if (meta.status !== 'Completed') continue; // 只处理已完成的漫画
 
                 if (!fs.existsSync(outMangaPath)) {
                     fs.mkdirSync(outMangaPath, { recursive: true });
@@ -41,8 +55,8 @@ class ToZip {
                 await zipAndRemoveFolders(filePath, `${this.outFloder}\\${fileName}`);
                 end_app()
             }
+
         }
-        console.log('全部处理完成');
     }
 
     getMangaList(directoryPath: string) {
@@ -57,6 +71,65 @@ class ToZip {
 
         return folders.map(folder => path.join(directoryPath, folder));
     }
+
+
+    async zipAndRemoveFolders(directoryPath: string) {
+        try {
+            // 读取目录内容
+            const items = fs.readdirSync(directoryPath, { withFileTypes: true });
+
+            // 筛选出子文件夹
+            const folders = items.filter(item => item.isDirectory());
+
+            if (folders.length === 0) {
+                console.log('没有找到任何子文件夹', directoryPath);
+                return;
+            }
+
+            // 处理每个子文件夹
+            for (const folder of folders) {
+                const folderPath = path.join(directoryPath, folder.name);
+                const zipPath = path.join(directoryPath, `${folder.name}.zip`);
+
+                // 检查是否存在 zip 文件 存在则删除
+                if (fs.existsSync(zipPath)) {
+                    fs.rmSync(zipPath, { recursive: true, force: true });
+                }
+
+                // 创建输出流
+                const output = fs.createWriteStream(zipPath);
+
+                const archive = archiver('zip', { zlib: { level: 9 } });
+
+                // 监听完成事件
+                output.on('close', () => {
+                    console.log(`${folder.name}.zip 已创建 (${archive.pointer()} bytes)`);
+
+                    // 删除源文件夹
+                    fs.rmSync(folderPath, { recursive: true, force: true });
+                    console.log(`已删除源文件夹: ${folder.name}`);
+                });
+
+                // 监听错误
+                archive.on('error', (err) => {
+                    throw err;
+                });
+
+                // 管道连接
+                archive.pipe(output);
+
+                // 添加文件夹内容
+                archive.directory(folderPath, false);
+
+                // 完成归档
+                await archive.finalize();
+            }
+
+            console.log('所有文件夹处理完成');
+        } catch (err) {
+            console.error('处理过程中出错:', err);
+        }
+    }
 }
 
 
@@ -69,7 +142,7 @@ function zip_directory(sourceDir: string, outputPath: string) {
 
         // 监听完成事件
         output.on('close', () => {
-            console.log(`${outputPath} 已创建 (${archive.pointer()} bytes)`);
+            console.log(`${outputPath}.zip 已创建 (${archive.pointer()} bytes)`);
             resolve(true);
         });
 
@@ -100,7 +173,7 @@ function zip_jpg(sourceDir: string, outputPath: string) {
 
         // 监听完成事件
         output.on('close', () => {
-            console.log(`${outputPath} 已创建 (${archive.pointer()} bytes)`);
+            console.log(`${outputPath}.zip 已创建 (${archive.pointer()} bytes)`);
             resolve(true);
         });
 
@@ -162,6 +235,66 @@ async function zipAndRemoveFolders(sourceDir: string, outputPath: string) {
 
             await zip_directory(folderPath, zipPath)
         }
+
+        console.log('所有文件夹处理完成');
+    } catch (err) {
+        console.error('处理过程中出错:', err);
+    }
+}
+
+function zipAndRemoveFoldersSync(directoryPath: string) {
+    try {
+        // 读取目录内容
+        const items = fs.readdirSync(directoryPath, { withFileTypes: true });
+
+        // 筛选出子文件夹
+        const folders = items.filter(item => item.isDirectory());
+
+        if (folders.length === 0) {
+            console.log('没有找到任何子文件夹');
+            return;
+        }
+
+        // 同步处理每个子文件夹
+        for (const folder of folders) {
+            const folderPath = path.join(directoryPath, folder.name);
+            const zipPath = path.join(directoryPath, `${folder.name}.zip`);
+
+            console.log(`开始处理文件夹: ${folder.name}`);
+
+            // 创建输出流
+            const output = fs.createWriteStream(zipPath);
+            const archive = archiver('zip', {
+                zlib: { level: 9 }
+            });
+
+            // 使用Promise确保同步完成
+            const zipPromise = new Promise((resolve, reject) => {
+                output.on('close', () => {
+                    console.log(`${folder.name} 创建完成 (${archive.pointer()} bytes)`);
+                    resolve();
+                });
+
+                archive.on('error', (err: any) => {
+                    reject(err);
+                });
+
+                archive.pipe(output);
+                archive.directory(folderPath, false);
+                archive.finalize();
+            });
+
+            // 等待当前压缩完成
+            zipPromise.then(() => {
+                // 删除源文件夹
+                fs.rmSync(folderPath, { recursive: true, force: true });
+                console.log(`已删除源文件夹: ${folder.name}`);
+            }).catch(err => {
+                console.error(`处理 ${folder.name} 时出错:`, err);
+            });
+        }
+
+        console.log('所有文件夹处理完成');
     } catch (err) {
         console.error('处理过程中出错:', err);
     }
