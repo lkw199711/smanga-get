@@ -11,6 +11,7 @@ import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
 import OmegaScansUpdate from '#services/omegascans-update'
+import ToZip from '#services/tozip';
 let subsribeCron: any = { stop: () => { } }
 let toomicsScAllCoversCron: any = { stop: () => { } }
 let toomicsTcAllCoversCron: any = { stop: () => { } }
@@ -85,6 +86,10 @@ export function create_scan_cron() {
       const item: subsribeType = subsribe[i]
       mangaTask.add(item)
     }
+    // 压缩漫画
+    mangaTask.add({ website: 'toomics-compress', id: 0, name: 'toomics-compress' })
+    // 压缩tc漫画
+    mangaTask.add({ website: 'toomics-compress-tc', id: 0, name: 'toomics-compress-tc' })
   });
 
   /*

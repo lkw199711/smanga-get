@@ -1,4 +1,4 @@
-import { subsribeType } from '#type/index.js';
+import { subsribeType, taskType } from '#type/index.js';
 import fs from 'fs'
 import { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser } from '#api/browser';
 
@@ -6,88 +6,88 @@ const taskFile = process.cwd() + '/task.json'
 /**
  * 读取订阅文件
  * @description: 读取订阅文件
- * @returns 
+ * @returns
  */
 export function task_read() {
-    const jsonStr = fs.readFileSync(taskFile, 'utf-8')
-    const json = JSON.parse(jsonStr)
-    return json;
+  const jsonStr = fs.readFileSync(taskFile, 'utf-8')
+  const json = JSON.parse(jsonStr)
+  return json;
 }
 
 /**
  * 写入订阅文件
  * @description: 写入订阅文件
- * @param json 
+ * @param json
  */
 export function task_write(json: any) {
-    fs.writeFileSync(taskFile, JSON.stringify(json, null, 2), 'utf-8')
+  fs.writeFileSync(taskFile, JSON.stringify(json, null, 2), 'utf-8')
 }
 
 /**
  * 新增订阅
- * @param param0 
+ * @param param0
  */
 export function task_add({ tasks, website, id, name }: { tasks: subsribeType[], website: string, name: string, id: number }) {
-    const task = task_read()
-    if (tasks) {
-        task.push(...tasks)
-    } else {
-        task.push({ website, id, name })
-    }
+  const task = task_read()
+  if (tasks) {
+    task.push(...tasks)
+  } else {
+    task.push({ website, id, name })
+  }
 
-    task_write(task)
+  task_write(task)
 }
 
 /**
  * 移除订阅
- * @param param0 
+ * @param param0
  */
 export function task_remove({ website, id }: { website: string, id: number }) {
-    const task = task_read()
-    const index = task.findIndex((item: any) => item.website === website && item.id === id)
-    if (index !== -1) {
-        task.splice(index, 1)
-        task_write(task)
-    }
+  const task = task_read()
+  const index = task.findIndex((item: any) => item.website === website && item.id === id)
+  if (index !== -1) {
+    task.splice(index, 1)
+    task_write(task)
+  }
 }
 
-export async function close_all_browsers() { 
-    await toomicsBrowser.browser?.close();
-    await bilibiliBrowser.browser?.close();
-    await toomicsBrowserNoUser.browser?.close();
-    await omegascansBrowser.browser?.close();
+export async function close_all_browsers() {
+  await toomicsBrowser.browser?.close();
+  await bilibiliBrowser.browser?.close();
+  await toomicsBrowserNoUser.browser?.close();
+  await omegascansBrowser.browser?.close();
 }
 
 class Task {
-    tasks: subsribeType[] = []
-    running: boolean | number = false
+  tasks: taskType[] = []
+  running: boolean | number = false
 
-    constructor(tasks: subsribeType[]) {
-        this.tasks = tasks
+  constructor(tasks: taskType[]) {
+    this.tasks = tasks
+  }
+
+  run() { }
+
+  get() {
+    return this.tasks
+  }
+
+  add(task: taskType) {
+    this.tasks.push(task)
+    this.run()
+  }
+
+  remove(mangaId: number) {
+    const index = this.tasks.findIndex((item) => item.id === mangaId)
+    if (index !== -1) {
+      this.tasks.splice(index, 1)
+      task_write(this.tasks)
     }
+  }
 
-    run() { }
-
-    get() {
-        return this.tasks
-    }
-
-    add(task: subsribeType) {
-        this.tasks.push(task)
-        this.run()
-    }
-
-    remove(mangaId: number) {
-        const index = this.tasks.findIndex((item) => item.id === mangaId)
-        if (index !== -1) {
-            this.tasks.splice(index, 1)
-            task_write(this.tasks)
-        }
-    }
-
-    clear() {
-        this.tasks = []
-    }
+  clear() {
+    this.tasks = []
+  }
 }
 
 import Toomics from '#services/toomics'
@@ -96,164 +96,171 @@ import Omegascans from '#services/omegascans'
 import { end_app, write_log } from '#utils/index';
 import ToomicsDayUpdate from '#services/toomics-update';
 import ToomicsAll from '#services/toomics-all';
+import ToZip from '#services/tozip';
 class BilibiliTask extends Task {
-    constructor(tasks: subsribeType[]) {
-        super(tasks)
+  constructor(tasks: taskType[]) {
+    super(tasks)
+  }
+
+  async run() {
+    if (this.tasks.length === 0) return;
+    if (this.running) return;
+
+    this.running = true
+    const task = this.tasks.shift()
+
+    if (!task) {
+      this.running = false
+      return
     }
 
-    async run() {
-        if (this.tasks.length === 0) return;
-        if (this.running) return;
+    const bilibili = new Bilibili(task)
 
-        this.running = true
-        const task = this.tasks.shift()
+    await bilibili.start()
+      .catch((err) => {
+        bilibili.browser?.close()
+        write_log(`[Bilibili] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+      })
 
-        if (!task) {
-            this.running = false
-            return
-        }
+    this.running = false
 
-        const bilibili = new Bilibili(task)
-
-        await bilibili.start()
-            .catch((err) => {
-                bilibili.browser?.close()
-                write_log(`[Bilibili] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
-            })
-
-        this.running = false
-
-        await this.run()
-    }
+    await this.run()
+  }
 }
 
 class ToomicsTask extends Task {
-    constructor(tasks: subsribeType[]) {
-        super(tasks)
+  constructor(tasks: taskType[]) {
+    super(tasks)
+  }
+
+  async run() {
+    if (this.tasks.length === 0) return;
+    if (this.running) return;
+
+    this.running = true
+    const task = this.tasks.shift()
+
+    if (!task) {
+      this.running = false
+      return
     }
 
-    async run() {
-        if (this.tasks.length === 0) return;
-        if (this.running) return;
+    const toomics = new Toomics(task)
+    await toomics.start()
+      .catch((err) => {
+        write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        // 任务放到末尾再次执行
+        this.tasks.push(task)
+      })
 
-        this.running = true
-        const task = this.tasks.shift()
+    this.running = false
 
-        if (!task) {
-            this.running = false
-            return
-        }
-
-        const toomics = new Toomics(task)
-        await toomics.start()
-            .catch((err) => {
-                write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
-                // 任务放到末尾再次执行
-                this.tasks.push(task)
-            })
-
-        this.running = false
-
-        await this.run()
-    }
+    await this.run()
+  }
 }
 
 class OmegascansTask extends Task {
-    running = 0;
-    private concurrency: number = 1;
-    constructor(tasks: subsribeType[]) {
-        super(tasks)
+  running = 0;
+  private concurrency: number = 1;
+  constructor(tasks: taskType[]) {
+    super(tasks)
+  }
+
+  async run() {
+    if (this.tasks.length === 0) return;
+    if (this.running >= this.concurrency) {
+      return;
     }
 
-    async run() {
-        if (this.tasks.length === 0) return;
-        if (this.running >= this.concurrency) {
-            return;
-        }
+    this.running++;
+    const task = this.tasks.shift()
 
-        this.running++;
-        const task = this.tasks.shift()
-
-        if (!task) {
-            this.running--
-            return
-        }
-
-        const omegascans = new Omegascans(task)
-        await omegascans.start()
-            .catch((err) => {
-                write_log(`[Omegascans] ${task.id} ${task.name} 任务执行失败: ${err?.message}`)
-                // 任务放到末尾再次执行
-                this.tasks.push(task)
-            })
-
-        this.running--;
-
-        await this.run()
+    if (!task) {
+      this.running--
+      return
     }
+
+    const omegascans = new Omegascans(task)
+    await omegascans.start()
+      .catch((err) => {
+        write_log(`[Omegascans] ${task?.id} ${task.name} 任务执行失败: ${err?.message}`)
+        // 任务放到末尾再次执行
+        this.tasks.push(task)
+      })
+
+    this.running--;
+
+    await this.run()
+  }
 }
 
-class MangaTask extends Task { 
-    constructor(tasks: subsribeType[]) {
-        super(tasks)
+class MangaTask extends Task {
+  constructor(tasks: taskType[]) {
+    super(tasks)
+  }
+
+  async run() {
+
+    if (this.running) {
+      return;
     }
 
-    async run() {
-        
-        if (this.running) {
-            return;
-        }
+    this.running = true
+    const task = this.tasks.shift()
 
-        this.running = true
-        const task = this.tasks.shift()
-
-        if (!task) {
-            write_log('[MangaTask] 所有任务执行完毕')
-            await close_all_browsers()
-            this.running = false
-            return
-        }
-
-        let taskService;
-        switch (task.website) {
-            case 'toomics':
-                taskService = new Toomics(task);
-                break;
-            case 'bilibili':
-                taskService = new Bilibili(task);
-                break;
-            case 'omegascans':
-                taskService = new Omegascans(task);
-                break;
-            case 'toomics-update-sc':
-                taskService = new ToomicsDayUpdate('sc');
-                break;
-            case 'toomics-update-tc':
-                taskService = new ToomicsDayUpdate('tc');
-                break;
-            case 'toomics-covers-sc':
-                taskService = new ToomicsAll('sc');
-                break;
-            case 'toomics-covers-tc':
-                taskService = new ToomicsAll('tc');
-                break;
-            default:
-                write_log(`[MangaTask] 未知网站: ${task.website}`);
-                this.running = false;
-                return;
-        }
-
-        await taskService.start()
-            .catch((err) => {
-                write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
-                // 任务放到末尾再次执行
-                this.tasks.push(task)
-            })
-        
-        end_app();
-        this.running = false
-        await this.run()
+    if (!task) {
+      write_log('[MangaTask] 所有任务执行完毕')
+      await close_all_browsers()
+      this.running = false
+      return
     }
+
+    let taskService;
+    switch (task.website) {
+      case 'toomics':
+        taskService = new Toomics(task);
+        break;
+      case 'bilibili':
+        taskService = new Bilibili(task);
+        break;
+      case 'omegascans':
+        taskService = new Omegascans(task);
+        break;
+      case 'toomics-update-sc':
+        taskService = new ToomicsDayUpdate('sc');
+        break;
+      case 'toomics-update-tc':
+        taskService = new ToomicsDayUpdate('tc');
+        break;
+      case 'toomics-covers-sc':
+        taskService = new ToomicsAll('sc');
+        break;
+      case 'toomics-covers-tc':
+        taskService = new ToomicsAll('tc');
+        break;
+      case 'toomics-compress':
+        taskService = new ToZip('M:\\manga\\toomics', 'M:\\manga\\toomics-zip');
+        break;
+      case 'toomics-compress-tc':
+        taskService = new ToZip('M:\\manga\\toomics-tc', 'M:\\manga\\toomics-tc-zip');
+        break;
+      default:
+        write_log(`[MangaTask] 未知网站: ${task.website}`);
+        this.running = false;
+        return;
+    }
+
+    await taskService.start()
+      .catch((err) => {
+        write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        // 任务放到末尾再次执行
+        this.tasks.push(task)
+      })
+
+    end_app();
+    this.running = false
+    await this.run()
+  }
 }
 
 const bilibiliTask = new BilibiliTask([])

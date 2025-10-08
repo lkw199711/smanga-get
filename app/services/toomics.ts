@@ -291,22 +291,10 @@ export default class Toomics {
       title, author, finished, audlt, describe, banner, cover, bannerBackground,
     }
 
-    let updateDownloadPath = '';
-    // if (/连载/.test(this.downloadPath)) {
-    //   updateDownloadPath = this.downloadPath
-    // } else {
-    //   updateDownloadPath = this.downloadPath + '-连载';
-    // }
-
     if (finished) {
-      if (fs.existsSync(`${updateDownloadPath}/${this.mangaName}`)) {
-        this.downloadPath = updateDownloadPath
-        write_log(`[toomics update] ${this.mangaName}已完结。`)
-        subscribe_remove({ website: this.website, id: this.mangaId })
-        write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
-      }
-    } else {
-      this.downloadPath = updateDownloadPath
+      write_log(`[toomics update] ${this.mangaName}已完结。`)
+      subscribe_remove({ website: this.website, id: this.mangaId })
+      write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
     }
 
     this.mangaName = title.replaceAll(/[<>:"/\\|?*]/g, '')
