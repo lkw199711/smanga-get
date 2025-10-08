@@ -39,6 +39,8 @@ export default class Toomics {
     private langTag: string = 'sc'
     private jumpExist = true // 是否跳过已存在的manga
     private config: any
+    private randomDoNotDownload: number = 1
+    private doNotDownloadNumber: number = 0
     constructor(params: subsribeType) {
         const config = get_config()?.toomics || {}
         this.config = config
@@ -99,16 +101,30 @@ export default class Toomics {
                 continue
             }
 
+            const doNorDownload = this.doNotDownloadNumber < this.randomDoNotDownload
+
             // 已下载 跳过
             if (fs.existsSync(chapterFolder)) {
                 const files = fs.readdirSync(chapterFolder)
-                if (files.length > 0) continue
+                if (files.length > 0 && !doNorDownload) {
+                    continue
+                }
             } else {
                 // 创建章节文件夹
                 await fs.promises.mkdir(chapterFolder, { recursive: true })
             }
 
-            await this.download_chapter(chapter.name, chapter.url, chapterFolder)
+            await this.download_chapter({
+                chapterName,
+                url: chapter.url,
+                downloadPath: chapterFolder,
+                doNotDownload: doNorDownload,
+            })
+
+            // 随机不下载章节数
+            if (doNorDownload) {
+                this.doNotDownloadNumber++
+            }
         }
 
         // 关闭浏览器 释放资源
@@ -484,7 +500,13 @@ export default class Toomics {
      * @param reloadImageindexs 重试图片
      * @returns 
      */
-    async download_chapter(chapterName: string, url: string, downloadPath: string, reloadImageindexs: number[] = []) {
+    async download_chapter({ chapterName, url, downloadPath, reloadImageindexs = [], doNotDownload = false }: {
+        chapterName: string,
+        url: string,
+        downloadPath: string,
+        reloadImageindexs?: number[],
+        doNotDownload?: boolean
+    }) {
         const errImgs: number[] = []
         const interfereImages: number[] = [];
         if (reloadImageindexs.length > 0) {
@@ -560,6 +582,15 @@ export default class Toomics {
         // 等待三秒之后开始下载
         await delay(3000)
 
+        if (doNotDownload) {
+            /**
+             * 每部漫画仅下载最后一章节,可能会遭到cookie禁用
+             * 因此首先尝试随机浏览一些其他章节
+             */
+            write_log(`[chapter download]${chapterName} 下载已禁用,跳过`);
+            return
+        }
+
         // 获取所有图片的url
         const imageUrls = await this.chapterPage.evaluate(() => {
             const els = document.querySelectorAll('img[id^="set_image_"]')
@@ -600,7 +631,12 @@ export default class Toomics {
             const interfereStr = interfereImages.length > 0 ? `, 检测到干扰图片:${interfereImages}` : ''
             const errorStr = errImgs.length > 0 ? `, 请求失败图片:${errImgs}` : ''
             write_log(`[chapter download]${chapterName}下载失败${interfereStr}${errorStr},进行重新下载`);
-            await this.download_chapter(chapterName, url, downloadPath, interfereImages.concat(errImgs))
+            await this.download_chapter({
+                chapterName,
+                url,
+                downloadPath,
+                reloadImageindexs: interfereImages.concat(errImgs),
+            })
             return
         }
 
@@ -623,10 +659,15 @@ export default class Toomics {
         if (maxImgNum + 1 > imgs.length) {
             write_log(`[chapter download]${chapterName} 下载完成,但是图片序号不连续,最大序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`);
             // 如果图片序号不连续 重新下载
-            await this.download_chapter(chapterName, url, downloadPath, Array.from({ length: maxImgNum + 1 }, (_, i) => i))
+            await this.download_chapter({
+                chapterName,
+                url,
+                downloadPath,
+                reloadImageindexs: Array.from({ length: maxImgNum + 1 }, (_, i) => i)
+            })
 
         } else {
-            write_log(`[chapter download]${chapterName} 下载完成.`)
+            write_log(`[chapter download]${chapterName} 下载完成.`);
         }
 
         await delay(1000)

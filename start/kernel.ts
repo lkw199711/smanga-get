@@ -65,7 +65,7 @@ const immediately = get_config().immediately ?? 0;
 create_config();
 
 // 压缩漫画
-await new ToZip('M:\\manga\\toomics-连载').start();
+// await new ToZip('M:\\manga\\toomics-连载').start();
 
 // 删除错误黑封面
 // delete_err_cover('A:\\02manga\\02压缩处理\\toomics');

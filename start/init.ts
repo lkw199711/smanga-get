@@ -70,7 +70,9 @@ export function create_scan_cron() {
     
     subsribeCron = cron.schedule(scanInterval, async () => {
         // 清空cookie记录
-        write_json('data/toomics-cookie.json', [])
+        if (config.clearCookies) {
+            write_json('data/toomics-cookie.json', [])
+        }
         // 获取全部漫画信息 并存储封面
         await new ToomicsAll('sc').start();
         await new ToomicsAll('tc').start();
