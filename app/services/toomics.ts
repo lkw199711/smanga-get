@@ -41,6 +41,8 @@ export default class Toomics {
   private config: any
   private randomDoNotDownload: number = 1
   private doNotDownloadNumber: number = 0
+  private chapterCount: number = 0
+  private params: subsribeType
   constructor(params: subsribeType) {
     const config = get_config()?.toomics || {}
     this.config = config
@@ -62,12 +64,17 @@ export default class Toomics {
       this.downloadPath = this.downloadPath + '-en';
     }
     if (params.langTag) this.langTag = params.langTag
+    if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
+    this.params = params
   }
 
   /**
    * @description: 开始下载
    */
   async start() {
+    if (!await this.check_update()) {
+      return;
+    }
     // 解析章节
     console.log(this.mangaName + ' 正在分析')
 
@@ -145,6 +152,29 @@ export default class Toomics {
 
     // 自动结束程序
     end_app()
+  }
+
+  /**
+   * @description 检查是否有更新
+   * @returns 是否有更新
+   */
+  async check_update() {
+    const mangaFloder = `${this.downloadPath}/${this.mangaName}`
+    // 没有漫画文件夹 说明是新订阅
+    if (!fs.existsSync(mangaFloder)) {
+      return true
+    }
+
+    // 筛选目录中的章节文件夹
+    let mangaChapterFloder = fs.readdirSync(mangaFloder)
+    mangaChapterFloder = mangaChapterFloder.filter((item) => fs.statSync(path.join(mangaFloder, item)).isDirectory())
+
+    // 检查是否有更新
+    if (mangaChapterFloder.length < this.chapterCount) {
+      return true
+    }
+
+    return false
   }
 
   /**
@@ -262,11 +292,11 @@ export default class Toomics {
     }
 
     let updateDownloadPath = '';
-    if (/连载/.test(this.downloadPath)) {
-      updateDownloadPath = this.downloadPath
-    } else {
-      updateDownloadPath = this.downloadPath + '-连载';
-    }
+    // if (/连载/.test(this.downloadPath)) {
+    //   updateDownloadPath = this.downloadPath
+    // } else {
+    //   updateDownloadPath = this.downloadPath + '-连载';
+    // }
 
     if (finished) {
       if (fs.existsSync(`${updateDownloadPath}/${this.mangaName}`)) {

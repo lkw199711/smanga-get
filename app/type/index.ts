@@ -9,6 +9,7 @@ type subsribeType = {
     series_slug?: string
     cover?: string
     status?: string
+    chapterCount?: number
 }
 
 

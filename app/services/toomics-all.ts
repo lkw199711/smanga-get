@@ -2,146 +2,148 @@
 import { toomicsBrowser, toomicsBrowserNoUser } from '#api/browser';
 import fs from 'fs';
 import { delay, get_config, get_os, read_json, write_log } from '#utils/index';
+import { mangaTask } from '#api/task';
 
 const linuxStr = get_os() === 'Linux' ? '/' : '';
 export default class ToomicsAll {
-    private langTag: string = 'sc' // 语言标签
-    private coverPath: string = linuxStr + 'data/toomics-covers'
-    private jsonFile: string = linuxStr + 'data/toomics-all.json'
-    private scrollStep: number = 400 // 滚动的步长
-    private scrollDelay: number = 500 // 滚动的延迟时间
-    public browser: any
-    constructor(langTag = 'sc', nouser = false) {
-        this.langTag = langTag || 'sc'; // 默认为简体中文
-        const config = get_config().toomics;
-        if (config.scrollStep) this.scrollStep = config.scrollStep;
-        if (config.scrollDelay) this.scrollDelay = config.scrollDelay;
-        this.coverPath = config.coverCache;
-        this.browser = nouser ? toomicsBrowserNoUser : toomicsBrowser
+  private langTag: string = 'sc' // 语言标签
+  private coverPath: string = linuxStr + 'data/toomics-covers'
+  private jsonFile: string = linuxStr + 'data/toomics-all.json'
+  private scrollStep: number = 400 // 滚动的步长
+  private scrollDelay: number = 500 // 滚动的延迟时间
+  public browser: any
+  constructor(langTag = 'sc', nouser = false) {
+    this.langTag = langTag || 'sc'; // 默认为简体中文
+    const config = get_config().toomics;
+    if (config.scrollStep) this.scrollStep = config.scrollStep;
+    if (config.scrollDelay) this.scrollDelay = config.scrollDelay;
+    this.coverPath = config.coverCache;
+    this.browser = nouser ? toomicsBrowserNoUser : toomicsBrowser
+  }
+  async start() {
+    write_log('[toomics all] 开始扫描所有漫画')
+    if (!this.browser.browser?.connected) {
+      await this.browser.init()
     }
-    async start() {
-        write_log('[toomics all] 开始扫描所有漫画')
-        if (!this.browser.browser?.connected) {
-            await this.browser.init()
-        }
 
-        if (!this.browser.browser) return;
+    if (!this.browser.browser) return;
 
-        await this.browser.get_cookie();
+    await this.browser.get_cookie();
 
-        const page = await this.browser.new_page();
-        if (!page) return
+    const page = await this.browser.new_page();
+    if (!page) return
 
-        await page.goto(`https://toomics.com/${this.langTag}/webtoon/ranking`, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/` }).catch(() => { })
-        await page.waitForSelector('.list_wrap').catch(() => { });
+    await page.goto(`https://toomics.com/${this.langTag}/webtoon/ranking`, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/` }).catch(() => { })
+    await page.waitForSelector('.list_wrap').catch(() => { });
 
-        let Base: any, location: any;
-        await page.evaluate(() => {
-            // 切换成人模式
-            Base.setDisplay('A', location.pathname);
-        }).catch(() => { })
-        await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
+    let Base: any, location: any;
+    await page.evaluate(() => {
+      // 切换成人模式
+      Base.setDisplay('A', location.pathname);
+    }).catch(() => { })
+    await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
 
-        await this.browser.save_cookie()
-        // 不断滚动 直到页面底部
-        console.log('开始滚动页面,等待加载图片');
-        let scrollY = -1;
-        let window: any, document: any;
-        await page.mouse.move(1000, 1000)
+    await this.browser.save_cookie()
+    // 不断滚动 直到页面底部
+    console.log('开始滚动页面,等待加载图片');
+    let scrollY = -1;
+    let window: any, document: any;
+    await page.mouse.move(1000, 1000)
 
-        // 向下滚动到底部
-        while (1) {
-            let protocolError = false
-            await page.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
-            await delay(this.scrollDelay)
-            const nowScrollY = await page.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-            if (protocolError) continue
+    // 向下滚动到底部
+    while (1) {
+      let protocolError = false
+      await page.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
+      await delay(this.scrollDelay)
+      const nowScrollY = await page.evaluate(() => window.scrollY).catch(() => { protocolError = true })
+      if (protocolError) continue
 
-            if (nowScrollY === scrollY) break
-            scrollY = nowScrollY
-        }
-
-        await page.waitForNetworkIdle().catch(() => { })
-        await delay(2000)
-
-        const mangas = await page.evaluate(() => {
-            function get_end() {
-                const lis = document.querySelectorAll('.list_wrap li')
-                return Array.from(lis).map((li: any) => {
-                    const website = 'toomics'
-                    const name = li.querySelector('h4')?.innerText.trim()
-                    const url = 'https://toomics.com' + li.querySelector('a')?.getAttribute('href')
-                    const id = url.split('/').pop()
-                    const cover = li.querySelector('img')?.getAttribute('src')
-                    const describe = li.querySelector('.text')?.innerHTML
-                    const audlt = /18\+/.test(li.innerHTML)
-                    const finsihed = /End/.test(li.innerHTML)
-                    let chapterCount = li.querySelector('.section_remai')?.innerText.trim()
-                    chapterCount = chapterCount.split('/')[1] || chapterCount.split('/')[0]
-
-                    return {
-                        website,
-                        name,
-                        url,
-                        id: Number(id),
-                        cover,
-                        covers: [cover],
-                        describe,
-                        chapterCount: Number(chapterCount),
-                        audlt,
-                        finsihed,
-                    }
-                })
-            }
-
-            return get_end()
-        })
-
-        let json: any = []
-        if (fs.existsSync(this.jsonFile)) {
-            json = read_json(this.jsonFile)
-        }
-
-        if (!fs.existsSync(this.coverPath)) {
-            fs.mkdirSync(this.coverPath, { recursive: true })
-        }
-
-        mangas.forEach((manga: any) => {
-            const mangaIndex = json.findIndex((old: any) => Number(old.id) === Number(manga.id))
-            if (mangaIndex === -1) {
-                json.push(manga)
-            } else {
-                let covers = json[mangaIndex]?.covers || []
-                if (/^https?:\/\//i.test(manga.cover) && !covers.includes(manga.cover)) {
-                    covers.push(manga.cover)
-                }
-                // 非http开头移除
-                covers = covers.filter((cover: string) => /^https?:\/\//i.test(cover));
-
-                manga.covers = covers
-                json[mangaIndex] = manga
-            }
-
-        })
-
-        fs.writeFileSync(this.jsonFile, JSON.stringify(json, null, 2))
-
-        for (const manga of mangas) {
-            const coverFile = manga.cover.split('/').pop()
-            const coverPath = `${this.coverPath}/${manga.id}-${coverFile}`
-            if (fs.existsSync(coverPath)) {
-                continue
-            }
-
-            if (this.browser.buffs[manga.cover] && this.browser.buffs[manga.cover].length > 250) {
-                fs.writeFileSync(coverPath, this.browser.buffs[manga.cover])
-            } else {
-                console.error('没有找到图片', manga.cover)
-            }
-        }
-
-        write_log('[toomics all] 扫描完成');
-        this.browser.clear_buffs();
-        page.close().catch(() => { })
+      if (nowScrollY === scrollY) break
+      scrollY = nowScrollY
     }
+
+    await page.waitForNetworkIdle().catch(() => { })
+    await delay(2000)
+
+    const mangas = await page.evaluate(() => {
+      function get_end() {
+        const lis = document.querySelectorAll('.list_wrap li')
+        return Array.from(lis).map((li: any) => {
+          const website = 'toomics'
+          const name = li.querySelector('h4')?.innerText.trim()
+          const url = 'https://toomics.com' + li.querySelector('a')?.getAttribute('href')
+          const id = url.split('/').pop()
+          const cover = li.querySelector('img')?.getAttribute('src')
+          const describe = li.querySelector('.text')?.innerHTML
+          const audlt = /18\+/.test(li.innerHTML)
+          const finsihed = /End/.test(li.innerHTML)
+          let chapterCount = li.querySelector('.section_remai')?.innerText.trim()
+          chapterCount = chapterCount.split('/')[1] || chapterCount.split('/')[0]
+
+          return {
+            website,
+            name,
+            url,
+            id: Number(id),
+            cover,
+            covers: [cover],
+            describe,
+            chapterCount: Number(chapterCount),
+            audlt,
+            finsihed
+          }
+        })
+      }
+
+      return get_end()
+    })
+
+    let json: any = []
+    if (fs.existsSync(this.jsonFile)) {
+      json = read_json(this.jsonFile)
+    }
+
+    if (!fs.existsSync(this.coverPath)) {
+      fs.mkdirSync(this.coverPath, { recursive: true })
+    }
+
+    mangas.forEach((manga: any) => {
+      const mangaIndex = json.findIndex((old: any) => Number(old.id) === Number(manga.id))
+      if (mangaIndex === -1) {
+        json.push(manga)
+      } else {
+        let covers = json[mangaIndex]?.covers || []
+        if (/^https?:\/\//i.test(manga.cover) && !covers.includes(manga.cover)) {
+          covers.push(manga.cover)
+        }
+        // 非http开头移除
+        covers = covers.filter((cover: string) => /^https?:\/\//i.test(cover));
+
+        manga.covers = covers
+        json[mangaIndex] = manga
+      }
+
+      mangaTask.add(manga)
+    })
+
+    fs.writeFileSync(this.jsonFile, JSON.stringify(json, null, 2))
+
+    for (const manga of mangas) {
+      const coverFile = manga.cover.split('/').pop()
+      const coverPath = `${this.coverPath}/${manga.id}-${coverFile}`
+      if (fs.existsSync(coverPath)) {
+        continue
+      }
+
+      if (this.browser.buffs[manga.cover] && this.browser.buffs[manga.cover].length > 250) {
+        fs.writeFileSync(coverPath, this.browser.buffs[manga.cover])
+      } else {
+        console.error('没有找到图片', manga.cover)
+      }
+    }
+
+    write_log('[toomics all] 扫描完成');
+    this.browser.clear_buffs();
+    page.close().catch(() => { })
+  }
 }

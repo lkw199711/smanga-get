@@ -87,20 +87,15 @@ if (immediately) {
     await new ToomicsAll('sc').start();
     await new ToomicsAll('tc').start();
     // await new ToomicsAll('en').start();
-  
+
     // 更新今天 昨天的漫画
     await new ToomicsUpdate('sc').start();
     await new ToomicsUpdate('tc').start();
   */
- 
+
   // 订阅简体漫画
   mangaTask.add({
     "website": 'toomics-covers-sc',
-    "id": 0,
-    "name": ''
-  })
-  mangaTask.add({
-    "website": 'toomics-update-sc',
     "id": 0,
     "name": ''
   })
@@ -111,16 +106,12 @@ if (immediately) {
     "id": 0,
     "name": ''
   })
-  mangaTask.add({
-    "website": 'toomics-update-tc',
-    "id": 0,
-    "name": ''
-  })
+
   // 执行订阅
   task_allocation();
 
 
-  /*  
+  /*
    mangaTask.add({
           "website": "toomics",
           "name": "新都市外送員",
