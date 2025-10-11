@@ -608,6 +608,7 @@ export default class Toomics {
        * 每部漫画仅下载最后一章节,可能会遭到cookie禁用
        * 因此首先尝试随机浏览一些其他章节
        */
+      await this.chapterPage.close()
       write_log(`[chapter download]${chapterName} 下载已禁用,跳过`);
       return
     }
