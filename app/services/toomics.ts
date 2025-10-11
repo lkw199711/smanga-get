@@ -47,7 +47,7 @@ export default class Toomics {
     const config = get_config()?.toomics || {}
     this.config = config
     this.mangaId = Number(params.id)
-    this.mangaName = params.name
+    this.mangaName = params.name.replaceAll(/[<>:"/\\|?*]/g, '')
     this.downloadLockedMeta = config?.downloadLockedMeta
     this.userName = config?.userName || ''
     this.passWord = config?.passWord || ''
@@ -169,8 +169,8 @@ export default class Toomics {
     let mangaChapterFloder = fs.readdirSync(mangaFloder)
     mangaChapterFloder = mangaChapterFloder.filter((item) => fs.statSync(path.join(mangaFloder, item)).isDirectory())
 
-    // 检查是否有更新
-    if (mangaChapterFloder.length < this.chapterCount) {
+    // 检查是否有更新(.5不计算)
+    if (mangaChapterFloder.length + 0.9 < this.chapterCount) {
       return true
     }
 
