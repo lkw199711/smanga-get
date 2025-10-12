@@ -1,7 +1,6 @@
 import { end_app, read_json, write_log, delay } from "#utils/index";
-import { axios, download_image, downloadImage } from "#api/omegascans";
 import { get_config, make_can_be_floder } from "#utils/index";
-import fs, { write } from "fs";
+import fs from "fs";
 import { subscribe_remove } from "#api/subsribe";
 import { omegascansBrowser } from "#api/browser";
 
@@ -26,12 +25,12 @@ export default class OmegaScans {
         this.params = params
         this.downloadPath = config.downloadPath + '/omegascans'
 
-        this.mangaFolder = `${this.downloadPath}-ongoing/${this.name}`;
-        this.metaFolder = `${this.downloadPath}-ongoing/${this.name}-smanga-info`;
+        this.mangaFolder = `${this.downloadPath}/${this.name}`;
+        this.metaFolder = `${this.downloadPath}/${this.name}-smanga-info`;
     }
 
     async start() {
-        if (fs.existsSync(`${this.downloadPath}/${this.name}`)) { 
+        if (fs.existsSync(`${this.downloadPath}/${this.name}`)) {
             return;
         }
         // 创建元数据文件夹
@@ -323,20 +322,5 @@ export default class OmegaScans {
         fs.writeFileSync(path, buffer);
 
         return await this.page.close(); // 关闭页面;
-    }
-
-    async request_interface() {
-        await this.page_open(); // 确保页面已打开
-        await this.page.goto('https://api.omegascans.org/chapter/query?page=1&perPage=999&series_id=' + manga.id, {
-            waitUntil: 'domcontentloaded',
-        }).catch((error: any) => {
-            write_log(`[manga meta]章节列表获取失败 ${this.name}`);
-            throw error; // 重新抛出错误以便上层处理
-        })
-        await omegascansBrowser.save_cookie();
-        const chaptersResponse = await this.page.content();
-        await this.page.close(); // 关闭页面
-        const chapterTxt = chaptersResponse.match(/\{.*\}/s)?.[0];
-        const chaptersData = JSON.parse(chapterTxt);
     }
 }

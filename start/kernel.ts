@@ -82,17 +82,6 @@ create_scan_cron();
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
 if (immediately) {
-  /*
-    // 获取全部漫画信息 并存储封面
-    await new ToomicsAll('sc').start();
-    await new ToomicsAll('tc').start();
-    // await new ToomicsAll('en').start();
-
-    // 更新今天 昨天的漫画
-    await new ToomicsUpdate('sc').start();
-    await new ToomicsUpdate('tc').start();
-  */
-
   // 订阅简体漫画
   mangaTask.add({
     "website": 'toomics-covers-sc',
@@ -107,11 +96,27 @@ if (immediately) {
     "name": ''
   })
 
+  // 订阅OmegaScans
+  mangaTask.add({
+    "website": 'omegascans-update',
+    "id": 0,
+    "name": ''
+  })
+
+  // 压缩简体漫画
+  mangaTask.add({ website: 'toomics-compress-sc', id: 0, name: '' })
+
+  // 压缩繁体漫画
+  mangaTask.add({ website: 'toomics-compress-tc', id: 0, name: '' })
+
+  // 压缩OmegaScans
+  mangaTask.add({ website: 'omegascans-compress', id: 0, name: '' })
+
   // 执行订阅
   task_allocation();
+}
 
-
-  /*
+/* 单漫画任务添加示例
    mangaTask.add({
           "website": "toomics",
           "name": "新都市外送員",
@@ -127,7 +132,6 @@ if (immediately) {
           "finsihed": false
       })
           */
-}
 
 /*
 const toomics = new Toomics({

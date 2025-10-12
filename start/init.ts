@@ -74,37 +74,43 @@ export function create_scan_cron() {
     if (config.clearCookies) {
       write_json('data/toomics-cookie.json', [])
     }
-    // 获取全部漫画信息 并存储封面
-    await new ToomicsAll('sc').start();
-    await new ToomicsAll('tc').start();
 
-    // 更新今天 昨天的漫画
-    await new OmegaScansUpdate({}).start();
+    // 订阅简体漫画
+    mangaTask.add({
+      "website": 'toomics-covers-sc',
+      "id": 0,
+      "name": ''
+    })
+
+    // 订阅繁体漫画
+    mangaTask.add({
+      "website": 'toomics-covers-tc',
+      "id": 0,
+      "name": ''
+    })
+
+    // 订阅OmegaScans
+    mangaTask.add({
+      "website": 'omegascans-update',
+      "id": 0,
+      "name": ''
+    })
 
     const subsribe = subscribe_read()
     for (let i = 0; i < subsribe.length; i++) {
       const item: subsribeType = subsribe[i]
       mangaTask.add(item)
     }
-    // 压缩漫画
-    mangaTask.add({ website: 'toomics-compress', id: 0, name: 'toomics-compress' })
-    // 压缩tc漫画
-    mangaTask.add({ website: 'toomics-compress-tc', id: 0, name: 'toomics-compress-tc' })
+
+    // 压缩简体漫画
+    mangaTask.add({ website: 'toomics-compress-sc', id: 0, name: '' })
+
+    // 压缩繁体漫画
+    mangaTask.add({ website: 'toomics-compress-tc', id: 0, name: '' })
+
+    // 压缩OmegaScans
+    mangaTask.add({ website: 'omegascans-compress', id: 0, name: '' })
   });
-
-  /*
-      // Toomics 更新扫描任务
-      toomicsScUpdateCron = cron.schedule(config.toomicsScUpdateInterval, async () => {
-          await new ToomicsAll('sc').start()
-          await new ToomicsDayUpdate('sc').start()
-      })
-
-      // Toomics 更新扫描任务
-      toomicsTcUpdateCron = cron.schedule(config.toomicsTcUpdateInterval, async () => {
-          await new ToomicsAll('tc').start()
-          await new ToomicsDayUpdate('tc').start()
-      })
-  */
 }
 
 export function task_allocation() {

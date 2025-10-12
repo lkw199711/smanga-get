@@ -97,6 +97,7 @@ import { end_app, write_log } from '#utils/index';
 import ToomicsDayUpdate from '#services/toomics-update';
 import ToomicsAll from '#services/toomics-all';
 import ToZip from '#services/tozip';
+import OmegaScansUpdate from '#services/omegascans-update';
 class BilibiliTask extends Task {
   constructor(tasks: taskType[]) {
     super(tasks)
@@ -226,6 +227,9 @@ class MangaTask extends Task {
       case 'omegascans':
         taskService = new Omegascans(task);
         break;
+      case 'omegascans-update':
+        taskService = new OmegaScansUpdate({});
+        break;
       case 'toomics-update-sc':
         taskService = new ToomicsDayUpdate('sc');
         break;
@@ -238,11 +242,14 @@ class MangaTask extends Task {
       case 'toomics-covers-tc':
         taskService = new ToomicsAll('tc');
         break;
-      case 'toomics-compress':
+      case 'toomics-compress-sc':
         taskService = new ToZip('M:\\manga\\toomics', 'M:\\manga\\toomics-zip');
         break;
       case 'toomics-compress-tc':
         taskService = new ToZip('M:\\manga\\toomics-tc', 'M:\\manga\\toomics-tc-zip');
+        break;
+      case 'omegascans-compress':
+        taskService = new ToZip('M:\\manga\\omegascans', 'M:\\manga\\omegascans-zip');
         break;
       default:
         write_log(`[MangaTask] 未知网站: ${task.website}`);
