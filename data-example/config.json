@@ -1,0 +1,33 @@
+{
+  "headless": 1,
+  "immediately": {
+    "toomicsUpdateSc": true,
+    "toomicsUpdateTc": true,
+    "omegascansUpdate": true,
+    "bilibili": true,
+    "toomicsCompressSc": true,
+    "toomicsCompressTc": true,
+    "omegascansCompress": true
+  },
+  "endAfterSetCookie": false,
+  "toomics": {
+    "cookieFile": "./data/cookies/toomics-cookies.json",
+    "downloadPath": "C:\\11manga",
+    "compressPath": "C:\\12manga-compress",
+    "coverCache": "C:\\11manga\\toomics-cache\\covers",
+    "chapterCache": "C:\\11manga\\toomics-cache\\chapter-images",
+    "userName": "lkw199711@163.com",
+    "passWord": "123qwe"
+  },
+  "bilibili": {
+    "cookieFile": "./data/cookies/bilibili-cookies.json",
+    "downloadPath": "A:\\02manga\\10media"
+  },
+  "omegascans": {
+    "cookieFile": "./data/cookies/omegascans-cookies.json",
+    "downloadPath": "C:\\11manga",
+    "compressPath": "C:\\12manga-compress"
+  },
+  "downloadPath": "C:\\11manga",
+  "compressPath": "C:\\12manga-compress"
+}
