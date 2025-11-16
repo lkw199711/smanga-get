@@ -1,4 +1,3 @@
-
 import { end_app, read_json, write_log, delay, make_can_be_floder, get_config } from "#utils/index";
 import { omegascansBrowser } from "#api/browser";
 import { mangaTask } from "#api/task";
@@ -35,9 +34,14 @@ export default class OmegaScansUpdate {
       if (manga.status === 'Dropped') return false; // 跳过已放弃的漫画
 
       const mangaName = make_can_be_floder(manga.title);
+      const paid_chapters = manga.paid_chapters || [];
+      const chapters_count = manga?.meta?.chapters_count || 0;
       const mangaFolder = `${this.downloadPath}/${mangaName}`;
       const metaFolder = `${this.downloadPath}/${mangaName}-smanga-info`;
       const metaFile = `${metaFolder}/meta.json`;
+
+      // 计算可下载的章节数
+      manga.chapterCount = chapters_count - paid_chapters.length;
 
       if (fs.existsSync(metaFile)) {
         const oldMeta = read_json(metaFile) || {};
@@ -53,6 +57,7 @@ export default class OmegaScansUpdate {
         series_slug: manga.series_slug,
         status: manga.status,
         website: 'omegascans',
+        chapterCount: manga.chapterCount,
       }
       // console.log(params)
       mangaTask.add(params)

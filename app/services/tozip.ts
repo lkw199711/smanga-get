@@ -38,6 +38,12 @@ class ToZip {
         // 复制元数据文件夹
         copy_folder(`${filePath}-smanga-info`, `${this.outFloder}\\${fileName}-smanga-info`);
         // await zip_jpg(filePath, `${this.outFloder}\\${fileName}-covers.zip`);
+        // 漫画文件夹为空 跳过
+        if (fs.readdirSync(filePath).length === 0) {
+          console.log('漫画文件夹为空', fileName);
+          continue;
+        }
+        // 压缩漫画文件夹
         await zipAndRemoveFolders(filePath, `${this.outFloder}\\${fileName}`);
         end_app()
       }

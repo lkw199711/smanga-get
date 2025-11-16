@@ -47,7 +47,6 @@ class UseBrowser {
         this.config = get_config()
         this.websiteConfig = this.config[website]
         this.website = website;
-
         if (nouser) {
             this.cookieFile = this.websiteConfig.cookieFileNoUser || 'data/cookies.json'
         } else {
@@ -169,7 +168,7 @@ class UseBrowser {
 
 
 class UseToomicsBrowser extends UseBrowser {
-    private CACHE_ROOT: string = 'M:\\manga\\toomics-cache';
+    private CACHE_ROOT: string = 'C:\\11manga\\toomics-cache';
     constructor() {
         super({ nouser: false, website: 'toomics' });
         this.CACHE_ROOT = this.config.coverCache || this.CACHE_ROOT;

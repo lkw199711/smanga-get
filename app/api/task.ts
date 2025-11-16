@@ -243,13 +243,13 @@ class MangaTask extends Task {
         taskService = new ToomicsAll('tc');
         break;
       case 'toomics-compress-sc':
-        taskService = new ToZip('M:\\manga\\toomics', 'M:\\manga\\toomics-zip');
+        taskService = new ToZip('C:\\11manga\\toomics', 'C:\\12manga-compress\\toomics');
         break;
       case 'toomics-compress-tc':
-        taskService = new ToZip('M:\\manga\\toomics-tc', 'M:\\manga\\toomics-tc-zip');
+        taskService = new ToZip('C:\\11manga\\toomics-tc', 'C:\\12manga-compress\\toomics-tc');
         break;
       case 'omegascans-compress':
-        taskService = new ToZip('M:\\manga\\omegascans', 'M:\\manga\\omegascans-zip');
+        taskService = new ToZip('C:\\11manga\\omegascans', 'C:\\12manga-compress\\omegascans');
         break;
       default:
         write_log(`[MangaTask] 未知网站: ${task.website}`);

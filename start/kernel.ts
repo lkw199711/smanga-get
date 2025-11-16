@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-09-30 05:07:46
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-11-17 18:14:29
+ * @LastEditTime: 2025-11-08 15:46:20
  * @FilePath: \manga-get\start\kernel.ts
  */
 /*
@@ -59,7 +59,7 @@ import { delay, get_config } from '#utils/index'
 import { toomicsBrowser } from '#api/browser'
 import { mangaTask } from '#api/task'
 
-const immediately = get_config().immediately ?? 0;
+const immediately = get_config().immediately ?? {};
 
 // 创建配置文件
 create_config();
@@ -72,7 +72,7 @@ create_config();
 // delete_err_cover('M:\\manga\\toomics');
 
 // 定时任务
-create_scan_cron();
+// create_scan_cron();
 
 // 查询干扰图片
 // console.log(check_img_num("M:\\manga\\omegascans"));
@@ -81,40 +81,52 @@ create_scan_cron();
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
-if (immediately) {
+if (immediately.toomicsUpdateSc) {
   // 订阅简体漫画
   mangaTask.add({
-    "website": 'toomics-covers-sc',
-    "id": 0,
-    "name": ''
+    website: 'toomics-covers-sc',
+    id: 0,
+    name: '',
   })
+}
 
+if (immediately.toomicsUpdateTc) {
   // 订阅繁体漫画
   mangaTask.add({
-    "website": 'toomics-covers-tc',
-    "id": 0,
-    "name": ''
+    website: 'toomics-covers-tc',
+    id: 0,
+    name: '',
   })
+}
 
+if (immediately.omegascansUpdate) {
   // 订阅OmegaScans
   mangaTask.add({
-    "website": 'omegascans-update',
-    "id": 0,
-    "name": ''
+    website: 'omegascans-update',
+    id: 0,
+    name: '',
   })
+}
 
+if (immediately.toomicsCompressSc) {
   // 压缩简体漫画
   mangaTask.add({ website: 'toomics-compress-sc', id: 0, name: '' })
+}
 
+if (immediately.toomicsCompressTc) {
   // 压缩繁体漫画
   mangaTask.add({ website: 'toomics-compress-tc', id: 0, name: '' })
+}
 
+if (immediately.omegascansCompress) {
   // 压缩OmegaScans
   mangaTask.add({ website: 'omegascans-compress', id: 0, name: '' })
-
-  // 执行订阅
-  task_allocation();
 }
+
+
+// 执行订阅
+task_allocation()
+
 
 /* 单漫画任务添加示例
    mangaTask.add({

@@ -1,19 +1,20 @@
 import * as fs from 'fs'
 import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
-import { subscribe_remove } from '#api/subsribe';
-import path from 'path';
-import { delay, end_app, get_config, read_json, s_delete, write_log } from '#utils/index';
-import puppeteer from 'puppeteer';
-import { toomicsBrowser } from '#api/browser';
-import { close_all_browsers, mangaTask } from '#api/task';
+import { subscribe_remove } from '#api/subsribe'
+import path from 'path'
+import { delay, end_app, get_config, read_json, s_delete, write_log } from '#utils/index'
+import puppeteer from 'puppeteer'
+import { toomicsBrowser } from '#api/browser'
+import { close_all_browsers, mangaTask } from '#api/task'
 export default class Toomics {
-  private domain = 'https://toomics.com';
+  private domain = 'https://toomics.com'
   private website: string = 'toomics'
   private mangaId: number
   private mangaName: string
   private mangaUrl: string = ''
   private downloadPath: string
+  private compressPath: string
   private downloadLockedMeta: boolean
   // 是否下载付费章节
   private downloadLockedChapter: boolean = true
@@ -39,9 +40,8 @@ export default class Toomics {
   private langTag: string = 'sc'
   private jumpExist = true // 是否跳过已存在的manga
   private config: any
-  private randomDoNotDownload: number = 1
-  private doNotDownloadNumber: number = 0
   private chapterCount: number = 0
+  private pretendNum: number = 2 // 假装下载的章节数
   private params: subsribeType
   constructor(params: subsribeType) {
     const config = get_config()?.toomics || {}
@@ -53,15 +53,22 @@ export default class Toomics {
     this.passWord = config?.passWord || ''
     this.scrollStep = config?.scrollStep || this.scrollStep
     this.scrollDelay = config?.scrollDelay || this.scrollDelay
-    this.downloadPath = path.join(config?.downloadPath || '', this.website);
-    this.adult = params.adult || false;
+    this.downloadPath = path.join(config?.downloadPath || '', this.website)
+    this.compressPath = path.join(config?.compressPath || '', this.website)
+    this.adult = params.adult || false
     this.jumpExist = config?.jumpExist
     if (params?.url && /tc/.test(params.url)) {
-      this.langTag = 'tc';
-      this.downloadPath = this.downloadPath + '-tc';
+      this.langTag = 'tc'
+      this.downloadPath = this.downloadPath + '-tc'
+      this.compressPath = this.compressPath + '-tc'
     } else if (params?.url && /en/.test(params.url)) {
-      this.langTag = 'en';
-      this.downloadPath = this.downloadPath + '-en';
+      this.langTag = 'en'
+      this.downloadPath = this.downloadPath + '-en'
+      this.compressPath = this.compressPath + '-en'
+    } else if (params?.url && /en/.test(params.url)) {
+      this.langTag = 'en'
+      this.downloadPath = this.downloadPath + '-en'
+      this.compressPath = this.compressPath + '-en'
     }
     if (params.langTag) this.langTag = params.langTag
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
@@ -72,9 +79,7 @@ export default class Toomics {
    * @description: 开始下载
    */
   async start() {
-    if (!await this.check_update()) {
-      return;
-    }
+    if (!this.check_update()) return
     // 解析章节
     console.log(this.mangaName + ' 正在分析')
 
@@ -94,54 +99,60 @@ export default class Toomics {
     // 获取元数据
     await this.get_meta()
 
-    // 下载章节
-    for (let i = 0; i < this.chapters.length; i++) {
-      const chapter = this.chapters[i]
+    let chapters = []
+    for (let chapter of this.chapters) {
       const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
       const chapterFolder = `${this.downloadPath}/${this.mangaName}/${chapterName}`
-      if (!chapter.isFree && !this.downloadLockedChapter) {
-        // 虽然未解锁 但是仍然下载封面 创建目录
-        if (this.downloadLockedMeta && !fs.existsSync(chapterFolder)) {
-          await fs.promises.mkdir(chapterFolder, { recursive: true })
-          await downloadImage(chapter.cover, `${chapterFolder}.jpg`)
-        }
-        continue
-      }
-
-      let doNorDownload = this.doNotDownloadNumber < this.randomDoNotDownload
+      let alreadyHas = false
 
       // 已下载 跳过
       if (fs.existsSync(chapterFolder)) {
         const files = fs.readdirSync(chapterFolder)
-        if (files.length > 0 && !doNorDownload) {
-          continue
-        } else if (files.length === 0) {
-          doNorDownload = false
+        if (files.length > 0) {
+          alreadyHas = true
         }
+      } else if (fs.existsSync(`${this.compressPath}/${this.mangaName}/${chapterName}.zip`)) {
+        alreadyHas = true
       } else {
         // 创建章节文件夹
         await fs.promises.mkdir(chapterFolder, { recursive: true })
-        doNorDownload = false
       }
 
-      await this.download_chapter({
+      chapters.push({
         chapterName,
         url: chapter.url,
         downloadPath: chapterFolder,
-        doNotDownload: doNorDownload,
+        alreadyHas,
+        doNotDownload: alreadyHas,
       })
+    }
 
-      // 随机不下载章节数
-      if (doNorDownload) {
-        this.doNotDownloadNumber++
+    // 筛选出需要下载的章节
+    const chaptersToDownload = chapters.filter((chapter: any) => !chapter.alreadyHas)
+    // 筛选出需要不下载的章节
+    const chaptersToNotDownload = chapters.filter((chapter: any) => chapter.doNotDownload)
+    // 假装下载的章节
+    let pretendNum = this.pretendNum - chaptersToDownload.length
+    let pretendDownload = []
+    if (pretendNum > 0) pretendDownload = chaptersToNotDownload.slice(-pretendNum)
+
+    if (chaptersToDownload.length > 0) {
+      // 假装下载章节
+      for (let chapter of pretendDownload) {
+        await this.download_chapter(chapter)
+      }
+
+      // 下载章节
+      for (let chapter of chaptersToDownload) {
+        await this.download_chapter(chapter)
       }
     }
 
     // 关闭浏览器 释放资源
-    await this.page?.close().catch(() => { })
-    await this.chapterPage?.close().catch(() => { })
-    await this.checkPage?.close().catch(() => { })
-    await this.metaPage?.close().catch(() => { })
+    await this.page?.close().catch(() => {})
+    await this.chapterPage?.close().catch(() => {})
+    await this.checkPage?.close().catch(() => {})
+    await this.metaPage?.close().catch(() => {})
 
     console.log(this.mangaName + ' 订阅完毕')
     // 移除完结的订阅
@@ -158,19 +169,29 @@ export default class Toomics {
    * @description 检查是否有更新
    * @returns 是否有更新
    */
-  async check_update() {
+  check_update() {
     const mangaFloder = `${this.downloadPath}/${this.mangaName}`
-    // 没有漫画文件夹 说明是新订阅
-    if (!fs.existsSync(mangaFloder)) {
-      return true
+    const compressFloder = `${this.compressPath}/${this.mangaName}`
+    let mangaChapterFloders: any = []
+    let mangacompressChapterFloders = []
+    // 筛选目录中的章节文件夹
+    if (fs.existsSync(mangaFloder)) {
+      mangaChapterFloders = fs.readdirSync(mangaFloder)
+      mangaChapterFloders = mangaChapterFloders.filter((item) =>
+        fs.statSync(path.join(mangaFloder, item)).isDirectory()
+      )
     }
 
-    // 筛选目录中的章节文件夹
-    let mangaChapterFloder = fs.readdirSync(mangaFloder)
-    mangaChapterFloder = mangaChapterFloder.filter((item) => fs.statSync(path.join(mangaFloder, item)).isDirectory())
+    // 筛选目录中的压缩章节文件夹
+    if (fs.existsSync(compressFloder)) {
+      mangacompressChapterFloders = fs.readdirSync(compressFloder)
+      mangacompressChapterFloders = mangacompressChapterFloders.filter((item) => {
+        return !mangaChapterFloders.includes(item.replace('.zip', '')) && item.endsWith('.zip')
+      })
+    }
 
     // 检查是否有更新(.5不计算)
-    if (mangaChapterFloder.length + 0.9 < this.chapterCount) {
+    if (mangaChapterFloders.length + mangacompressChapterFloders.length + 0.9 < this.chapterCount) {
       return true
     }
 
@@ -184,82 +205,115 @@ export default class Toomics {
    * @returns
    */
   async init() {
-
     if (!toomicsBrowser.browser?.connected) {
       await toomicsBrowser.init()
     }
 
-    if (!toomicsBrowser.browser) return;
+    if (!toomicsBrowser.browser) return
 
     // 获取cookie
     await toomicsBrowser.get_cookie()
 
     // 清除旧的章节缓存
-    const chapterCahceImages = fs.readdirSync(this.config.chapterCache);
+    const chapterCahceImages = fs.readdirSync(this.config.chapterCache)
     chapterCahceImages.forEach((file) => {
-      const filePath = path.join(this.config.chapterCache, file);
-      fs.unlinkSync(filePath);
-    });
+      const filePath = path.join(this.config.chapterCache, file)
+      fs.unlinkSync(filePath)
+    })
 
     this.page = await toomicsBrowser.new_page()
     if (!this.page) return
 
-    await this.page.goto(this.domain + `/sc`, {
-      waitUntil: 'networkidle2',
-      timeout: 60 * 1000,
-    }).catch(() => { })
+    await this.page
+      .goto(this.domain + `/sc`, {
+        waitUntil: 'networkidle2',
+        timeout: 60 * 1000,
+      })
+      .catch(() => {})
 
     const homePageHtml = await this.page.content()
-    if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(homePageHtml)) {
+    if (
+      /flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(
+        homePageHtml
+      )
+    ) {
       write_log('[cookie]cookie过期，尝试重新登录')
 
       // 关闭弹窗
-      await this.page.locator('div.close_popup').click().catch(() => { })
+      await this.page
+        .locator('div.close_popup')
+        .click()
+        .catch(() => {})
       await delay(2000)
 
       // 点击菜单按钮
-      await this.page.locator('button[title = "菜单"]').click().catch(() => { })
+      await this.page
+        .locator('button[title = "菜单"]')
+        .click()
+        .catch(() => {})
       await delay(2000)
 
       // 点击登录按钮
-      await this.page.locator('button.bg-white').filter(button => button.innerText.trim() === '登录').click().catch(() => { })
+      await this.page
+        .locator('button.bg-white')
+        .filter((button) => button.innerText.trim() === '登录')
+        .click()
+        .catch(() => {})
       await delay(2000)
 
       // 点击使用邮箱登录
-      await this.page.locator('button[onclick="Base.changeSignInForm();"]').click().catch(() => { })
+      await this.page
+        .locator('button[onclick="Base.changeSignInForm();"]')
+        .click()
+        .catch(() => {})
       await delay(2000)
 
       // 填充用户名与密码
-      await this.page.locator('input[name="user_id"]').fill(this.userName).catch(() => { })
+      await this.page
+        .locator('input[name="user_id"]')
+        .fill(this.userName)
+        .catch(() => {})
       await delay(1000)
-      await this.page.locator('input[name="user_pw"]').fill(this.passWord).catch(() => { })
+      await this.page
+        .locator('input[name="user_pw"]')
+        .fill(this.passWord)
+        .catch(() => {})
       await delay(1000)
 
       // 点击登录按钮
-      await this.page.locator('button[type="submit"]').click().catch(() => { })
+      await this.page
+        .locator('button[type="submit"]')
+        .click()
+        .catch(() => {})
       await delay(2000)
 
       // 等待导航完成
-      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
+      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
 
-      if (/flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(await this.page?.content())) {
+      if (
+        /flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(
+          await this.page?.content()
+        )
+      ) {
         write_log('登录失败，请检查账号密码')
         throw new Error('登录失败，请检查账号密码')
       }
 
-      let Base: any;
-      await this.page.evaluate(() => {
-        // 切换成人模式
-        Base.setDisplay('A', '/sc');
-      }).catch(() => { })
+      let Base: any
+      await this.page
+        .evaluate(() => {
+          // 切换成人模式
+          Base.setDisplay('A', '/sc')
+        })
+        .catch(() => {})
 
-      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
+      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
     }
 
-    await toomicsBrowser.save_cookie();
+    await toomicsBrowser.save_cookie()
 
     // 关闭页面 避免页面过多
-    await this.page.close().catch(() => { })
+    await this.page.close().catch(() => {})
   }
 
   /**
@@ -267,28 +321,39 @@ export default class Toomics {
    * @returns
    */
   async get_meta() {
-    console.log('正在获取元数据');
+    console.log('正在获取元数据')
     if (!toomicsBrowser.browser) {
       return ''
     }
 
     // 获取元数据页html
-    await this.get_meta_html();
+    await this.get_meta_html()
 
-    let title = this.metaPageHtml?.match(/(?<=<h2.+>)[^<]+/s)?.[0] || '';
+    let title = this.metaPageHtml?.match(/(?<=<h2.+>)[^<]+/s)?.[0] || ''
     title = title.trim()
-    let author = this.metaPageHtml?.match(/(?<=mb-0 text-xs font-normal text-gray-300\">)[^<]+/s)?.[0] || '';
-    author = author.trim();
-    const describe = this.metaPageHtml?.match(/(?<=name=\"description\" content=\")[^\"]+/s)?.[0] || '';
-    const banner = this.metaPageHtml?.match(/(?<=<!-- pc -->.+srcset=\")[^\"]+/s)?.[0] || '';
-    const bannerBackground = this.metaPageHtml?.match(/(?<=<!-- pc bg -->.+src=\")[^\"]+/s)?.[0] || '';
-    const cover = this.metaPageHtml?.match(/(?<=<!-- mobile -->.+src=\")[^\"]+/s)?.[0] || '';
-    const finishedTxt = this.metaPageHtml?.match(/(?<=text-3xs font-bold text-gray-900\">)[^<]+/s)?.[0] || '';
+    let author =
+      this.metaPageHtml?.match(/(?<=mb-0 text-xs font-normal text-gray-300\">)[^<]+/s)?.[0] || ''
+    author = author.trim()
+    const describe =
+      this.metaPageHtml?.match(/(?<=name=\"description\" content=\")[^\"]+/s)?.[0] || ''
+    const banner = this.metaPageHtml?.match(/(?<=<!-- pc -->.+srcset=\")[^\"]+/s)?.[0] || ''
+    const bannerBackground =
+      this.metaPageHtml?.match(/(?<=<!-- pc bg -->.+src=\")[^\"]+/s)?.[0] || ''
+    const cover = this.metaPageHtml?.match(/(?<=<!-- mobile -->.+src=\")[^\"]+/s)?.[0] || ''
+    const finishedTxt =
+      this.metaPageHtml?.match(/(?<=text-3xs font-bold text-gray-900\">)[^<]+/s)?.[0] || ''
     const finished = ['完结', '完結', 'End'].includes(finishedTxt.trim()) ? true : false
-    const audlt = this.adult;
+    const audlt = this.adult
 
     this.meta = {
-      title, author, finished, audlt, describe, banner, cover, bannerBackground,
+      title,
+      author,
+      finished,
+      audlt,
+      describe,
+      banner,
+      cover,
+      bannerBackground,
     }
 
     if (finished) {
@@ -306,17 +371,17 @@ export default class Toomics {
 
     let downloadMetaError = false
     if (!toomicsBrowser.buffs[banner]) {
-      console.log('横幅图片下载失败');
+      console.log('横幅图片下载失败')
       downloadMetaError = true
     }
     if (!toomicsBrowser.buffs[bannerBackground]) {
-      console.log('横幅背景图片下载失败');
+      console.log('横幅背景图片下载失败')
       downloadMetaError = true
     }
 
     this.chapters.forEach((chapter: any) => {
       if (!toomicsBrowser.buffs[chapter.cover]) {
-        console.log('章节封面图片下载失败', chapter.cover);
+        console.log('章节封面图片下载失败', chapter.cover)
         // downloadMetaError = true
       }
     })
@@ -328,12 +393,12 @@ export default class Toomics {
     if (downloadMetaError && this.retry < 3) {
       write_log(`[meta]${this.mangaName} 下载元数据失败,重新执行元数据获取`)
       this.downloadMetaError = true
-      this.retry++;
+      this.retry++
       await this.get_meta()
     } else {
       if (this.retry >= 3) {
         write_log(`[meta]${this.mangaName} 任务失败`)
-        throw new Error("任务失败")
+        throw new Error('任务失败')
       }
       this.downloadMetaError = false
       toomicsBrowser.clear_buffs()
@@ -341,7 +406,7 @@ export default class Toomics {
   }
 
   get_chapters() {
-    const chapterBoxs = this.metaPageHtml?.match(/(?<=normal_ep).+?(?=<\/li>)/gs) || [];
+    const chapterBoxs = this.metaPageHtml?.match(/(?<=normal_ep).+?(?=<\/li>)/gs) || []
     const chapters = chapterBoxs.map((box: string) => {
       let index = box.match(/(?<=small>)[^<]+/s)?.[0] || ''
       index = index.trim()
@@ -351,7 +416,7 @@ export default class Toomics {
         subName = box.match(/(?<=Up<\/span>)[^<]+/s)?.[0] || ''
         subName = subName.trim()
       }
-      const name = index + ' ' + subName;
+      const name = index + ' ' + subName
       const cover = box.match(/(?<=data-original=\")[^\"]+/)?.[0] || ''
       const date = box.match(/(?<=text-muted\">)[^<]+/s)?.[0] || ''
       const url = box.match(/\/(sc|tc|en)\/webtoon\/detail[^\']+/)?.[0] || ''
@@ -367,12 +432,12 @@ export default class Toomics {
 
     // 更新元数据日期
     this.meta.publishDate = chapters[0].date
-    this.meta.chapters = chapters;
-    this.chapters = chapters;
+    this.meta.chapters = chapters
+    this.chapters = chapters
   }
 
   async download_meta() {
-    let homeMeta = null;
+    let homeMeta = null
     if (fs.existsSync('data/toomics-all.json')) {
       const json = read_json('data/toomics-all.json')
       const manga = json.find((manga: any) => Number(manga.id) === this.mangaId)
@@ -382,8 +447,10 @@ export default class Toomics {
     }
 
     // 创建元数据文件夹
-    if (!fs.existsSync(this.metaFolder)) await fs.promises.mkdir(this.metaFolder, { recursive: true })
-    if (!fs.existsSync(this.mangaFolder)) await fs.promises.mkdir(this.mangaFolder, { recursive: true })
+    if (!fs.existsSync(this.metaFolder))
+      await fs.promises.mkdir(this.metaFolder, { recursive: true })
+    if (!fs.existsSync(this.mangaFolder))
+      await fs.promises.mkdir(this.mangaFolder, { recursive: true })
 
     const metaFile = `${this.metaFolder}/meta.json`
     if (fs.existsSync(metaFile)) {
@@ -412,18 +479,25 @@ export default class Toomics {
       }
     }
 
-    if (!fs.existsSync(metaFile) || this.metaOverWrite || this.metaUpdate || this.downloadMetaError) {
+    if (
+      !fs.existsSync(metaFile) ||
+      this.metaOverWrite ||
+      this.metaUpdate ||
+      this.downloadMetaError
+    ) {
       // 写入元数据
       await fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
 
       // 封面图
       // fs.writeFileSync(`${this.metaFolder}/cover.jpg`, toomicsBrowser.buffs[this.meta.cover])
       fs.writeFileSync(`${this.metaFolder}/banner.jpg`, toomicsBrowser.buffs[this.meta.banner])
-      fs.writeFileSync(`${this.metaFolder}/bannerBackground.jpg`, toomicsBrowser.buffs[this.meta.bannerBackground])
+      fs.writeFileSync(
+        `${this.metaFolder}/bannerBackground.jpg`,
+        toomicsBrowser.buffs[this.meta.bannerBackground]
+      )
     } else {
       console.log(this.mangaName + ' 没有更新')
     }
-
 
     // 下载章节封面
     for (let i = 0; i < this.chapters.length; i++) {
@@ -444,12 +518,12 @@ export default class Toomics {
     }
     if (!overWrite && fs.existsSync(localPath)) {
       return
-    };
+    }
     const imagePath = `${this.config.coverCache}/${this.mangaId}-${imageName}`
     if (!fs.existsSync(imagePath)) {
       console.error('封面图片不存在,请检查全部漫画获取程序', imagePath)
       return
-    };
+    }
     const stat = fs.statSync(imagePath)
     if (stat.size < 1000) {
       console.error('封面图片大小异常,请检查全部漫画获取程序', imagePath)
@@ -460,32 +534,49 @@ export default class Toomics {
   }
 
   async get_meta_html() {
-    this.metaPage = await toomicsBrowser.new_page();
+    this.metaPage = await toomicsBrowser.new_page()
     if (!this.metaPage) return
-    this.metaPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1')
+    this.metaPage.setUserAgent(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+    )
     this.mangaUrl = `https://toomics.com/${this.langTag}/webtoon/episode/toon/${this.mangaId}`
-    await this.metaPage.goto(this.mangaUrl, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/webtoon/search`, timeout: 180 * 1000 }).catch(() => { })
-    await toomicsBrowser.save_cookie();
+    await this.metaPage
+      .goto(this.mangaUrl, {
+        waitUntil: 'networkidle2',
+        referer: `https://toomics.com/${this.langTag}/webtoon/search`,
+        timeout: 180 * 1000,
+      })
+      .catch(() => {})
+    await toomicsBrowser.save_cookie()
 
     if (/ep\//.test(this.metaPage.url())) {
-      await this.metaPage.locator('h1 a').click().catch(() => { })
-      await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+      await this.metaPage
+        .locator('h1 a')
+        .click()
+        .catch(() => {})
+      await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
       await delay(2000)
-      await toomicsBrowser.save_cookie();
+      await toomicsBrowser.save_cookie()
     }
 
     // 不断滚动 直到页面底部
-    console.log('开始滚动页面,等待加载图片');
-    let scrollY = -1;
-    let window: any;
+    console.log('开始滚动页面,等待加载图片')
+    let scrollY = -1
+    let window: any
     await this.metaPage.mouse.move(1000, 1000)
 
     // 向上滚动到顶部
     while (1) {
       let protocolError = false
-      await this.metaPage.mouse.wheel({ deltaY: -this.scrollStep }).catch(() => { protocolError = true })
+      await this.metaPage.mouse.wheel({ deltaY: -this.scrollStep }).catch(() => {
+        protocolError = true
+      })
       await delay(this.scrollDelay)
-      const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
+      const nowScrollY = await this.metaPage
+        .evaluate(() => window.scrollY)
+        .catch(() => {
+          protocolError = true
+        })
       if (protocolError) continue
 
       if (nowScrollY === 0) break
@@ -495,16 +586,22 @@ export default class Toomics {
     // 向下滚动到底部
     while (1) {
       let protocolError = false
-      await this.metaPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
+      await this.metaPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => {
+        protocolError = true
+      })
       await delay(this.scrollDelay)
-      const nowScrollY = await this.metaPage.evaluate(() => window.scrollY).catch(() => { protocolError = true })
+      const nowScrollY = await this.metaPage
+        .evaluate(() => window.scrollY)
+        .catch(() => {
+          protocolError = true
+        })
       if (protocolError) continue
 
       if (nowScrollY === scrollY) break
       scrollY = nowScrollY
     }
 
-    await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
+    await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
     await delay(1000)
     this.metaPageHtml = await this.metaPage.content()
 
@@ -521,15 +618,21 @@ export default class Toomics {
    * @param reloadImageindexs 重试图片
    * @returns
    */
-  async download_chapter({ chapterName, url, downloadPath, reloadImageindexs = [], doNotDownload = false }: {
-    chapterName: string,
-    url: string,
-    downloadPath: string,
-    reloadImageindexs?: number[],
+  async download_chapter({
+    chapterName,
+    url,
+    downloadPath,
+    reloadImageindexs = [],
+    doNotDownload = false,
+  }: {
+    chapterName: string
+    url: string
+    downloadPath: string
+    reloadImageindexs?: number[]
     doNotDownload?: boolean
   }) {
     const errImgs: number[] = []
-    const interfereImages: number[] = [];
+    const interfereImages: number[] = []
     if (reloadImageindexs.length > 0) {
       this.retry++
       if (this.retry > 3) {
@@ -540,21 +643,23 @@ export default class Toomics {
     } else {
       this.retry = 0
     }
-    if (!toomicsBrowser.browser) return;
-    this.chapterPage = await toomicsBrowser.new_page();
+    if (!toomicsBrowser.browser) return
+    this.chapterPage = await toomicsBrowser.new_page()
     if (!this.chapterPage) return
 
     // 开始下载章节
     console.log('正在下载章节:', chapterName)
 
-    await this.chapterPage.goto(url + '/viewer/S', {
-      waitUntil: 'networkidle2',
-      timeout: 60 * 1000,
-      referer: this.mangaUrl
-    }).catch(() => { })
+    await this.chapterPage
+      .goto(url + '/viewer/S', {
+        waitUntil: 'networkidle2',
+        timeout: 60 * 1000,
+        referer: this.mangaUrl,
+      })
+      .catch(() => {})
 
     // 获取最新cookie
-    await toomicsBrowser.save_cookie();
+    await toomicsBrowser.save_cookie()
     /*
     // await delay(10000)
 
@@ -583,22 +688,21 @@ export default class Toomics {
     }
 */
 
-
     // 不断滚动 直到页面底部
-    console.log('开始滚动页面,等待加载图片');
-    let scrollY = -1;
-    let window: any, document: any;
+    console.log('开始滚动页面,等待加载图片')
+    let scrollY = -1
+    let window: any, document: any
     await this.chapterPage.mouse.move(1000, 1000)
     while (1) {
-      await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { })
+      await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => {})
       await delay(this.scrollDelay)
-      const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => { })
+      const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => {})
       if (nowScrollY === scrollY) break
       scrollY = nowScrollY
     }
 
     // 等待图片网络请求完成
-    await this.chapterPage.waitForNetworkIdle().catch(() => { })
+    await this.chapterPage.waitForNetworkIdle().catch(() => {})
 
     // 等待三秒之后开始下载
     await delay(3000)
@@ -609,7 +713,7 @@ export default class Toomics {
        * 因此首先尝试随机浏览一些其他章节
        */
       await this.chapterPage.close()
-      write_log(`[chapter download]${chapterName} 下载已禁用,跳过`);
+      write_log(`[chapter download]${chapterName} 下载已禁用,跳过`)
       return
     }
 
@@ -617,7 +721,7 @@ export default class Toomics {
     const imageUrls = await this.chapterPage.evaluate(() => {
       const els = document.querySelectorAll('img[id^="set_image_"]')
       const urls = Array.from(els).map((el: any) => el.src)
-      return urls;
+      return urls
     })
 
     // 数量正确 进行下载
@@ -628,7 +732,7 @@ export default class Toomics {
 
       // 如果为重试模式 仅下载指定图片
       if (reloadImageindexs.length > 0 && !reloadImageindexs.includes(i)) {
-        continue;
+        continue
       }
 
       // 记录错误图片
@@ -652,7 +756,7 @@ export default class Toomics {
     if (interfereImages.length > 0) {
       const interfereStr = interfereImages.length > 0 ? `, 检测到干扰图片:${interfereImages}` : ''
       const errorStr = errImgs.length > 0 ? `, 请求失败图片:${errImgs}` : ''
-      write_log(`[chapter download]${chapterName}下载失败${interfereStr}${errorStr},进行重新下载`);
+      write_log(`[chapter download]${chapterName}下载失败${interfereStr}${errorStr},进行重新下载`)
       await this.download_chapter({
         chapterName,
         url,
@@ -663,37 +767,40 @@ export default class Toomics {
     }
 
     // 检测图片序号连续性
-    let imgs = fs.readdirSync(downloadPath).filter(file => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+    let imgs = fs
+      .readdirSync(downloadPath)
+      .filter((file) => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
     if (imgs.length === 0) {
-      write_log(`[chapter download]${chapterName} 下载完成,没有图片`);
-      return;
+      write_log(`[chapter download]${chapterName} 下载完成,没有图片`)
+      return
     }
     imgs.sort((a, b) => {
-      const numA = parseInt(a.split('.')[0], 10);
-      const numB = parseInt(b.split('.')[0], 10);
-      return numA - numB;
+      const numA = parseInt(a.split('.')[0], 10)
+      const numB = parseInt(b.split('.')[0], 10)
+      return numA - numB
     })
 
-    const maxImg = imgs[imgs.length - 1];
-    const maxImgName = path.basename(maxImg);
-    const maxImgNum = parseInt(maxImgName);
+    const maxImg = imgs[imgs.length - 1]
+    const maxImgName = path.basename(maxImg)
+    const maxImgNum = parseInt(maxImgName)
 
     if (maxImgNum + 1 > imgs.length) {
-      write_log(`[chapter download]${chapterName} 下载完成,但是图片序号不连续,最大序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`);
+      write_log(
+        `[chapter download]${chapterName} 下载完成,但是图片序号不连续,最大序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`
+      )
       // 如果图片序号不连续 重新下载
       await this.download_chapter({
         chapterName,
         url,
         downloadPath,
-        reloadImageindexs: Array.from({ length: maxImgNum + 1 }, (_, i) => i)
+        reloadImageindexs: Array.from({ length: maxImgNum + 1 }, (_, i) => i),
       })
-
     } else {
-      write_log(`[chapter download]${chapterName} 下载完成.`);
+      write_log(`[chapter download]${chapterName} 下载完成.`)
     }
 
     await delay(1000)
 
-    end_app();
+    end_app()
   }
 }

@@ -35,6 +35,7 @@ export default class ToomicsAll {
 
     await page.goto(`https://toomics.com/${this.langTag}/webtoon/ranking`, { waitUntil: 'networkidle2', referer: `https://toomics.com/${this.langTag}/` }).catch(() => { })
     await page.waitForSelector('.list_wrap').catch(() => { });
+    await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
 
     let Base: any, location: any;
     await page.evaluate(() => {
