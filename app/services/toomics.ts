@@ -3,7 +3,7 @@ import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
 import path from 'path'
-import { delay, end_app, get_config, read_json, s_delete, write_log } from '#utils/index'
+import { delay, end_app, get_config, make_can_be_floder, read_json, s_delete, write_log } from '#utils/index'
 import puppeteer from 'puppeteer'
 import { toomicsBrowser } from '#api/browser'
 import { close_all_browsers, mangaTask } from '#api/task'
@@ -47,7 +47,7 @@ export default class Toomics {
     const config = get_config()?.toomics || {}
     this.config = config
     this.mangaId = Number(params.id)
-    this.mangaName = params.name.replaceAll(/[<>:"/\\|?*]/g, '')
+    this.mangaName = make_can_be_floder(params.name)
     this.downloadLockedMeta = config?.downloadLockedMeta
     this.userName = config?.userName || ''
     this.passWord = config?.passWord || ''
@@ -101,7 +101,7 @@ export default class Toomics {
 
     let chapters = []
     for (let chapter of this.chapters) {
-      const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
+      const chapterName = make_can_be_floder(chapter.name)
       const chapterFolder = `${this.downloadPath}/${this.mangaName}/${chapterName}`
       let alreadyHas = false
 
@@ -362,7 +362,7 @@ export default class Toomics {
       write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
     }
 
-    this.mangaName = title.replaceAll(/[<>:"/\\|?*]/g, '')
+    this.mangaName = make_can_be_floder(title)
     this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
     this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
 
@@ -502,7 +502,7 @@ export default class Toomics {
     // 下载章节封面
     for (let i = 0; i < this.chapters.length; i++) {
       const chapter = this.chapters[i]
-      const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
+      const chapterName = make_can_be_floder(chapter.name)
       const chapterCover = `${this.mangaFolder}/${chapterName}.jpg`
       // 下载章节封面
       if (!fs.existsSync(chapterCover) && toomicsBrowser.buffs[chapter.cover]) {

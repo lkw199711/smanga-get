@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { downloadImage } from '#api/bilibili'
 import { subsribeType } from '#type/index.js'
-import { delay, end_app, saveBase64Image, write_log, get_config } from '#utils/index'
+import { delay, end_app, saveBase64Image, write_log, get_config, make_can_be_floder } from '#utils/index'
 import puppeteer from 'puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
@@ -69,7 +69,7 @@ export default class Bilibili {
         // 等待获取元数据或timeout
 
         // 漫画名删除特殊字符
-        const mangaName = this.meta.title.replaceAll(/[<>:"/\\|?*]/g, '')
+        const mangaName = make_can_be_floder(this.meta.title)
         // 创建元数据文件夹
         const metaFolder = `${this.downloadPath}/${mangaName}-smanga-info`
         if (!fs.existsSync(metaFolder)) await fs.promises.mkdir(metaFolder, { recursive: true })
@@ -139,7 +139,7 @@ export default class Bilibili {
         // 下载章节
         for (let i = 0; i < this.chapters.length; i++) {
             const chapter = this.chapters[i]
-            const chapterName = chapter.title.replaceAll(/[<>:"/\\|?*]/g, '')
+            const chapterName = make_can_be_floder(chapter.title)
             const chapterFolder = `${this.downloadPath}/${mangaName}/${this.get_order(chapter.ord)} ${chapterName}`
 
             if (chapter.isLocked) {
@@ -554,6 +554,6 @@ export default class Bilibili {
             chapters: this.chapters,
         }
 
-        this.mangaName = this.meta.title.replaceAll(/[<>:"/\\|?*]/g, '')
+        this.mangaName = make_can_be_floder(this.meta.title)
     }
 }

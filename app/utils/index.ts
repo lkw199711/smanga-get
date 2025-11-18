@@ -157,5 +157,5 @@ export function copy_folder(source: string, target: string) {
 }
 
 export function make_can_be_floder(name: string): string {
-  return name.replace(/[\\/\\\\:*?\"<>|]/g, '').trimStart().trimEnd();
+  return name.replace(/[\\/\\\\:*?\"<>|\.]/g, '').trimStart().trimEnd();
 }

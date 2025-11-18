@@ -118,7 +118,7 @@ export default class OmegaScans {
   async download_chapter(chapter: any) {
     if (!omegascansBrowser?.browser) return
 
-    const chapterName = chapter.name.replaceAll(/[<>:"/\\|?*]/g, '')
+    const chapterName = make_can_be_floder(chapter.name)
     const chapterFolder = `${this.mangaFolder}/${chapterName}`
 
     // 已下载 跳过
