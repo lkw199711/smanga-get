@@ -98,6 +98,7 @@ import ToomicsDayUpdate from '#services/toomics-update';
 import ToomicsAll from '#services/toomics-all';
 import ToZip from '#services/tozip';
 import OmegaScansUpdate from '#services/omegascans-update';
+import SyncCloud from '#services/sync-cloud';
 class BilibiliTask extends Task {
   constructor(tasks: taskType[]) {
     super(tasks)
@@ -243,13 +244,25 @@ class MangaTask extends Task {
         taskService = new ToomicsAll('tc');
         break;
       case 'toomics-compress-sc':
-        taskService = new ToZip('C:\\11manga\\toomics', 'C:\\12manga-compress\\toomics');
+        taskService = new ToZip('toomics-sc');
         break;
       case 'toomics-compress-tc':
-        taskService = new ToZip('C:\\11manga\\toomics-tc', 'C:\\12manga-compress\\toomics-tc');
+        taskService = new ToZip('toomics-tc');
         break;
       case 'omegascans-compress':
-        taskService = new ToZip('C:\\11manga\\omegascans', 'C:\\12manga-compress\\omegascans');
+        taskService = new ToZip('omegascans', true);
+        break;
+      case 'bilibili-compress':
+        taskService = new ToZip('bilibili', true);
+        break;
+      case 'sync-toomics-sc':
+        taskService = new SyncCloud('toomics-sc');
+        break;
+      case 'sync-toomics-tc':
+        taskService = new SyncCloud('toomics-tc');
+        break;
+      case 'sync-omegascans':
+        taskService = new SyncCloud('omegascans');
         break;
       default:
         write_log(`[MangaTask] 未知网站: ${task.website}`);

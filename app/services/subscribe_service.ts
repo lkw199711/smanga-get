@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-09-29 00:13:56
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-11-17 18:11:49
- * @FilePath: \manga-get\app\services\subsribe_service.ts
- */
 import * as fs from 'fs'
 import { downloadImage, get_meta, image_index, image_token } from '#api/index'
 import { log } from 'console'

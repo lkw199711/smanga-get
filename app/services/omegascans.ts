@@ -28,12 +28,12 @@ export default class OmegaScans {
     this.name = make_can_be_floder(this.name)
     this.mangaName = this.name
     this.params = params
-    this.downloadPath = config.downloadPath + '/omegascans'
-    this.compressPath = config.compressPath + '/omegascans'
+    this.downloadPath = config.downloadPath
+    this.compressPath = config.compressPath
     this.chapterCount = params.chapterCount || 0
 
     this.mangaFolder = `${this.downloadPath}/${this.name}`
-    this.metaFolder = `${this.downloadPath}/${this.name}-smanga-info`
+    this.metaFolder = `${this.downloadPath}/${this.name}/.smanga`
   }
 
   async start() {
@@ -339,6 +339,11 @@ export default class OmegaScans {
       const chapter = chapters[i]
       const chapterCover = `${this.mangaFolder}/${chapter.name}.jpg`
       const compressChapterCover = `${this.compressPath}/${this.mangaName}/${chapter.name}.jpg`
+      const metaCacheChapterCover = `C:\\12manga-meta-cache/${this.mangaName}/${chapter.name}.jpg`
+      const metaChapterCover = `C:\\12manga-meta/${this.mangaName}/${chapter.name}.jpg`
+      
+      if (fs.existsSync(metaCacheChapterCover)) continue
+      if (fs.existsSync(metaChapterCover)) continue
       
       if (fs.existsSync(compressChapterCover)) continue
       if (!fs.existsSync(chapterCover)) {

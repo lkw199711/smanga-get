@@ -44,7 +44,19 @@ export default class Toomics {
   private pretendNum: number = 2 // 假装下载的章节数
   private params: subsribeType
   constructor(params: subsribeType) {
-    const config = get_config()?.toomics || {}
+    if (params?.url && /tc/.test(params.url)) {
+      this.langTag = 'tc'
+      this.website = 'toomics-tc'
+    } else if (params?.url && /en/.test(params.url)) {
+      this.langTag = 'en'
+      this.website = 'toomics-en'
+    } else {
+      this.langTag = 'sc'
+      this.website = 'toomics-sc'
+    }
+    const config = get_config(this.website) || {}
+    this.downloadPath = config?.downloadPath || ''
+    this.compressPath = config?.compressPath || ''
     this.config = config
     this.mangaId = Number(params.id)
     this.mangaName = make_can_be_floder(params.name)
@@ -53,23 +65,9 @@ export default class Toomics {
     this.passWord = config?.passWord || ''
     this.scrollStep = config?.scrollStep || this.scrollStep
     this.scrollDelay = config?.scrollDelay || this.scrollDelay
-    this.downloadPath = path.join(config?.downloadPath || '', this.website)
-    this.compressPath = path.join(config?.compressPath || '', this.website)
     this.adult = params.adult || false
     this.jumpExist = config?.jumpExist
-    if (params?.url && /tc/.test(params.url)) {
-      this.langTag = 'tc'
-      this.downloadPath = this.downloadPath + '-tc'
-      this.compressPath = this.compressPath + '-tc'
-    } else if (params?.url && /en/.test(params.url)) {
-      this.langTag = 'en'
-      this.downloadPath = this.downloadPath + '-en'
-      this.compressPath = this.compressPath + '-en'
-    } else if (params?.url && /en/.test(params.url)) {
-      this.langTag = 'en'
-      this.downloadPath = this.downloadPath + '-en'
-      this.compressPath = this.compressPath + '-en'
-    }
+    
     if (params.langTag) this.langTag = params.langTag
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
     this.params = params
@@ -178,7 +176,7 @@ export default class Toomics {
     if (fs.existsSync(mangaFloder)) {
       mangaChapterFloders = fs.readdirSync(mangaFloder)
       mangaChapterFloders = mangaChapterFloders.filter((item) =>
-        fs.statSync(path.join(mangaFloder, item)).isDirectory()
+        fs.statSync(path.join(mangaFloder, item)).isDirectory() && item !== '.smanga'
       )
     }
 
@@ -186,10 +184,18 @@ export default class Toomics {
     if (fs.existsSync(compressFloder)) {
       mangacompressChapterFloders = fs.readdirSync(compressFloder)
       mangacompressChapterFloders = mangacompressChapterFloders.filter((item) => {
-        return !mangaChapterFloders.includes(item.replace('.zip', '')) && item.endsWith('.zip')
+        return !mangaChapterFloders.includes(item.replace('.zip', ''))
+          && item.endsWith('.zip')
+          && /\d/.test(item)
       })
     }
-
+console.log(
+  this.mangaName,
+  mangaChapterFloders.length,
+  mangacompressChapterFloders.length,
+  mangaChapterFloders.length + mangacompressChapterFloders.length,
+  this.chapterCount
+)
     // 检查是否有更新(.5不计算)
     if (mangaChapterFloders.length + mangacompressChapterFloders.length + 0.9 < this.chapterCount) {
       return true
@@ -363,7 +369,7 @@ export default class Toomics {
     }
 
     this.mangaName = make_can_be_floder(title)
-    this.metaFolder = `${this.downloadPath}/${this.mangaName}-smanga-info`
+    this.metaFolder = `${this.downloadPath}/${this.mangaName}/.smanga`
     this.mangaFolder = `${this.downloadPath}/${this.mangaName}`
 
     // 获取章节列表
@@ -753,7 +759,10 @@ export default class Toomics {
     toomicsBrowser.clear_buffs()
     this.chapterPage.close()
 
-    if (interfereImages.length > 0) {
+    if (interfereImages.length === 1 && interfereImages[0] === imageUrls.length-1) {
+      // 如果错误图片为最后一张
+      write_log(`[chapter download]${chapterName} 最后一张为干扰图.`)
+    } else if (interfereImages.length > 0) {
       const interfereStr = interfereImages.length > 0 ? `, 检测到干扰图片:${interfereImages}` : ''
       const errorStr = errImgs.length > 0 ? `, 请求失败图片:${errImgs}` : ''
       write_log(`[chapter download]${chapterName}下载失败${interfereStr}${errorStr},进行重新下载`)

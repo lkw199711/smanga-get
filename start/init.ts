@@ -39,7 +39,7 @@ export function create_config() {
     "endAfterSetCookie": false,
     "autoRemoveSubscribe": true,
     "toomics": {
-      "userName": "lkw199711@163.com",
+      "userName": "lkw199712@163.com",
       "passWord": "123qwe",
       "downloadLockedMeta": false,
       "cookieFile": "data/toomics-cookies.json",

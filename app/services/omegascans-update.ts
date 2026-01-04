@@ -8,8 +8,8 @@ export default class OmegaScansUpdate {
   downloadPath: string; // 下载路径
 
   constructor(params: any) {
-    const config = get_config()?.omegascans || {}
-    this.downloadPath = config.downloadPath + '/omegascans'
+    const config = get_config('omegascans') || {}
+    this.downloadPath = config.downloadPath
   }
 
   async start() {
@@ -37,7 +37,7 @@ export default class OmegaScansUpdate {
       const paid_chapters = manga.paid_chapters || [];
       const chapters_count = manga?.meta?.chapters_count || 0;
       const mangaFolder = `${this.downloadPath}/${mangaName}`;
-      const metaFolder = `${this.downloadPath}/${mangaName}-smanga-info`;
+      const metaFolder = `${this.downloadPath}/${mangaName}/.smanga`;
       const metaFile = `${metaFolder}/meta.json`;
 
       // 计算可下载的章节数

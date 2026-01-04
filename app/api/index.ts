@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-10-01 00:04:30
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-01 00:08:28
- * @FilePath: \manga-get\app\api\index.ts
- */
 import Axios from 'axios'
 import * as fs from 'fs'
 

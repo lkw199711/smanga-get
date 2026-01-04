@@ -3,65 +3,70 @@ import { spawn } from "node:child_process";
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module'
-import { s_delete, copy_folder, read_json, end_app } from "#utils/index";
+import { s_delete, copy_folder, read_json, end_app, get_config } from "#utils/index";
 const require = createRequire(import.meta.url)
 const archiver = require('archiver');
 
 class ToZip {
-  mangaFloder: string = '';
-  outFloder: string = '';
-  deleteSource: boolean = false;
-  constructor(mangaFloder: string, outFloder: string) {
-    this.mangaFloder = mangaFloder;
-    this.outFloder = outFloder;
+  mangaFloder: string = ''
+  outFloder: string = ''
+  deleteSource: boolean = false
+  constructor(website: string, deleteSource: boolean = false) {
+    const websiteConfig = get_config(website)
+    if (!websiteConfig) {
+      console.log('未配置网站', website)
+      return
+    }
+    this.mangaFloder = websiteConfig.downloadPath
+    this.outFloder = websiteConfig.compressPath
+    this.deleteSource = deleteSource
   }
 
   async start() {
-    const items = fs.readdirSync(this.mangaFloder);
+    const items = fs.readdirSync(this.mangaFloder)
     for (let i = 0; i < items.length; i++) {
-      const fileName = items[i];
-      const filePath = path.join(this.mangaFloder, fileName);
-      const outMangaPath = path.join(this.outFloder, fileName);
+      const fileName = items[i]
+      const filePath = path.join(this.mangaFloder, fileName)
+      const outMangaPath = path.join(this.outFloder, fileName)
 
       if (/zip/.test(fileName)) {
-        console.log('跳过压缩包', fileName);
-        continue;
+        console.log('跳过压缩包', fileName)
+        continue
       } else if (/smanga-info/.test(fileName)) {
-
       } else {
-        const metaFile = `${filePath}-smanga-info\\meta.json`;
+        const metaFile = `${filePath}-smanga-info\\meta.json`
 
         if (!fs.existsSync(outMangaPath)) {
-          fs.mkdirSync(outMangaPath, { recursive: true });
+          fs.mkdirSync(outMangaPath, { recursive: true })
         }
 
         // 复制元数据文件夹
-        copy_folder(`${filePath}-smanga-info`, `${this.outFloder}\\${fileName}-smanga-info`);
+        copy_folder(`${filePath}-smanga-info`, `${this.outFloder}\\${fileName}-smanga-info`)
         // await zip_jpg(filePath, `${this.outFloder}\\${fileName}-covers.zip`);
         // 漫画文件夹为空 跳过
         if (fs.readdirSync(filePath).length === 0) {
-          console.log('漫画文件夹为空', fileName);
-          continue;
+          console.log('漫画文件夹为空', fileName)
+          continue
         }
         // 压缩漫画文件夹
-        await zipAndRemoveFolders(filePath, `${this.outFloder}\\${fileName}`);
+        await zipAndRemoveFolders(filePath, `${this.outFloder}\\${fileName}`)
         end_app()
       }
     }
-    console.log('全部处理完成');
+    console.log('全部处理完成')
   }
 
   getMangaList(directoryPath: string) {
-    const items = fs.readdirSync(directoryPath, { withFileTypes: false });
-    const folders = items.filter(item => {
+    const items = fs.readdirSync(directoryPath, { withFileTypes: false })
+    const folders = items.filter((item) => {
       if (/smanga-info/.test(item)) {
-        return false;
+        return false
       }
 
-      return true;
-    });
+      return true
+    })
 
-    return folders.map(folder => path.join(directoryPath, folder));
+    return folders.map((folder) => path.join(directoryPath, folder))
   }
 }
 

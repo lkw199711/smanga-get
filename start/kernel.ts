@@ -1,11 +1,4 @@
 /*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-09-30 05:07:46
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-11-08 15:46:20
- * @FilePath: \manga-get\start\kernel.ts
- */
-/*
 |--------------------------------------------------------------------------
 | HTTP kernel file
 |--------------------------------------------------------------------------
@@ -55,18 +48,32 @@ import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import OmegaScansUpdate from '#services/omegascans-update'
 import ToZip from '#services/tozip'
+import CopyMeta from '#services/copy-meta'
+import MoveMeta from '#services/move-meta'
+import RemoveDuplicates from '#services/remove-duplicates'
 import { delay, get_config } from '#utils/index'
 import { toomicsBrowser } from '#api/browser'
 import { mangaTask } from '#api/task'
 
-const immediately = get_config().immediately ?? {};
+const immediately = get_config().immediately ?? {}
 
 // 创建配置文件
-create_config();
+create_config()
 
 // 压缩漫画
-// await new ToZip('M:\\manga\\toomics-连载').start();
-
+// await new ToZip('C:\\11manga\\绅士漫画-整理', 'C:\\12manga-compress\\绅士漫画').start();
+// await new ToZip('C:\\11manga\\omegascans', 'C:\\12manga-compress\\omegascans').start()
+// await new RemoveDuplicates(
+//   'C:\\99mnt\\0\\20manga-compress\\toptoon\\2023',
+//   'C:\\12manga-compress\\omegascans'
+// ).start()
+// await new MoveMeta('C:\\12manga\\omegascans', 'C:\\12manga-compress\\omegascans').start()
+// await new MoveMeta({
+//   outFloder: 'C:\\12manga-meta\\toptoon\\2025',
+//   mangaFloder: 'C:\\12manga-compress\\toptoon\\2025',
+//   outPutMetaFloderType: '.',
+//   deleteSource: false,
+// }).start()
 // 删除错误黑封面
 // delete_err_cover('A:\\02manga\\02压缩处理\\toomics');
 // delete_err_cover('M:\\manga\\toomics');
@@ -123,10 +130,13 @@ if (immediately.omegascansCompress) {
   mangaTask.add({ website: 'omegascans-compress', id: 0, name: '' })
 }
 
+if (immediately.omegascansSyncCloud) {
+  // 同步OmegaScans到云盘
+  mangaTask.add({ website: 'sync-omegascans', id: 0, name: '' })
+}
 
 // 执行订阅
 task_allocation()
-
 
 /* 单漫画任务添加示例
    mangaTask.add({
