@@ -197,4 +197,22 @@ function info_covers(dir: string) {
         fs.renameSync(file, `${path.dirname(file)}/cover${index == 0 ? '' : index}.jpg`); // 将所有的 .jpg 文件改为 .png
     })
 }
-export { demo, get_all_img, get_all_file, check_img_num, delete_err_cover }
+
+function check_small_zip(dir: string) {
+    const files = fs.readdirSync(dir);
+    let zipFiles: string[] = []
+    files.forEach((file, index) => {
+        if (!/zip|rar|7z|cbz|cbr/.test(file)) return;
+
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.size < 1048576) {
+            zipFiles.push(filePath);
+        }
+    });
+
+    // if (zipFiles.length > 0) {
+        console.log(zipFiles);
+    // }
+}
+export { demo, get_all_img, get_all_file, check_img_num, delete_err_cover, check_small_zip }

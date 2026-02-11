@@ -1,4 +1,5 @@
 import Axios from 'axios'
+import { exec } from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -122,6 +123,21 @@ export function end_app() {
   if (config.endAfterSetCookie) {
     set_config({ endAfterSetCookie: false })
     console.log('程序结束')
+    process.exit(0)
+  }
+}
+
+export function shut_down() {
+  const config = get_config()
+  if (config.shutdownAfterSetCookie) {
+    set_config({ shutdownAfterSetCookie: false })
+    console.log('关闭计算机')
+    // 关机命令
+    if (get_os() === 'Windows') {
+      exec('shutdown -s -t 0')
+    } else if (get_os() === 'Linux') {
+      exec('shutdown -h now')
+    }
     process.exit(0)
   }
 }

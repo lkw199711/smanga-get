@@ -1,13 +1,14 @@
 {
-  "headless": 1,
+  "headless": 0,
   "immediately": {
-    "toomicsUpdateSc": true,
-    "toomicsUpdateTc": true,
-    "omegascansUpdate": true,
-    "bilibili": true,
-    "toomicsCompressSc": true,
-    "toomicsCompressTc": true,
-    "omegascansCompress": true
+    "toomicsUpdateSc": 1,
+    "toomicsUpdateTc": 1,
+    "omegascansUpdate": 0,
+    "bilibili": 0,
+    "toomicsCompressSc": 0,
+    "toomicsCompressTc": 0,
+    "omegascansCompress": 0,
+    "omegascansSyncCloud": 0
   },
   "endAfterSetCookie": false,
   "toomics": {
@@ -17,16 +18,42 @@
     "coverCache": "C:\\11manga\\toomics-cache\\covers",
     "chapterCache": "C:\\11manga\\toomics-cache\\chapter-images",
     "userName": "lkw199712@163.com",
-    "passWord": "123qwe"
+    "passWord": "123qwe",
+    "latestSyncCloud": 1765017319232
+  },
+  "toomics-sc": {
+    "cookieFile": "./data/cookies/toomics-cookies.json",
+    "downloadPath": "C:\\11manga\\toomics-sc",
+    "compressPath": "C:\\12manga-compress\\toomics-sc",
+    "cloudPath": "C:\\99mnt\\0\\20manga-compress\\toomics-sc",
+    "coverCache": "C:\\11manga\\toomics-cache\\covers",
+    "chapterCache": "C:\\11manga\\toomics-cache\\chapter-images",
+    "userName": "lkw199712@163.com",
+    "passWord": "123qwe",
+    "latestSyncCloud": 1765017319232
+  },
+  "toomics-tc": {
+    "cookieFile": "./data/cookies/toomics-cookies.json",
+    "downloadPath": "C:\\11manga\\toomics-tc",
+    "compressPath": "C:\\12manga-compress\\toomics-tc",
+    "cloudPath": "C:\\99mnt\\0\\20manga-compress\\toomics-tc",
+    "coverCache": "C:\\11manga\\toomics-cache\\covers",
+    "chapterCache": "C:\\11manga\\toomics-cache\\chapter-images",
+    "userName": "lkw199712@163.com",
+    "passWord": "123qwe",
+    "latestSyncCloud": 1765017319232
   },
   "bilibili": {
     "cookieFile": "./data/cookies/bilibili-cookies.json",
-    "downloadPath": "A:\\02manga\\10media"
+    "downloadPath": "A:\\02manga\\10media",
+    "compressPath": "A:\\02manga\\11manga-compress"
   },
   "omegascans": {
     "cookieFile": "./data/cookies/omegascans-cookies.json",
-    "downloadPath": "C:\\11manga",
-    "compressPath": "C:\\12manga-compress"
+    "downloadPath": "C:\\11manga\\omegascans",
+    "compressPath": "C:\\12manga-compress\\omegascans",
+    "cloudPath": "C:\\99mnt\\0\\20manga-compress\\omegascans",
+    "latestSyncCloud": 1765017319232
   },
   "downloadPath": "C:\\11manga",
   "compressPath": "C:\\12manga-compress"

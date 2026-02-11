@@ -93,7 +93,7 @@ class Task {
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import Omegascans from '#services/omegascans'
-import { end_app, write_log } from '#utils/index';
+import { end_app, shut_down, write_log } from '#utils/index';
 import ToomicsDayUpdate from '#services/toomics-update';
 import ToomicsAll from '#services/toomics-all';
 import ToZip from '#services/tozip';
@@ -214,6 +214,7 @@ class MangaTask extends Task {
       write_log('[MangaTask] 所有任务执行完毕')
       await close_all_browsers()
       this.running = false
+      shut_down()
       return
     }
 
