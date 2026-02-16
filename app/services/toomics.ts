@@ -67,7 +67,7 @@ export default class Toomics {
     this.scrollDelay = config?.scrollDelay || this.scrollDelay
     this.adult = params.adult || false
     this.jumpExist = config?.jumpExist
-    
+
     if (params.langTag) this.langTag = params.langTag
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
     this.params = params
@@ -131,7 +131,7 @@ export default class Toomics {
     const chaptersToNotDownload = chapters.filter((chapter: any) => chapter.doNotDownload)
     // 假装下载的章节
     let pretendNum = this.pretendNum - chaptersToDownload.length
-    let pretendDownload = []
+    let pretendDownload: any[] = []
     if (pretendNum > 0) pretendDownload = chaptersToNotDownload.slice(-pretendNum)
 
     if (chaptersToDownload.length > 0) {
@@ -175,7 +175,7 @@ export default class Toomics {
     // 筛选目录中的章节文件夹
     if (fs.existsSync(mangaFloder)) {
       mangaChapterFloders = fs.readdirSync(mangaFloder)
-      mangaChapterFloders = mangaChapterFloders.filter((item) =>
+      mangaChapterFloders = mangaChapterFloders.filter((item: any) =>
         fs.statSync(path.join(mangaFloder, item)).isDirectory() && item !== '.smanga'
       )
     }

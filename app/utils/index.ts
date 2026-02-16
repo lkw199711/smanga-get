@@ -179,7 +179,14 @@ export function copy_folder(source: string, target: string) {
 
 export function make_can_be_floder(name: string): string {
   return name
-    .replace(/[\\/\\\\:*?\"<>|\.]/g, '')
+    .replace(/&lt;/g, '<') // 解码HTML实体
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/<[^>]+>/g, '') // 去除HTML标签
+    .replace(/[\/\\:*?"<>|\.]/g, '')
+    .replace(/[&<>'"]/g, '')
     .trimStart()
     .trimEnd()
 }
