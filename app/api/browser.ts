@@ -23,7 +23,7 @@ function getImageExtension(contentType: string) {
         'image/vnd.microsoft.icon': '.ico',
         'image': '.bin', // 默认处理未知类型为二进制文件
     };
-    return map[contentType] || '.bin';
+    return map[contentType as keyof typeof map] || '.bin';
 }
 
 type configType = {
@@ -291,5 +291,6 @@ const toomicsBrowser = new UseToomicsBrowser();
 const bilibiliBrowser = new UseBrowser({ website: 'bilibili' });
 const toomicsBrowserNoUser = new UseBrowser({ nouser: true, website: 'toomics' })
 const omegascansBrowser = new UseBrowser({ website: 'omegascans' });
+const gentlemanBrowser = new UseBrowser({ website: 'gentleman' });
 
-export { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser };
+export { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser, gentlemanBrowser };

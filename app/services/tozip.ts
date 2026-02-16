@@ -161,6 +161,14 @@ async function zipAndRemoveFolders(sourceDir: string, outputPath: string) {
         continue;
       }
 
+      if (item.name === '.smanga') {
+        // 复制文件夹
+        const sourceFile = path.join(sourceDir, item.name);
+        const outputFile = path.join(outputPath, item.name);
+        copy_folder(sourceFile, outputFile);
+        continue;
+      }
+
       // 目录打包zip
       const folderPath = path.join(sourceDir, item.name);
       const zipPath = path.join(outputPath, `${item.name}.zip`);

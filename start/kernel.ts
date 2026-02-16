@@ -52,7 +52,6 @@ import CopyMeta from '#services/copy-meta'
 import MoveMeta from '#services/move-meta'
 import RemoveDuplicates from '#services/remove-duplicates'
 import { delay, get_config } from '#utils/index'
-import { toomicsBrowser } from '#api/browser'
 import { mangaTask } from '#api/task'
 
 const immediately = get_config().immediately ?? {}
@@ -90,6 +89,21 @@ create_config()
 // process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
+
+// 订阅简体漫画
+mangaTask.add({
+  "url": "https://wn02.cc/search/?q=%E5%90%8C%E4%BA%8B%E6%8F%9B%E6%8F%9B%E6%84%9B&f=_all&s=create_time_DESC&syn=yes",
+  "prefix": "",
+  "website": "gentleman",
+  "chapterIncludes": "",
+  "chapterExcludes": "",
+  "imageIncludes": "",
+  "imageExcludes": "",
+  "moveEndSubscribe": true,
+  "name": "同事換換愛",
+  "id": 0
+})
+
 
 if (immediately.toomicsUpdateSc) {
   // 订阅简体漫画
@@ -139,7 +153,7 @@ if (immediately.omegascansSyncCloud) {
 }
 
 // 执行订阅
-task_allocation()
+// task_allocation()
 
 /* 单漫画任务添加示例
    mangaTask.add({

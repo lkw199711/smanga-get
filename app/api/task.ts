@@ -228,6 +228,9 @@ class MangaTask extends Task {
         break;
       case 'omegascans':
         taskService = new Omegascans(task);
+      case 'gentleman':
+        console.log('执行绅士漫画任务')
+        taskService = new (await import('#services/gentleman')).default(task);
         break;
       case 'omegascans-update':
         taskService = new OmegaScansUpdate({});
