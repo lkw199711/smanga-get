@@ -11,6 +11,18 @@
     "omegascansSyncCloud": 0
   },
   "endAfterSetCookie": false,
+  "gentleman": {
+    "cookieFile": "./data/cookies/gentleman-cookies.json",
+    "downloadPath": "A:\\05temp\\01软件\\manga-reptile\\download\\绅士漫画",
+    "organizePath": "D:\\11manga\\gentleman",
+    "compressPath": "D:\\12manga-compress\\gentleman",
+    "cloudPath": "D:\\99mnt\\0\\20manga-compress\\gentleman",
+    "coverCache": "D:\\11manga\\gentleman-cache\\covers",
+    "chapterCache": "D:\\11manga\\gentleman-cache\\chapter-images",
+    "userName": "",
+    "passWord": "",
+    "latestSyncCloud": 1765017319232
+  },
   "toomics": {
     "cookieFile": "./data/cookies/toomics-cookies.json",
     "downloadPath": "C:\\11manga",
