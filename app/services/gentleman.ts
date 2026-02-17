@@ -45,6 +45,9 @@ export default class Gentleman {
     // 替换域名
     this.mangaUrl = params.url?.replace(/https?:\/\/[^/]+/, this.domain) || '';
     this.mangaPath = path.join(this.downloadPath, this.mangaName)
+    if (!fs.existsSync(this.mangaPath)) {
+      fs.mkdirSync(this.mangaPath, { recursive: true })
+    }
     this.metaPath = path.join(this.mangaPath, '.smanga')
 
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
@@ -87,11 +90,13 @@ export default class Gentleman {
     // await this.organize_meta()
 
     // 整理文件
-    await this.organize_files()
+    if (this.config.organize) {
+      await this.organize_files()
+    }
 
     console.log(this.mangaName + ' 订阅完毕')
     // 移除完结的订阅
-    if (get_config().autoRemoveSubscribe && this.mangaStatus === 'finished') {
+    if (this.mangaStatus === 'finished') {
       subscribe_remove({ website: this.website, id: this.mangaId })
       write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
     }
@@ -121,7 +126,16 @@ export default class Gentleman {
       this.chapters = this.chapters.concat(this.get_page_chapters(html))
     }
     // &lt;emgt;同事lt;emgt;lt;emgt;換lt;emgt;換愛lt;emgt;lt;emgt; 185-186話
-    this.chapters = this.chapters.filter((item) => item.url)
+    this.chapters = this.chapters
+      .filter((item) => item.url)
+      .filter((item) => {
+        const chapterIncludes = this.config.chapterIncludes || ''
+        const chapterExcludes = this.config.chapterExcludes || ''
+
+        if (!chapterIncludes && new RegExp(chapterIncludes).test(item.name)) return false
+        if (chapterExcludes && new RegExp(chapterExcludes).test(item.name)) return false
+        return true
+      })
     return this.chapters;
   }
 
@@ -345,14 +359,6 @@ export default class Gentleman {
       name = name.replace(/<[^>]+>/g, '');
 
       name = this.make_can_be_floder(name);
-
-      // 正则排除章节
-      const chapterExcludes = this.config.chapterExcludes || '';
-
-      if (chapterExcludes && new RegExp(chapterExcludes).test(name)) {
-        console.log(`跳过 ${name}`);
-        continue;
-      }
 
       // 图片数量
       const imageNum = parseInt(chapter.match(/[\d]+(?=張圖片)/)?.[0] || '0', 10);

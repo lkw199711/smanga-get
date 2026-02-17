@@ -16,6 +16,7 @@
     "cookieFile": "./data/cookies/gentleman-cookies.json",
     "downloadPath": "A:\\05temp\\01软件\\manga-reptile\\download\\绅士漫画",
     "organizePath": "D:\\11manga\\gentleman",
+    "organize": 0,
     "compressPath": "D:\\12manga-compress\\gentleman",
     "cloudPath": "D:\\99mnt\\0\\20manga-compress\\gentleman",
     "coverCache": "D:\\11manga\\gentleman-cache\\covers",

@@ -154,7 +154,7 @@ export default class Toomics {
 
     console.log(this.mangaName + ' 订阅完毕')
     // 移除完结的订阅
-    if (get_config().autoRemoveSubscribe || this.meta.finished) {
+    if (this.meta.finished) {
       subscribe_remove({ website: this.website, id: this.mangaId })
       write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
     }

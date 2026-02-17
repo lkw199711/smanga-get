@@ -142,22 +142,20 @@ if (immediately.subscribeTask) {
   task_allocation()
 }
 
-/* 单漫画任务添加示例
-   mangaTask.add({
-          "website": "toomics",
-          "name": "新都市外送員",
-          "url": "https://toomics.com/tc/webtoon/episode/toon/7146",
-          "id": 7146,
-          "cover": "https://thumb-g2.toomics.com/upload/thumbnail/20240327100145/2024_04_03_17121144258499.jpg",
-          "covers": [
-              "https://thumb-g2.toomics.com/upload/thumbnail/20240327100145/2024_04_03_17121144258499.jpg"
-          ],
-          "describe": "<!--  -->",
-          "chapterCount": 47,
-          "audlt": true,
-          "finsihed": false
-      })
-          */
+/*
+mangaTask.add({
+  "url": "https://www.wn07.ru/search/?q=戀愛大富翁&f=_all&s=create_time_DESC&syn=yes",
+  "prefix": "",
+  "website": "gentleman",
+  "chapterIncludes": "",
+  "chapterExcludes": "戀愛大富翁",
+  "imageIncludes": "",
+  "imageExcludes": "",
+  "moveEndSubscribe": true,
+  "name": "戀愛大富翁",
+  "id": 0
+})
+*/
 
 /*
 const toomics = new Toomics({
