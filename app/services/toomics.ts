@@ -32,8 +32,9 @@ export default class Toomics {
   private checkPage: puppeteer.Page | null = null
   private metaPage: puppeteer.Page | null = null
   private retry: number = 0 // 重试次数
+  private maxRetry: number = 3 // 最大重试次数
 
-  private scrollStep: number = 800 // 滚动步长
+  private scrollStep: number = 400 // 滚动步长
   private scrollDelay: number = 500 // 滚动延迟
   private userName: string
   private passWord: string
@@ -65,6 +66,7 @@ export default class Toomics {
     this.passWord = config?.passWord || ''
     this.scrollStep = config?.scrollStep || this.scrollStep
     this.scrollDelay = config?.scrollDelay || this.scrollDelay
+    this.maxRetry = config?.maxRetry || this.maxRetry
     this.adult = params.adult || false
     this.jumpExist = config?.jumpExist
 
