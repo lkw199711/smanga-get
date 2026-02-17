@@ -1,8 +1,9 @@
 {
   "headless": 0,
   "immediately": {
-    "toomicsUpdateSc": 1,
-    "toomicsUpdateTc": 1,
+    "subscribeTask": 0,
+    "toomicsUpdateSc": 0,
+    "toomicsUpdateTc": 0,
     "omegascansUpdate": 0,
     "bilibili": 0,
     "toomicsCompressSc": 0,

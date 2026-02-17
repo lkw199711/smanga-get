@@ -137,8 +137,10 @@ if (immediately.omegascansSyncCloud) {
   mangaTask.add({ website: 'sync-omegascans', id: 0, name: '' })
 }
 
-// 执行订阅
-task_allocation()
+if (immediately.subscribeTask) {
+  // 执行订阅
+  task_allocation()
+}
 
 /* 单漫画任务添加示例
    mangaTask.add({
