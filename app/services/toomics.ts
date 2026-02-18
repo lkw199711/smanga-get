@@ -845,8 +845,5 @@ export default class Toomics {
         await zip_directory(fullPath, compressChapterName)
       }
     }
-
-    exit(0)
   }
-
 }

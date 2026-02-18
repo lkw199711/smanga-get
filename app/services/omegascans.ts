@@ -1,4 +1,9 @@
-import { end_app, read_json, write_log, delay } from '#utils/index'
+import {
+  end_app, read_json, write_log, delay,
+  copy_folder,
+  get_failed_chapters,
+} from '#utils/index'
+import { zip_directory } from '#utils/zip'
 import { get_config, make_can_be_floder } from '#utils/index'
 import fs from 'fs'
 import { subscribe_remove } from '#api/subsribe'
@@ -21,6 +26,9 @@ export default class OmegaScans {
   imageReTry: number = 0 // 图片下载重试次数
   mangaPage: any
   page: any // Puppeteer 页面对象
+  mangaCompressPath: string
+  mangaPath: string
+  config: any
   constructor(params: any) {
     const config = get_config()?.omegascans || {}
     this.id = params.id || 0
@@ -31,9 +39,12 @@ export default class OmegaScans {
     this.downloadPath = config.downloadPath
     this.compressPath = config.compressPath
     this.chapterCount = params.chapterCount || 0
+    this.config = config
 
     this.mangaFolder = `${this.downloadPath}/${this.name}`
     this.metaFolder = `${this.downloadPath}/${this.name}/.smanga`
+    this.mangaPath = `${this.downloadPath}/${this.name}`
+    this.mangaCompressPath = `${this.compressPath}/${this.name}`
   }
 
   async start() {
@@ -68,6 +79,10 @@ export default class OmegaScans {
       end_app() // 结束应用
       await this.download_chapter(chapter)
       omegascansBrowser.clear_buffs() // 清除浏览器缓存
+    }
+
+    if (this.config?.autoCompress) {
+      await this.compress_manga()
     }
 
     subscribe_remove({ website: this.params.website, id: this.params.id })
@@ -341,10 +356,10 @@ export default class OmegaScans {
       const compressChapterCover = `${this.compressPath}/${this.mangaName}/${chapter.name}.jpg`
       const metaCacheChapterCover = `C:\\12manga-meta-cache/${this.mangaName}/${chapter.name}.jpg`
       const metaChapterCover = `C:\\12manga-meta/${this.mangaName}/${chapter.name}.jpg`
-      
+
       if (fs.existsSync(metaCacheChapterCover)) continue
       if (fs.existsSync(metaChapterCover)) continue
-      
+
       if (fs.existsSync(compressChapterCover)) continue
       if (!fs.existsSync(chapterCover)) {
         if (!chapter.cover) {
@@ -398,5 +413,27 @@ export default class OmegaScans {
     fs.writeFileSync(path, buffer)
 
     return await this.page.close() // 关闭页面;
+  }
+
+  async compress_manga() {
+    // 复制元数据
+    copy_folder(this.metaFolder, path.join(this.mangaCompressPath, '.smanga'))
+    const chapters = fs.readdirSync(this.mangaPath);
+    const failedChapters = get_failed_chapters();
+    for (const chapter of chapters) {
+      const fullPath = path.join(this.mangaPath, chapter)
+      if (chapter.startsWith('.')) continue
+      if (failedChapters.includes(chapter)) continue
+      if (!fs.statSync(fullPath).isDirectory()) {
+        // 不是文件夹 直接复制
+        const targetFile = path.join(this.mangaCompressPath, chapter)
+        fs.copyFileSync(fullPath, targetFile)
+      } else {
+        // 是文件夹 压缩
+        const compressChapterName = path.join(this.mangaCompressPath, chapter + '.zip')
+        if (fs.existsSync(compressChapterName)) continue
+        await zip_directory(fullPath, compressChapterName)
+      }
+    }
   }
 }
