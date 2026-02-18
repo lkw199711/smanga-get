@@ -144,16 +144,20 @@ if (immediately.subscribeTask) {
 
 /*
 mangaTask.add({
-  "url": "https://www.wn07.ru/search/index.php?q=%E8%8B%B1%E9%9B%84%E7%B6%93%E7%B4%80%E4%BA%BA&f=_all&s=create_time_DESC",
-  "prefix": "",
-  "website": "gentleman",
-  "chapterIncludes": "",
-  "chapterExcludes": "",
-  "imageIncludes": "",
-  "imageExcludes": "",
-  "moveEndSubscribe": true,
-  "name": "英雄經紀人",
-  "id": 0
+  "website": "toomics",
+  "name": "异世界骑士团长",
+  "url": "https://global.toomics.com/sc/webtoon/episode/toon/7620",
+  "id": 7620,
+  "cover": "https://thumb-g1.toomics.com/upload/thumbnail/20230308163402/2023_03_20_16792713164524.jpg",
+  "covers": [
+    "https://thumb-g1.toomics.com/upload/thumbnail/20230308163402/2023_03_20_16792713196230.jpg",
+    "https://thumb-g1.toomics.com/upload/thumbnail/20230308163402/2023_03_20_16792713164524.jpg"
+  ],
+  "describe": "<!--這個女生脾氣暴躁講話又難聽<br>\n區區金牌而已還敢嗆我!?<br>\n就讓她見識前準選手的厲害吧！-->",
+  "chapterCount": 121,
+  "audlt": true,
+  "finsihed": true,
+  "langTag": "sc"
 })
 */
 

@@ -8,6 +8,7 @@ import puppeteer from 'puppeteer'
 import { toomicsBrowser } from '#api/browser'
 import { close_all_browsers, mangaTask } from '#api/task'
 import { zip_directory } from '#utils/zip';
+import { exit } from 'process'
 export default class Toomics {
   private domain = 'https://toomics.com'
   private website: string = 'toomics'
@@ -163,12 +164,13 @@ export default class Toomics {
 
     // 压缩文件夹
     if (this.config?.autoCompress) {
+      write_log(`[toomics] ${this.mangaName} 正在压缩`)
       await this.compress_manga()
     }
 
     console.log(this.mangaName + ' 订阅完毕')
     // 移除完结的订阅
-    if (this.meta.finished) {
+    if (this.meta?.finished) {
       subscribe_remove({ website: this.website, id: this.mangaId })
       write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
     }
@@ -203,13 +205,7 @@ export default class Toomics {
           && /\d/.test(item)
       })
     }
-    console.log(
-      this.mangaName,
-      mangaChapterFloders.length,
-      mangacompressChapterFloders.length,
-      mangaChapterFloders.length + mangacompressChapterFloders.length,
-      this.chapterCount
-    )
+
     // 检查是否有更新(.5不计算)
     if (mangaChapterFloders.length + mangacompressChapterFloders.length + 0.9 < this.chapterCount) {
       return true
@@ -836,8 +832,8 @@ export default class Toomics {
     const failedChapters = get_failed_chapters();
     for (const chapter of chapters) {
       const fullPath = path.join(this.mangaPath, chapter)
-      if (chapter.startsWith('.')) return
-      if (failedChapters.includes(chapter)) return
+      if (chapter.startsWith('.')) continue
+      if (failedChapters.includes(chapter)) continue
       if (!fs.statSync(fullPath).isDirectory()) {
         // 不是文件夹 直接复制
         const targetFile = path.join(this.mangaCompressPath, chapter)
@@ -845,10 +841,12 @@ export default class Toomics {
       } else {
         // 是文件夹 压缩
         const compressChapterName = path.join(this.mangaCompressPath, chapter + '.zip')
-        if (fs.existsSync(compressChapterName)) return
+        if (fs.existsSync(compressChapterName)) continue
         await zip_directory(fullPath, compressChapterName)
       }
     }
+
+    exit(0)
   }
 
 }
