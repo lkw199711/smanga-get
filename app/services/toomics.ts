@@ -829,7 +829,7 @@ export default class Toomics {
     // 复制元数据
     copy_folder(this.metaFolder, path.join(this.mangaCompressPath, '.smanga'))
     const chapters = fs.readdirSync(this.mangaPath);
-    const failedChapters = get_failed_chapters();
+    const failedChapters = get_failed_chapters() || [];
     for (const chapter of chapters) {
       const fullPath = path.join(this.mangaPath, chapter)
       if (chapter.startsWith('.')) continue
