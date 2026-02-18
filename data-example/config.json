@@ -18,11 +18,6 @@
     "organizePath": "D:\\11manga\\gentleman",
     "organize": 0,
     "compressPath": "D:\\12manga-compress\\gentleman",
-    "cloudPath": "D:\\99mnt\\0\\20manga-compress\\gentleman",
-    "coverCache": "D:\\11manga\\gentleman-cache\\covers",
-    "chapterCache": "D:\\11manga\\gentleman-cache\\chapter-images",
-    "userName": "",
-    "passWord": "",
     "latestSyncCloud": 1765017319232
   },
   "toomics": {
@@ -42,6 +37,7 @@
     "cookieFile": "./data/cookies/toomics-cookies.json",
     "downloadPath": "C:\\11manga\\toomics-sc",
     "compressPath": "C:\\12manga-compress\\toomics-sc",
+    "autoCompress": 0,
     "cloudPath": "C:\\99mnt\\0\\20manga-compress\\toomics-sc",
     "coverCache": "C:\\11manga\\toomics-cache\\covers",
     "chapterCache": "C:\\11manga\\toomics-cache\\chapter-images",
@@ -56,6 +52,7 @@
     "cookieFile": "./data/cookies/toomics-cookies.json",
     "downloadPath": "C:\\11manga\\toomics-tc",
     "compressPath": "C:\\12manga-compress\\toomics-tc",
+    "autoCompress": 0,
     "cloudPath": "C:\\99mnt\\0\\20manga-compress\\toomics-tc",
     "coverCache": "C:\\11manga\\toomics-cache\\covers",
     "chapterCache": "C:\\11manga\\toomics-cache\\chapter-images",
@@ -75,6 +72,7 @@
     "cookieFile": "./data/cookies/omegascans-cookies.json",
     "downloadPath": "C:\\11manga\\omegascans",
     "compressPath": "C:\\12manga-compress\\omegascans",
+    "autoCompress": 0,
     "cloudPath": "C:\\99mnt\\0\\20manga-compress\\omegascans",
     "latestSyncCloud": 1765017319232
   },

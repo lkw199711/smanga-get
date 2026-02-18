@@ -6,6 +6,7 @@ import * as path from 'path'
 
 const liunxStr = get_os() === 'Linux' ? '/' : ''
 const configFile = liunxStr + 'data/config.json'
+const failedChaptersFile = liunxStr + 'data/failed-chapters.json'
 const logFile = liunxStr + 'data/log.txt'
 
 export function get_os() {
@@ -197,4 +198,19 @@ export function update_sync_cloud_time(website: string) {
     config[website].latestSyncCloud = new Date().getTime()
     set_config(config)
   }
+}
+
+export function get_failed_chapters() {
+  if (!fs.existsSync(failedChaptersFile)) {
+    return null
+  }
+  const configStr = fs.readFileSync(failedChaptersFile, 'utf-8')
+  const config = JSON.parse(configStr)
+
+  return config
+}
+
+export function set_failed_chapters(chapters: any[]) {
+  const failedChapters = get_failed_chapters() || []
+  write_json(failedChaptersFile, [...failedChapters, ...chapters])
 }

@@ -144,15 +144,15 @@ if (immediately.subscribeTask) {
 
 /*
 mangaTask.add({
-  "url": "https://www.wn07.ru/search/?q=戀愛大富翁&f=_all&s=create_time_DESC&syn=yes",
+  "url": "https://www.wn07.ru/search/index.php?q=%E8%8B%B1%E9%9B%84%E7%B6%93%E7%B4%80%E4%BA%BA&f=_all&s=create_time_DESC",
   "prefix": "",
   "website": "gentleman",
   "chapterIncludes": "",
-  "chapterExcludes": "戀愛大富翁",
+  "chapterExcludes": "",
   "imageIncludes": "",
   "imageExcludes": "",
   "moveEndSubscribe": true,
-  "name": "戀愛大富翁",
+  "name": "英雄經紀人",
   "id": 0
 })
 */

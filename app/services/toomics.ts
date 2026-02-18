@@ -3,10 +3,11 @@ import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
 import path from 'path'
-import { delay, end_app, get_config, make_can_be_floder, read_json, s_delete, write_log } from '#utils/index'
+import { copy_folder, delay, end_app, get_config, make_can_be_floder, read_json, s_delete, set_failed_chapters, write_log, get_failed_chapters } from '#utils/index'
 import puppeteer from 'puppeteer'
 import { toomicsBrowser } from '#api/browser'
 import { close_all_browsers, mangaTask } from '#api/task'
+import { zip_directory } from '#utils/zip';
 export default class Toomics {
   private domain = 'https://toomics.com'
   private website: string = 'toomics'
@@ -44,6 +45,9 @@ export default class Toomics {
   private chapterCount: number = 0
   private pretendNum: number = 2 // 假装下载的章节数
   private params: subsribeType
+  private failedChapters: any[] = []
+  private mangaPath: string = ''
+  private mangaCompressPath: string = ''
   constructor(params: subsribeType) {
     if (params?.url && /tc/.test(params.url)) {
       this.langTag = 'tc'
@@ -61,6 +65,9 @@ export default class Toomics {
     this.config = config
     this.mangaId = Number(params.id)
     this.mangaName = make_can_be_floder(params.name)
+    this.mangaPath = `${this.downloadPath}/${this.mangaName}`
+    this.mangaCompressPath = `${this.compressPath}/${this.mangaName}`
+    this.metaFolder = `${this.mangaPath}/.smanga`
     this.downloadLockedMeta = config?.downloadLockedMeta
     this.userName = config?.userName || ''
     this.passWord = config?.passWord || ''
@@ -149,10 +156,15 @@ export default class Toomics {
     }
 
     // 关闭浏览器 释放资源
-    await this.page?.close().catch(() => {})
-    await this.chapterPage?.close().catch(() => {})
-    await this.checkPage?.close().catch(() => {})
-    await this.metaPage?.close().catch(() => {})
+    await this.page?.close().catch(() => { })
+    await this.chapterPage?.close().catch(() => { })
+    await this.checkPage?.close().catch(() => { })
+    await this.metaPage?.close().catch(() => { })
+
+    // 压缩文件夹
+    if (this.config?.autoCompress) {
+      await this.compress_manga()
+    }
 
     console.log(this.mangaName + ' 订阅完毕')
     // 移除完结的订阅
@@ -191,13 +203,13 @@ export default class Toomics {
           && /\d/.test(item)
       })
     }
-console.log(
-  this.mangaName,
-  mangaChapterFloders.length,
-  mangacompressChapterFloders.length,
-  mangaChapterFloders.length + mangacompressChapterFloders.length,
-  this.chapterCount
-)
+    console.log(
+      this.mangaName,
+      mangaChapterFloders.length,
+      mangacompressChapterFloders.length,
+      mangaChapterFloders.length + mangacompressChapterFloders.length,
+      this.chapterCount
+    )
     // 检查是否有更新(.5不计算)
     if (mangaChapterFloders.length + mangacompressChapterFloders.length + 0.9 < this.chapterCount) {
       return true
@@ -237,7 +249,7 @@ console.log(
         waitUntil: 'networkidle2',
         timeout: 60 * 1000,
       })
-      .catch(() => {})
+      .catch(() => { })
 
     const homePageHtml = await this.page.content()
     if (
@@ -251,14 +263,14 @@ console.log(
       await this.page
         .locator('div.close_popup')
         .click()
-        .catch(() => {})
+        .catch(() => { })
       await delay(2000)
 
       // 点击菜单按钮
       await this.page
         .locator('button[title = "菜单"]')
         .click()
-        .catch(() => {})
+        .catch(() => { })
       await delay(2000)
 
       // 点击登录按钮
@@ -266,37 +278,37 @@ console.log(
         .locator('button.bg-white')
         .filter((button) => button.innerText.trim() === '登录')
         .click()
-        .catch(() => {})
+        .catch(() => { })
       await delay(2000)
 
       // 点击使用邮箱登录
       await this.page
         .locator('button[onclick="Base.changeSignInForm();"]')
         .click()
-        .catch(() => {})
+        .catch(() => { })
       await delay(2000)
 
       // 填充用户名与密码
       await this.page
         .locator('input[name="user_id"]')
         .fill(this.userName)
-        .catch(() => {})
+        .catch(() => { })
       await delay(1000)
       await this.page
         .locator('input[name="user_pw"]')
         .fill(this.passWord)
-        .catch(() => {})
+        .catch(() => { })
       await delay(1000)
 
       // 点击登录按钮
       await this.page
         .locator('button[type="submit"]')
         .click()
-        .catch(() => {})
+        .catch(() => { })
       await delay(2000)
 
       // 等待导航完成
-      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
+      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
 
       if (
         /flex h-11 w-full items-center justify-center rounded-lg bg-white px-4 text-base font-bold text-gray-900/gs.test(
@@ -313,15 +325,15 @@ console.log(
           // 切换成人模式
           Base.setDisplay('A', '/sc')
         })
-        .catch(() => {})
+        .catch(() => { })
 
-      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
+      await this.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
     }
 
     await toomicsBrowser.save_cookie()
 
     // 关闭页面 避免页面过多
-    await this.page.close().catch(() => {})
+    await this.page.close().catch(() => { })
   }
 
   /**
@@ -554,15 +566,15 @@ console.log(
         referer: `https://toomics.com/${this.langTag}/webtoon/search`,
         timeout: 180 * 1000,
       })
-      .catch(() => {})
+      .catch(() => { })
     await toomicsBrowser.save_cookie()
 
     if (/ep\//.test(this.metaPage.url())) {
       await this.metaPage
         .locator('h1 a')
         .click()
-        .catch(() => {})
-      await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
+        .catch(() => { })
+      await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
       await delay(2000)
       await toomicsBrowser.save_cookie()
     }
@@ -609,7 +621,7 @@ console.log(
       scrollY = nowScrollY
     }
 
-    await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
+    await this.metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => { })
     await delay(1000)
     this.metaPageHtml = await this.metaPage.content()
 
@@ -645,6 +657,8 @@ console.log(
       this.retry++
       if (this.retry > 3) {
         write_log(`[chapter download]${chapterName} 重试次数过多,跳过`)
+        this.failedChapters.push(chapterName)
+        set_failed_chapters(this.failedChapters)
         this.retry = 0
         return
       }
@@ -664,7 +678,7 @@ console.log(
         timeout: 60 * 1000,
         referer: this.mangaUrl,
       })
-      .catch(() => {})
+      .catch(() => { })
 
     // 获取最新cookie
     await toomicsBrowser.save_cookie()
@@ -702,15 +716,15 @@ console.log(
     let window: any, document: any
     await this.chapterPage.mouse.move(1000, 1000)
     while (1) {
-      await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => {})
+      await this.chapterPage.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { })
       await delay(this.scrollDelay)
-      const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => {})
+      const nowScrollY = await this.chapterPage.evaluate(() => window.scrollY).catch(() => { })
       if (nowScrollY === scrollY) break
       scrollY = nowScrollY
     }
 
     // 等待图片网络请求完成
-    await this.chapterPage.waitForNetworkIdle().catch(() => {})
+    await this.chapterPage.waitForNetworkIdle().catch(() => { })
 
     // 等待三秒之后开始下载
     await delay(3000)
@@ -761,7 +775,7 @@ console.log(
     toomicsBrowser.clear_buffs()
     this.chapterPage.close()
 
-    if (interfereImages.length === 1 && interfereImages[0] === imageUrls.length-1) {
+    if (interfereImages.length === 1 && interfereImages[0] === imageUrls.length - 1) {
       // 如果错误图片为最后一张
       write_log(`[chapter download]${chapterName} 最后一张为干扰图.`)
     } else if (interfereImages.length > 0) {
@@ -814,4 +828,27 @@ console.log(
 
     end_app()
   }
+
+  async compress_manga() {
+    // 复制元数据
+    copy_folder(this.metaFolder, path.join(this.mangaCompressPath, '.smanga'))
+    const chapters = fs.readdirSync(this.mangaPath);
+    const failedChapters = get_failed_chapters();
+    for (const chapter of chapters) {
+      const fullPath = path.join(this.mangaPath, chapter)
+      if (chapter.startsWith('.')) return
+      if (failedChapters.includes(chapter)) return
+      if (!fs.statSync(fullPath).isDirectory()) {
+        // 不是文件夹 直接复制
+        const targetFile = path.join(this.mangaCompressPath, chapter)
+        fs.copyFileSync(fullPath, targetFile)
+      } else {
+        // 是文件夹 压缩
+        const compressChapterName = path.join(this.mangaCompressPath, chapter + '.zip')
+        if (fs.existsSync(compressChapterName)) return
+        await zip_directory(fullPath, compressChapterName)
+      }
+    }
+  }
+
 }
