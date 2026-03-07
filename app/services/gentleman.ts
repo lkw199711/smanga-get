@@ -15,7 +15,7 @@ type chapterType = {
   images: string[]
 }
 export default class Gentleman {
-  private domain = 'https://www.wn07.ru'
+  private domain = 'https://www.wnacg.ru'
   private website: string = 'gentleman'
   private mangaId: number
   private mangaName: string
@@ -32,6 +32,7 @@ export default class Gentleman {
   private currentChapter: string = ''
   private mangaPath: string = '' // 添加mangaPath属性
   private metaPath: string = '' // 添加metaPath属性
+  private organizeMetaPath: string = '' // 添加organizeMetaPath属性
   private textPrefix: string = '' // 添加textPrefix属性
   private mangaStatus: string = '' // 添加mangaStatus属性
   constructor(params: subsribeType) {
@@ -43,12 +44,13 @@ export default class Gentleman {
     this.mangaId = Number(params.id)
     this.mangaName = this.make_can_be_floder(params.name)
     // 替换域名
-    this.mangaUrl = params.url?.replace(/https?:\/\/[^/]+/, this.domain) || '';
+    this.mangaUrl = params.url?.replace(/https?:\/\/[^/]+/, this.domain) || ''
     this.mangaPath = path.join(this.downloadPath, this.mangaName)
     if (!fs.existsSync(this.mangaPath)) {
       fs.mkdirSync(this.mangaPath, { recursive: true })
     }
     this.metaPath = path.join(this.mangaPath, '.smanga')
+    this.organizeMetaPath = path.join(this.organizePath, this.mangaName, '.smanga')
 
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
   }
@@ -88,6 +90,7 @@ export default class Gentleman {
 
     // 整理元数据
     // await this.organize_meta()
+    await this.organize_meta_1()
 
     // 整理文件
     if (this.config.organize) {
@@ -106,22 +109,22 @@ export default class Gentleman {
   }
 
   async get_chapters(): Promise<chapterType[]> {
-    const pages: string[] = [this.mangaUrl];
-    const firstPageHtml = await this.get_browser_html(this.mangaUrl);
+    const pages: string[] = [this.mangaUrl]
+    const firstPageHtml = await this.get_browser_html(this.mangaUrl)
     // 截取页码部分
-    const pageBox = firstPageHtml.match(/(?<=thispage).+?(?=\/div)/s)?.[0] || '';
+    const pageBox = firstPageHtml.match(/(?<=thispage).+?(?=\/div)/s)?.[0] || ''
 
     this.chapters = this.get_page_chapters(firstPageHtml)
 
-    const pagesMatch = pageBox.match(/(?<=href=").+?(?=")/gs);
-    if (!pagesMatch) return this.chapters;
+    const pagesMatch = pageBox.match(/(?<=href=").+?(?=")/gs)
+    if (!pagesMatch) return this.chapters
 
     for (const item of pagesMatch) {
       // 遇到已下载章节,不再加载下一页
       const pageLastChapterName = this.chapters[this.chapters.length - 1].name
       if (fs.existsSync(path.join(this.mangaPath, pageLastChapterName))) return this.chapters
       // 排除干扰
-      if (item.length < 10) continue;
+      if (item.length < 10) continue
       const html = await this.get_browser_html(this.domain + item)
       this.chapters = this.chapters.concat(this.get_page_chapters(html))
     }
@@ -136,7 +139,7 @@ export default class Gentleman {
         if (chapterExcludes && new RegExp(chapterExcludes).test(item.name)) return false
         return true
       })
-    return this.chapters;
+    return this.chapters
   }
 
   async get_browser_html(url: string): Promise<string> {
@@ -145,19 +148,42 @@ export default class Gentleman {
     }
 
     if (!gentlemanBrowser.browser) return ''
-    this.chapterPage = await gentlemanBrowser.browser?.newPage() || null
+    this.chapterPage = (await gentlemanBrowser.browser?.newPage()) || null
     if (!this.chapterPage) return ''
 
-    await this.chapterPage.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 60 * 1000,
-    }).catch(() => { })
+    await this.chapterPage
+      .goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: 60 * 1000,
+      })
+      .catch(() => {})
 
     const html = await this.chapterPage.content()
 
     this.chapterPage.close()
 
     return html
+  }
+
+  async organize_meta_1() {
+    if (!fs.existsSync(this.metaPath)) fs.mkdirSync(this.metaPath, { recursive: true })
+    let covers: string[] = []
+    // 从漫画漫画路径获取所有的cover.jpg
+    const chapters = fs.readdirSync(this.mangaPath)
+
+    for (let chapter of chapters) {
+      const filePath = path.join(this.mangaPath, chapter)
+      if (!fs.statSync(filePath).isDirectory()) continue
+      fs.readdirSync(filePath)
+        .filter((file) => file.includes('cover') || file.includes('logo'))
+        .forEach((file) => {
+          covers.push(path.join(filePath, file))
+        })
+    }
+
+    const latestCover = covers[covers.length - 1]
+    fs.copyFileSync(latestCover, path.join(this.metaPath, 'cover.jpg'))
+    copy_folder(this.metaPath, this.organizeMetaPath)
   }
 
   async organize_meta() {
@@ -191,11 +217,12 @@ export default class Gentleman {
     }
     covers = Array.from(fileHashes.values())
 
-    const oldCovers = fs.readdirSync(this.metaPath)
+    const oldCovers = fs
+      .readdirSync(this.metaPath)
       .filter((file) => file.includes('cover'))
       .map((file) => path.join(this.metaPath, file))
 
-    if(covers.length > oldCovers.length) {
+    if (covers.length > oldCovers.length) {
       covers.forEach((cover, index) => {
         fs.copyFileSync(cover, path.join(this.metaPath, `cover${index}.jpg`))
       })
@@ -230,7 +257,7 @@ export default class Gentleman {
       }
       sourceImages = sourceImages.concat(chapterImages)
     })
-/* 由于获取到的图片特征码不一致无法去重 故而暂时不进行自动化处理
+    /* 由于获取到的图片特征码不一致无法去重 故而暂时不进行自动化处理
     // 复制元数据
     const organizeMetaPath = path.join(organizeMangaPath, '.smanga')
     if (!fs.existsSync(this.metaPath)) return
@@ -286,7 +313,10 @@ export default class Gentleman {
     return list
   }
 
-  private async get_chapter_images(chapter: chapterType, url: string = chapter.url): Promise<string[]> {
+  private async get_chapter_images(
+    chapter: chapterType,
+    url: string = chapter.url
+  ): Promise<string[]> {
     const html = await this.get_browser_html(url)
 
     if (!chapter.prefix) {
@@ -343,33 +373,33 @@ export default class Gentleman {
    * @returns 章节链接数组
    */
   get_page_chapters(html: string): chapterType[] {
-    const chapterUrls: chapterType[] = [];
+    const chapterUrls: chapterType[] = []
 
     // 截取包含章节列表的部分
-    const chapterBox = html.match(/(?<=gallary_wrap).+?(?=bot_toolbar)/s)?.[0] || '';
+    const chapterBox = html.match(/(?<=gallary_wrap).+?(?=bot_toolbar)/s)?.[0] || ''
 
     // 获取所有章节内容
-    const chapterList = chapterBox.match(/(?<=<li).+?(?=<\/li>)/gs) || [];
+    const chapterList = chapterBox.match(/(?<=<li).+?(?=<\/li>)/gs) || []
 
     for (const chapter of chapterList) {
       // 章节链接
-      const href = chapter.match(/\/photos-index-aid-[\d]+\.html/)?.[0] || '';
+      const href = chapter.match(/\/photos-index-aid-[\d]+\.html/)?.[0] || ''
       // 章节名
-      let name = chapter.match(/(?<=title=\").+?(?=\")/)?.[0] || '';
-      name = name.replace(/<[^>]+>/g, '');
+      let name = chapter.match(/(?<=title=\").+?(?=\")/)?.[0] || ''
+      name = name.replace(/<[^>]+>/g, '')
 
-      name = this.make_can_be_floder(name);
+      name = this.make_can_be_floder(name)
 
       // 图片数量
-      const imageNum = parseInt(chapter.match(/[\d]+(?=張圖片)/)?.[0] || '0', 10);
+      const imageNum = parseInt(chapter.match(/[\d]+(?=張圖片)/)?.[0] || '0', 10)
 
       // 拼接处理,形成完整链接
-      const url = `${this.domain}${href}`;
+      const url = `${this.domain}${href}`
 
-      chapterUrls.push({ url, name, imageNum: imageNum, images: [] });
+      chapterUrls.push({ url, name, imageNum: imageNum, images: [] })
     }
 
-    return chapterUrls;
+    return chapterUrls
   }
 
   make_can_be_floder(name: string): string {
