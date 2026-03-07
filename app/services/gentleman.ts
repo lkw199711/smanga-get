@@ -232,6 +232,7 @@ export default class Gentleman {
   async organize_files() {
     const sourceChapters = fs.readdirSync(this.mangaPath)
     const organizeMangaPath = path.join(this.organizePath, this.mangaName)
+    let coverFile = ''
     if (!fs.existsSync(organizeMangaPath)) fs.mkdirSync(organizeMangaPath, { recursive: true })
     const organizeChapters = fs.readdirSync(organizeMangaPath)
     let sourceImages: string[] = []
@@ -242,6 +243,10 @@ export default class Gentleman {
       const chapterImages = fs.readdirSync(filePath)
       for (let image of chapterImages) {
         if (!image.includes('jpg')) continue
+        if (image.includes('cover') || image.includes('logo')) {
+          coverFile = path.join(filePath, image)
+          continue
+        }
         const imageNums = image.split('_')
         if (imageNums.length < 2) continue
         const chapterNum = imageNums[0]
@@ -256,6 +261,14 @@ export default class Gentleman {
         fs.copyFileSync(path.join(filePath, image), organizeFile)
       }
       sourceImages = sourceImages.concat(chapterImages)
+    })
+
+    organizeChapters.forEach((chapter) => { 
+      const chapterCover = path.join(organizeMangaPath, chapter + 'cover.jpg')
+      if (fs.existsSync(chapterCover)) return
+      if (!coverFile) return
+      // 如果章节目录下没有封面图片，则复制最新的封面图片到该章节目录下
+      fs.copyFileSync(coverFile, chapterCover)
     })
     /* 由于获取到的图片特征码不一致无法去重 故而暂时不进行自动化处理
     // 复制元数据
