@@ -90,6 +90,11 @@ create_config()
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 
+if (immediately.subscribeTask) {
+  // 执行订阅
+  task_allocation()
+}
+
 if (immediately.toomicsUpdateSc) {
   // 订阅简体漫画
   mangaTask.add({
@@ -135,11 +140,6 @@ if (immediately.omegascansCompress) {
 if (immediately.omegascansSyncCloud) {
   // 同步OmegaScans到云盘
   mangaTask.add({ website: 'sync-omegascans', id: 0, name: '' })
-}
-
-if (immediately.subscribeTask) {
-  // 执行订阅
-  task_allocation()
 }
 
 /*
