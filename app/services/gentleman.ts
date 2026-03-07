@@ -264,7 +264,9 @@ export default class Gentleman {
     })
 
     organizeChapters.forEach((chapter) => { 
-      const chapterCover = path.join(organizeMangaPath, chapter + 'cover.jpg')
+      if (chapter === '.smanga') return
+      if (!fs.statSync(path.join(organizeMangaPath, chapter)).isDirectory()) return
+      const chapterCover = path.join(organizeMangaPath, chapter + '.jpg')
       if (fs.existsSync(chapterCover)) return
       if (!coverFile) return
       // 如果章节目录下没有封面图片，则复制最新的封面图片到该章节目录下
