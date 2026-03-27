@@ -135,7 +135,7 @@ export default class Gentleman {
         const chapterIncludes = this.config.chapterIncludes || ''
         const chapterExcludes = this.config.chapterExcludes || ''
 
-        if (!chapterIncludes && new RegExp(chapterIncludes).test(item.name)) return false
+        if (chapterIncludes && !new RegExp(chapterIncludes).test(item.name)) return false
         if (chapterExcludes && new RegExp(chapterExcludes).test(item.name)) return false
         return true
       })
@@ -180,6 +180,8 @@ export default class Gentleman {
           covers.push(path.join(filePath, file))
         })
     }
+
+    if (covers.length === 0) return
 
     const latestCover = covers[covers.length - 1]
     fs.copyFileSync(latestCover, path.join(this.metaPath, 'cover.jpg'))
