@@ -12,7 +12,8 @@
     "omegascansSyncCloud": 0
   },
   "cron": {
-    "enable": 1
+    "enable": 1,
+    "interval": "0 0 1,13 * * *"
   },
   "endAfterSetCookie": false,
   "gentleman": {
