@@ -11,6 +11,9 @@
     "omegascansCompress": 0,
     "omegascansSyncCloud": 0
   },
+  "cron": {
+    "enable": 1
+  },
   "endAfterSetCookie": false,
   "gentleman": {
     "cookieFile": "./data/cookies/gentleman-cookies.json",

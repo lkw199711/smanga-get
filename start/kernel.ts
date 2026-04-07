@@ -81,7 +81,7 @@ create_config()
 // delete_err_cover('M:\\manga\\toomics');
 
 // 定时任务
-// create_scan_cron();
+create_scan_cron();
 
 // 查询干扰图片
 // console.log(check_img_num("M:\\manga\\omegascans"));
