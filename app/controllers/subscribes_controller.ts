@@ -1,7 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { bilibiliTask, toomicsTask } from '#api/task'
+import { bilibiliTask, toomicsTask, mangaTask } from '#api/task'
 import { write_log } from '#utils/index'
-import { subscribe_add, subscribe_clear, subscribe_read } from '#api/subsribe'
+import { subscribe_add, subscribe_remove, subscribe_clear, subscribe_read } from '#api/subsribe'
 
 export default class SubscribesController {
     get() {
@@ -9,7 +9,7 @@ export default class SubscribesController {
     }
 
     add({ request }: HttpContext) {
-        const { website, id, name } = request.all()
+        const { website, id, name, mangaUrl, moveEndSubscribe } = request.all()
 
         if (!website || !id || !name) {
             return {
@@ -18,10 +18,29 @@ export default class SubscribesController {
             }
         }
 
+        const subscribe = subscribe_read()
+        const isExist = subscribe.some((item: any) => 
+            (item.website === website && item.id === id)
+            || (item.url === mangaUrl)
+        )
+        if (isExist) {
+            return {
+                code: 400,
+                message: 'Subscribe already exists',
+            }
+        }
+
         if (website === 'toomics') {
-            toomicsTask.add({ website, id, name })
+            mangaTask.add({ website, id, name })
         } else if (website === 'bilibili') {
-            bilibiliTask.add({ website, id, name })
+            mangaTask.add({ website, id, name })
+        } else if (website === 'gentleman') {
+            mangaTask.add({ 
+                website, 
+                id, name, 
+                url: mangaUrl, 
+                moveEndSubscribe 
+            })
         } else {
             return {
                 code: 400,
@@ -29,7 +48,11 @@ export default class SubscribesController {
             }
         }
 
-        subscribe_add({ website, id, name })
+        subscribe_add({ 
+            website, id, name,
+            url: mangaUrl, 
+            moveEndSubscribe 
+         })
         write_log(`[subscribe]${website} ${id} ${name} 订阅添加成功`)
 
         return {
@@ -39,7 +62,7 @@ export default class SubscribesController {
     }
 
     remove({ request }: HttpContext) {
-        const { website, id } = request.all()
+        const { website, id, mangaUrl, moveEndSubscribe, name } = request.all()
 
         if (!website || !id) {
             return {
@@ -52,12 +75,16 @@ export default class SubscribesController {
             toomicsTask.remove(id)
         } else if (website === 'bilibili') {
             bilibiliTask.remove(id)
-        } else {
+        } else if (website === 'gentleman') {
+            mangaTask.remove(id)
+        } else{
             return {
                 code: 400,
                 message: 'Invalid website',
             }
         }
+
+        subscribe_remove({ website, id, name })
 
         write_log(`[subscribe]${website} ${id} 订阅删除成功`)
 

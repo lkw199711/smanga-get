@@ -31,9 +31,9 @@ export function subscribe_write(json: any) {
  * 新增订阅
  * @param param0 
  */
-export function subscribe_add({ website, id, name }: { website: string, name: string, id: number }) {
+export function subscribe_add(params: any) {
     const subscribe = subscribe_read()
-    subscribe.push({ website, id, name })
+    subscribe.push( params )
     subscribe_write(subscribe)
 }
 
@@ -41,9 +41,14 @@ export function subscribe_add({ website, id, name }: { website: string, name: st
  * 移除订阅
  * @param param0 
  */
-export function subscribe_remove({ website, id }: { website: string, id: number }) {
+export function subscribe_remove({ website, id, name }: { website: string, id: number, name: string }) {
     const subscribe = subscribe_read()
-    const index = subscribe.findIndex((item: any) => item.website === website && Number(item.id) === Number(id))
+    let index = -1
+    if (website === 'gentleman') {
+        index = subscribe.findIndex((item: any) => item.website === website && item.name === name)
+    } else {
+        index = subscribe.findIndex((item: any) => item.website === website && Number(item.id) === Number(id))
+    }
 
     if (index !== -1) {
         subscribe.splice(index, 1)

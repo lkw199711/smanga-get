@@ -5,9 +5,11 @@ import { write_log } from '#utils/index'
 export default class TasksController {
 
     add({ request }: HttpContext) {
-        const { website, id, name } = request.all()
+        const { website, id, name, mangaUrl, moveEndSubscribe } = request.all()
 
-        mangaTask.add({ website, id, name })
+        mangaTask.add({ website, id, name, 
+            url: mangaUrl, 
+            moveEndSubscribe })
 
         write_log(`[task]${website} ${id} ${name} 任务添加成功`)
 
