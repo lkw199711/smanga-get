@@ -197,6 +197,7 @@ class OmegascansTask extends Task {
 }
 
 class MangaTask extends Task {
+  taskErrors = 0
   constructor(tasks: taskType[]) {
     super(tasks)
   }
@@ -277,6 +278,11 @@ class MangaTask extends Task {
     await taskService.start()
       .catch((err) => {
         write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        if (this.taskErrors > 10) {
+          write_log(`[Task] 任务重试超过10次,退出`)
+          return;
+        }
+        this.taskErrors++;
         // 任务放到末尾再次执行
         this.tasks.push(task)
       })

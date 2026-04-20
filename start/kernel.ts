@@ -48,6 +48,7 @@ import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import OmegaScansUpdate from '#services/omegascans-update'
 import ToZip from '#services/tozip'
+import ToZipInOut from '#services/tozip-in-out'
 import CopyMeta from '#services/copy-meta'
 import MoveMeta from '#services/move-meta'
 import RemoveDuplicates from '#services/remove-duplicates'
@@ -63,7 +64,7 @@ create_config()
 // check_small_zip('C:\\12manga-compress')
 
 // 压缩漫画
-// await new ToZip('C:\\11manga\\绅士漫画-整理', 'C:\\12manga-compress\\绅士漫画').start();
+// await new ToZipInOut('D:\\11manga\\bilibili', 'D:\\11manga\\bilibili-compress').start();
 // await new ToZip('C:\\11manga\\omegascans', 'C:\\12manga-compress\\omegascans').start()
 // await new RemoveDuplicates(
 //   'C:\\99mnt\\0\\20manga-compress\\toptoon\\2023',

@@ -11,13 +11,14 @@ class ToZip {
     mangaFloder: string = '';
     outFloder: string = '';
     deleteSource: boolean = false;
-    constructor(mangaFloder: string) {
+    constructor(mangaFloder: string, outFloder: string) {
         this.mangaFloder = mangaFloder;
-        this.outFloder = 'M:\\manga\\toomics-连载-zip';
+        this.outFloder = outFloder;
     }
 
     async start() {
         const items = fs.readdirSync(this.mangaFloder);
+
         for (let i = 0; i < items.length; i++) {
             const fileName = items[i];
             const filePath = path.join(this.mangaFloder, fileName);
@@ -43,14 +44,14 @@ class ToZip {
                 const metaFile = `${filePath}-smanga-info\\meta.json`;
                 if (!fs.existsSync(metaFile)) continue;
                 const meta = read_json(metaFile);
-                if (meta.status !== 'Completed') continue; // 只处理已完成的漫画
+                //f (meta.status !== 'Completed') continue; // 只处理已完成的漫画
 
                 if (!fs.existsSync(outMangaPath)) {
                     fs.mkdirSync(outMangaPath, { recursive: true });
                 }
 
                 // 复制元数据文件夹
-                copy_folder(`${filePath}-smanga-info`, `${this.outFloder}\\${fileName}-smanga-info`);
+                copy_folder(`${filePath}-smanga-info`, `${this.outFloder}\\${fileName}\\.smanga`);
                 // await zip_jpg(filePath, `${this.outFloder}\\${fileName}-covers.zip`);
                 await zipAndRemoveFolders(filePath, `${this.outFloder}\\${fileName}`);
                 end_app()
