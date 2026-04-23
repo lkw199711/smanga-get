@@ -43,7 +43,7 @@ export const middleware = router.named({})
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import { create_scan_cron, task_allocation, create_config } from './init.js'
-import { demo, get_all_img, get_all_file, check_img_num, delete_err_cover, check_small_zip } from '#services/test'
+import { demo, get_all_img, get_all_file, check_img_num, delete_err_cover, check_small_zip, delete_small_images_dir } from '#services/test'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsUpdate from '#services/toomics-update'
 import OmegaScansUpdate from '#services/omegascans-update'
@@ -62,7 +62,7 @@ create_config()
 
 // 检查小压缩包
 // check_small_zip('C:\\12manga-compress')
-
+// delete_small_images_dir('U:\\gentleman-organize')
 // 压缩漫画
 // await new ToZipInOut('D:\\11manga\\bilibili', 'D:\\11manga\\bilibili-compress').start();
 // await new ToZip('C:\\11manga\\omegascans', 'C:\\12manga-compress\\omegascans').start()

@@ -19,10 +19,13 @@ export default class SubscribesController {
         }
 
         const subscribe = subscribe_read()
-        const isExist = subscribe.some((item: any) => 
-            (item.website === website && item.id === id)
-            || (item.url === mangaUrl)
-        )
+        const isExist = subscribe.some((item: any) => {
+            if (website === 'gentleman') {
+                return item.url === mangaUrl
+            } else {
+                return item.website === website && item.id === id
+            }
+        })
         if (isExist) {
             return {
                 code: 400,

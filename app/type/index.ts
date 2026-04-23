@@ -10,6 +10,7 @@ type subsribeType = {
   cover?: string
   status?: string
   chapterCount?: number
+  nameMatch?: boolean
 }
 
 type commandType = {

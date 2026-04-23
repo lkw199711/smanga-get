@@ -35,8 +35,10 @@ export default class Gentleman {
   private organizeMetaPath: string = '' // 添加organizeMetaPath属性
   private textPrefix: string = '' // 添加textPrefix属性
   private mangaStatus: string = '' // 添加mangaStatus属性
+  private params: any
   constructor(params: subsribeType) {
     const config = get_config(this.website) || {}
+    this.params = params
     this.downloadPath = config?.downloadPath || ''
     this.organizePath = config?.organizePath || ''
     this.compressPath = config?.compressPath || ''
@@ -134,7 +136,11 @@ export default class Gentleman {
       .filter((item) => {
         const chapterIncludes = this.config.chapterIncludes || ''
         const chapterExcludes = this.config.chapterExcludes || ''
+        const nameMatchRegex = new RegExp(`${this.params.name}\\d+(-\\d+)?話`)
 
+        if (this.params?.nameMatch !== false) {
+          if (!nameMatchRegex.test(item.name)) return false
+        }
         if (chapterIncludes && !new RegExp(chapterIncludes).test(item.name)) return false
         if (chapterExcludes && new RegExp(chapterExcludes).test(item.name)) return false
         return true
@@ -340,8 +346,14 @@ export default class Gentleman {
       const firstViewUrlMatch = html.match(/\/photos-view-id-[^\"]+/)
       const firstViewUrl = firstViewUrlMatch ? firstViewUrlMatch[0] : ''
 
+      // 获取第一个图片页面的HTML
       const viewHtml = await this.get_browser_html(this.domain + firstViewUrl)
-      const prefixMatch = viewHtml.match(/(?<=src=\"\/\/).+?\/data/)
+      
+      // 提取id为imgarea的span元素
+      const imgAreaMatch = viewHtml.match(/<span[^>]*id=["']imgarea["'][^>]*>(.*?)<\/span>/s)
+      const imgAreaContent = imgAreaMatch ? imgAreaMatch[1] : viewHtml
+      
+      const prefixMatch = imgAreaContent.match(/(?<=src=\"\/\/).+?\/data/)
       chapter.prefix = prefixMatch ? prefixMatch[0] : ''
       this.textPrefix = chapter.prefix || '' // 设置textPrefix
     }

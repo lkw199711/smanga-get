@@ -215,4 +215,34 @@ function check_small_zip(dir: string) {
         console.log(zipFiles);
     // }
 }
-export { demo, get_all_img, get_all_file, check_img_num, delete_err_cover, check_small_zip }
+function delete_small_images_dir(dir: string) {
+    const files = fs.readdirSync(dir);
+    let hasImage = false;
+    let allImagesSmall = true;
+    const imageFiles: string[] = [];
+
+    files.forEach((file) => {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        
+        if (stat.isDirectory()) {
+            // 递归处理子目录
+            delete_small_images_dir(filePath);
+        } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file)) {
+            hasImage = true;
+            imageFiles.push(filePath);
+            // 检查图片是否大于等于10KB (10240字节)
+            if (stat.size >= 10240) {
+                allImagesSmall = false;
+            }
+        }
+    });
+
+    // 如果目录中有图片且所有图片都小于10KB，则删除该目录
+    if (hasImage && allImagesSmall && imageFiles.length > 0) {
+        console.log(`删除目录: ${dir} (包含 ${imageFiles.length} 张小图片)`);
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+export { demo, get_all_img, get_all_file, check_img_num, delete_err_cover, check_small_zip, delete_small_images_dir }
