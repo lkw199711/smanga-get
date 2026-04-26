@@ -6,7 +6,9 @@
 set -e
 
 DATA_DIR="/data"
-EXAMPLE_DIR="/app/smanga-get/data-example"
+# 优先使用 docker 专用的示例配置 (路径已用 Linux 风格 /data/...)
+EXAMPLE_DIR="/app/smanga-get/data-example-docker"
+[ -d "${EXAMPLE_DIR}" ] || EXAMPLE_DIR="/app/smanga-get/data-example"
 
 mkdir -p "${DATA_DIR}/cookies"
 
