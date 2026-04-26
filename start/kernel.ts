@@ -63,6 +63,7 @@ create_config()
 // 检查小压缩包
 // check_small_zip('C:\\12manga-compress')
 // delete_small_images_dir('U:\\gentleman-organize')
+// delete_small_images_dir('U:\\gentleman')
 // 压缩漫画
 // await new ToZipInOut('D:\\11manga\\bilibili', 'D:\\11manga\\bilibili-compress').start();
 // await new ToZip('C:\\11manga\\omegascans', 'C:\\12manga-compress\\omegascans').start()

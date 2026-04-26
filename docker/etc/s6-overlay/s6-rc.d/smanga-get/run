@@ -1,0 +1,6 @@
+#!/command/execlineb -P
+fdmove -c 2 1
+cd /app/smanga-get
+export NODE_ENV production
+export PUPPETEER_EXECUTABLE_PATH /usr/bin/chromium
+exec node bin/server.js
