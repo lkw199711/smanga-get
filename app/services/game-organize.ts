@@ -1,5 +1,3 @@
-
-
 import fs from 'fs';
 import path from 'path';
 import seven from 'node-7z';
@@ -11,7 +9,6 @@ const execAsync = promisify(exec);
 interface GameInfo {
     name: string;
     sourcePath: string;
-    organizedPath: string;
     errors: string[];
 }
 
@@ -23,8 +20,8 @@ class GameOrganize {
     private sourceDir: string;
     private organizedDir: string;
     private zipDir: string;
-    private winrarPath: string = 'C:\\user\\WinRAR\\WinRAR.exe';
     private extractPassword: string = '嘤嘤嘤';
+    private extractCounter: number = 0; // 全局解压计数器,用于扁平化编号
 
     constructor(sourceDir: string) {
         this.sourceDir = sourceDir;
@@ -54,7 +51,6 @@ class GameOrganize {
             const gameInfo: GameInfo = {
                 name: gameName,
                 sourcePath: gameDir,
-                organizedPath: path.join(this.organizedDir, gameName),
                 errors: []
             };
             
@@ -109,13 +105,16 @@ class GameOrganize {
             return;
         }
         
+        // 重置解压计数器(每个游戏独立编号)
+        this.extractCounter = 0;
+        
         // 第一步:文件改名映射 mkv->zip, tif->7z
         console.log(`  🔄 开始文件改名映射...`);
         await this.renameArchiveFiles(gameInfo.sourcePath);
         
-        // 第二步:在原目录递归解压所有压缩包
+        // 第二步:递归解压所有压缩包,直到找到游戏文件
         console.log(`  🔍 开始递归解压...`);
-        await this.recursiveExtract(gameInfo.sourcePath, gameInfo);
+        await this.extractUntilGameFound(gameInfo.sourcePath, gameInfo);
         
         console.log(`  🔎 查找游戏目录...`);
         // 解压完成后,查找所有游戏目录(PC和APK)
@@ -154,8 +153,8 @@ class GameOrganize {
                 fs.mkdirSync(typeDir, { recursive: true });
             }
             
-            console.log(`  📋 复制${gameType}游戏文件到整理目录...`);
-            await this.copyGameFiles(gameDir.path, typeDir, gameInfo);
+            console.log(`  📋 移动${gameType}游戏文件到整理目录...`);
+            await this.moveGameFiles(gameDir.path, typeDir, gameInfo);
             
             // 删除免费游戏网站.txt
             await this.removeFreeGameFile(typeDir, gameInfo);
@@ -168,6 +167,7 @@ class GameOrganize {
 
     /**
      * 文件改名映射: 测试mkv/tif是zip还是7z格式,然后改名
+     * 支持分卷压缩包: .mkv.001 -> .7z.001
      */
     private async renameArchiveFiles(dir: string): Promise<void> {
         const files = fs.readdirSync(dir);
@@ -188,20 +188,45 @@ class GameOrganize {
             }
             
             // 直接改名,不测试
-            const ext = path.extname(file).toLowerCase();
+            let ext = path.extname(file).toLowerCase();
             const baseName = path.basename(file, ext);
             let newExt = '';
             
-            if (ext === '.mkv') {
-                newExt = '.zip';
-            } else if (ext === '.tif' || ext === '.tiff') {
-                newExt = '.7z';
-            }
-            
-            if (newExt) {
-                const newPath = path.join(dir, baseName + newExt);
-                fs.renameSync(filePath, newPath);
-                console.log(`    📝 改名: ${file} -> ${baseName}${newExt}`);
+            // 检查是否是分卷压缩包 (.001, .002 等)
+            const volumeMatch = file.match(/\.(\d{3})$/);
+            if (volumeMatch) {
+                // 是分卷,需要检查前面的扩展名
+                const volumeNum = volumeMatch[1];
+                const nameWithoutVolume = path.basename(file, `.${volumeNum}`);
+                const realExt = path.extname(nameWithoutVolume).toLowerCase();
+                const realBaseName = path.basename(nameWithoutVolume, realExt);
+                
+                if (realExt === '.mkv') {
+                    // .mkv.001 -> .zip.001
+                    newExt = `.zip.${volumeNum}`;
+                } else if (realExt === '.tif' || realExt === '.tiff') {
+                    // .tif.001 -> .7z.001
+                    newExt = `.7z.${volumeNum}`;
+                }
+                
+                if (newExt) {
+                    const newPath = path.join(dir, realBaseName + newExt);
+                    fs.renameSync(filePath, newPath);
+                    console.log(`    📝 改名: ${file} -> ${realBaseName}${newExt}`);
+                }
+            } else {
+                // 普通文件
+                if (ext === '.mkv') {
+                    newExt = '.zip';
+                } else if (ext === '.tif' || ext === '.tiff') {
+                    newExt = '.7z';
+                }
+                
+                if (newExt) {
+                    const newPath = path.join(dir, baseName + newExt);
+                    fs.renameSync(filePath, newPath);
+                    console.log(`    📝 改名: ${file} -> ${baseName}${newExt}`);
+                }
             }
         }
     }
@@ -252,7 +277,7 @@ class GameOrganize {
     }
 
     /**
-     * 递归解压所有压缩包 - 单线程顺序处理,全部使用7z
+     * 递归解压所有压缩包 - 扁平化结构,所有extract都在游戏根目录
      */
     private async recursiveExtract(dir: string, gameInfo: GameInfo, depth: number = 0): Promise<void> {
         if (depth > 20) {
@@ -265,7 +290,7 @@ class GameOrganize {
         // **关键**: 先执行改名逻辑,处理当前目录下的mkv/tif文件
         await this.renameArchiveFiles(dir);
         
-        // 收集所有需要解压的文件和子目录
+        // 收集当前目录下所有需要解压的文件
         const filesToExtract: string[] = [];
         let subDirs: string[] = [];
         
@@ -280,28 +305,34 @@ class GameOrganize {
             const stat = fs.statSync(filePath);
             
             if (stat.isDirectory()) {
-                subDirs.push(filePath);
+                // 跳过extract_目录,避免重复处理
+                if (!file.startsWith('extract_')) {
+                    subDirs.push(filePath);
+                }
             } else {
                 const ext = path.extname(file).toLowerCase();
-                // 只处理 7z 和 zip 文件
+                // 处理普通压缩包和分卷压缩包
                 if (ext === '.7z' || ext === '.zip') {
                     filesToExtract.push(filePath);
+                } else if (/\.\d{3}$/.test(file)) {
+                    // 分卷压缩包: .001, .002, .003 等
+                    // 只收集第一个分卷(.001)
+                    if (/\.001$/.test(file)) {
+                        filesToExtract.push(filePath);
+                    }
                 }
             }
         }
         
-        // 单线程顺序解压每个文件 - 全部使用7z
+        // 单线程顺序解压每个文件 - 全部解压到游戏根目录
         for (const filePath of filesToExtract) {
             const fileName = path.basename(filePath);
             const ext = path.extname(filePath).toLowerCase();
             
-            // 创建编号的解压目录 (extract_001, extract_002, ...)
-            const extractDirs = fs.readdirSync(dir).filter(f => {
-                return f.startsWith('extract_') && fs.statSync(path.join(dir, f)).isDirectory();
-            });
-            const nextNum = extractDirs.length + 1;
-            const extractDirName = `extract_${String(nextNum).padStart(3, '0')}`;
-            const extractDir = path.join(dir, extractDirName);
+            // **扁平化**: 所有解压目录都创建在游戏根目录,使用全局计数器
+            this.extractCounter++;
+            const extractDirName = `extract_${String(this.extractCounter).padStart(3, '0')}`;
+            const extractDir = path.join(gameInfo.sourcePath, extractDirName);
             
             if (!fs.existsSync(extractDir)) {
                 fs.mkdirSync(extractDir, { recursive: true });
@@ -317,16 +348,16 @@ class GameOrganize {
                 } else if (ext === '.zip') {
                     // zip文件使用WinRAR解压(无密码)
                     await this.extractZip(filePath, extractDir, gameInfo);
+                } else if (/\.001$/.test(fileName)) {
+                    // 分卷压缩包(.001)使用7z解压(带密码)
+                    await this.extract7z(filePath, extractDir, gameInfo);
                 }
                 
                 // 不删除原压缩包
                 console.log(`    ✅ 解压完成: ${fileName}`);
                 
-                // **关键**: 立即递归处理新创建的解压目录
-                await this.recursiveExtract(extractDir, gameInfo, depth + 1);
-                
             } catch (error) {
-                console.log(`    ❌ 解压失败: ${fileName} - ${error.message}`);
+                console.log(`    ❌ 觐压失败: ${fileName} - ${error.message}`);
                 gameInfo.errors.push(`解压失败 ${fileName}: ${error.message}`);
                 
                 // 如果解压失败,删除空的解压目录
@@ -342,15 +373,15 @@ class GameOrganize {
             await this.sleep(500);
         }
         
-        // 重新获取子目录列表(可能新增了解压目录)
+        // 重新获取子目录列表(过滤extract_目录)
         subDirs = fs.readdirSync(dir)
             .filter(f => {
                 const fullPath = path.join(dir, f);
-                return fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
+                return fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory() && !f.startsWith('extract_');
             })
             .map(f => path.join(dir, f));
         
-        // 递归处理所有子目录
+        // 递归扫描所有子目录,找到所有压缩包
         for (const subDir of subDirs) {
             await this.recursiveExtract(subDir, gameInfo, depth + 1);
         }
@@ -432,6 +463,248 @@ class GameOrganize {
                 reject(err);
             });
         });
+    }
+
+    /**
+     * 递归解压直到找到游戏文件
+     * 聚焦刚解压出来的目录,只检查它内部的压缩包
+     */
+    private async extractUntilGameFound(startDir: string, gameInfo: GameInfo): Promise<void> {
+        // 检查当前目录是否已有游戏文件
+        const hasGame = await this.containsGameFiles(startDir);
+        if (hasGame) {
+            console.log(`  🎯 起始目录已包含游戏文件`);
+            return;
+        }
+        
+        // **关键**: 先执行改名逻辑,处理tif/tif文件
+        await this.renameArchiveFiles(startDir);
+        
+        // 查找当前目录下的压缩包
+        const archives = await this.findArchivesInDir(startDir);
+        
+        if (archives.length === 0) {
+            console.log(`  ⚠️  未找到压缩包`);
+            return;
+        }
+        
+        console.log(`  📦 找到 ${archives.length} 个压缩包`);
+        
+        // 逐个解压
+        for (const archivePath of archives) {
+            const fileName = path.basename(archivePath);
+            const ext = path.extname(archivePath).toLowerCase();
+            
+            this.extractCounter++;
+            const extractDirName = `extract_${String(this.extractCounter).padStart(3, '0')}`;
+            const extractDir = path.join(gameInfo.sourcePath, extractDirName);
+            
+            if (!fs.existsSync(extractDir)) {
+                fs.mkdirSync(extractDir, { recursive: true });
+            }
+            
+            try {
+                console.log(`    📂 解压: ${fileName} -> ${extractDirName}`);
+                
+                if (ext === '.7z') {
+                    await this.extract7z(archivePath, extractDir, gameInfo);
+                } else if (ext === '.zip') {
+                    await this.extractZip(archivePath, extractDir, gameInfo);
+                } else if (/\.001$/.test(fileName)) {
+                    await this.extract7z(archivePath, extractDir, gameInfo);
+                }
+                
+                console.log(`    ✅ 解压完成: ${fileName}`);
+                
+                // **关键**: 解压后立即改名,处理tif等伪装文件
+                console.log(`    🔄 对 ${extractDirName} 执行改名...`);
+                await this.renameArchiveFiles(extractDir);
+                
+                // 聚焦检查: 先检查extractDir本身是否有游戏文件
+                const hasGameInExtract = await this.containsGameFiles(extractDir);
+                if (hasGameInExtract) {
+                    console.log(`    🎯 在 ${extractDirName} 中找到游戏文件,停止解压`);
+                    return;
+                }
+                
+                // 查找extractDir下的压缩包(改名后可能有新的7z/zip)
+                const newArchives = await this.findArchivesInDir(extractDir);
+                if (newArchives.length > 0) {
+                    console.log(`    📦 在 ${extractDirName} 中发现 ${newArchives.length} 个新压缩包`);
+                    // 递归处理这些新压缩包
+                    for (const newArchive of newArchives) {
+                        const newFileName = path.basename(newArchive);
+                        const newExt = path.extname(newArchive).toLowerCase();
+                        
+                        this.extractCounter++;
+                        const newExtractDirName = `extract_${String(this.extractCounter).padStart(3, '0')}`;
+                        const newExtractDir = path.join(gameInfo.sourcePath, newExtractDirName);
+                        
+                        if (!fs.existsSync(newExtractDir)) {
+                            fs.mkdirSync(newExtractDir, { recursive: true });
+                        }
+                        
+                        try {
+                            console.log(`    📂 解压: ${newFileName} -> ${newExtractDirName}`);
+                            
+                            if (newExt === '.7z') {
+                                await this.extract7z(newArchive, newExtractDir, gameInfo);
+                            } else if (newExt === '.zip') {
+                                await this.extractZip(newArchive, newExtractDir, gameInfo);
+                            } else if (/\.001$/.test(newFileName)) {
+                                await this.extract7z(newArchive, newExtractDir, gameInfo);
+                            }
+                            
+                            console.log(`    ✅ 解压完成: ${newFileName}`);
+                            
+                            // 递归检查新解压的目录
+                            console.log(`    🔍 聚焦检查: ${newExtractDirName}`);
+                            await this.extractUntilGameFound(newExtractDir, gameInfo);
+                            
+                            // 检查是否找到游戏
+                            const foundGame = await this.containsGameFiles(gameInfo.sourcePath);
+                            if (foundGame) {
+                                console.log(`    🎯 找到游戏文件,停止解压`);
+                                return;
+                            }
+                        } catch (error) {
+                            console.log(`    ❌ 解压失败: ${newFileName} - ${error.message}`);
+                            gameInfo.errors.push(`解压失败 ${newFileName}: ${error.message}`);
+                        }
+                        
+                        await this.sleep(500);
+                    }
+                }
+                
+                // 查找extractDir下的子目录,递归检查每个子目录
+                const subDirs = fs.readdirSync(extractDir)
+                    .filter(f => {
+                        const fullPath = path.join(extractDir, f);
+                        return fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
+                    });
+                
+                for (const subDir of subDirs) {
+                    const subDirPath = path.join(extractDir, subDir);
+                    console.log(`    🔍 检查子目录: ${subDir}`);
+                    await this.extractUntilGameFound(subDirPath, gameInfo);
+                    
+                    // 检查是否已找到游戏文件
+                    const foundGame = await this.containsGameFiles(extractDir);
+                    if (foundGame) {
+                        console.log(`    🎯 在 ${extractDirName} 中找到游戏文件,停止解压`);
+                        return;
+                    }
+                }
+                
+            } catch (error) {
+                console.log(`    ❌ 解压失败: ${fileName} - ${error.message}`);
+                gameInfo.errors.push(`解压失败 ${fileName}: ${error.message}`);
+                
+                if (fs.existsSync(extractDir)) {
+                    const extractFiles = fs.readdirSync(extractDir);
+                    if (extractFiles.length === 0) {
+                        fs.rmdirSync(extractDir);
+                    }
+                }
+            }
+            
+            await this.sleep(500);
+        }
+    }
+
+    /**
+     * 查找目录下的压缩包(不递归)
+     */
+    private async findArchivesInDir(dir: string): Promise<string[]> {
+        const archives: string[] = [];
+        const files = fs.readdirSync(dir);
+        
+        for (const file of files) {
+            const filePath = path.join(dir, file);
+            
+            if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+                continue;
+            }
+            
+            const ext = path.extname(file).toLowerCase();
+            if (ext === '.7z' || ext === '.zip') {
+                archives.push(filePath);
+            } else if (/\.001$/.test(file)) {
+                archives.push(filePath);
+            }
+        }
+        
+        return archives;
+    }
+
+    /**
+     * 查找所有压缩包(递归扫描所有目录,包括extract_)
+     */
+    private async findAllArchives(dir: string): Promise<string[]> {
+        const archives: string[] = [];
+        
+        const scanDirectory = (currentDir: string) => {
+            const files = fs.readdirSync(currentDir);
+            
+            for (const file of files) {
+                const filePath = path.join(currentDir, file);
+                
+                if (!fs.existsSync(filePath)) {
+                    continue;
+                }
+                
+                const stat = fs.statSync(filePath);
+                
+                if (stat.isDirectory()) {
+                    // 递归扫描所有子目录(包括extract_)
+                    scanDirectory(filePath);
+                } else {
+                    const ext = path.extname(file).toLowerCase();
+                    // 收集压缩包
+                    if (ext === '.7z' || ext === '.zip') {
+                        archives.push(filePath);
+                    } else if (/\.001$/.test(file)) {
+                        // 分卷只收集.001
+                        archives.push(filePath);
+                    }
+                }
+            }
+        };
+        
+        scanDirectory(dir);
+        return archives;
+    }
+
+    /**
+     * 检查目录是否包含游戏文件(exe/apk)
+     */
+    private async containsGameFiles(dir: string): Promise<boolean> {
+        const files = fs.readdirSync(dir);
+        
+        for (const file of files) {
+            const filePath = path.join(dir, file);
+            
+            if (!fs.existsSync(filePath)) {
+                continue;
+            }
+            
+            const stat = fs.statSync(filePath);
+            
+            if (stat.isDirectory()) {
+                // 递归检查子目录
+                const hasGame = await this.containsGameFiles(filePath);
+                if (hasGame) return true;
+            } else {
+                const ext = path.extname(file).toLowerCase();
+                const fileName = file.toLowerCase();
+                
+                if (ext === '.exe' || fileName.endsWith('.apk')) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -519,57 +792,9 @@ class GameOrganize {
     }
 
     /**
-     * 查找真正的游戏根目录(旧版本)
+     * 移动游戏文件到整理目录
      */
-    private async findGameRoot(dir: string, gameInfo: GameInfo, depth: number = 0): Promise<string | null> {
-        if (depth > 20) {
-            return null;
-        }
-        
-        // 检查目录是否存在
-        if (!fs.existsSync(dir)) {
-            return null;
-        }
-        
-        const files = fs.readdirSync(dir);
-        
-        // 检查当前目录是否包含 exe 或 apk
-        for (const file of files) {
-            const filePath = path.join(dir, file);
-            
-            // 检查文件是否存在
-            if (!fs.existsSync(filePath)) {
-                continue;
-            }
-            
-            const ext = path.extname(file).toLowerCase();
-            const fileName = file.toLowerCase();
-            
-            if (ext === '.exe' || fileName.endsWith('.apk')) {
-                console.log(`    🎯 找到游戏文件: ${file}`);
-                return dir;
-            }
-        }
-        
-        // 递归查找子目录
-        for (const file of files) {
-            const filePath = path.join(dir, file);
-            
-            if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-                const result = await this.findGameRoot(filePath, gameInfo, depth + 1);
-                if (result) {
-                    return result;
-                }
-            }
-        }
-        
-        return null;
-    }
-
-    /**
-     * 复制游戏文件到整理目录
-     */
-    private async copyGameFiles(sourceDir: string, targetDir: string, gameInfo: GameInfo): Promise<void> {
+    private async moveGameFiles(sourceDir: string, targetDir: string, gameInfo: GameInfo): Promise<void> {
         const files = fs.readdirSync(sourceDir);
         
         for (const file of files) {
@@ -578,22 +803,22 @@ class GameOrganize {
             
             try {
                 if (fs.statSync(sourcePath).isDirectory()) {
-                    // 递归复制目录
-                    await this.copyDirectory(sourcePath, targetPath);
+                    // 递归移动目录
+                    await this.moveDirectory(sourcePath, targetPath);
                 } else {
-                    // 复制文件
-                    fs.copyFileSync(sourcePath, targetPath);
+                    // 移动文件
+                    fs.renameSync(sourcePath, targetPath);
                 }
             } catch (error) {
-                gameInfo.errors.push(`复制失败 ${file}: ${error.message}`);
+                gameInfo.errors.push(`移动失败 ${file}: ${error.message}`);
             }
         }
     }
 
     /**
-     * 递归复制目录
+     * 递归移动目录
      */
-    private async copyDirectory(sourceDir: string, targetDir: string): Promise<void> {
+    private async moveDirectory(sourceDir: string, targetDir: string): Promise<void> {
         if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true });
         }
@@ -605,10 +830,17 @@ class GameOrganize {
             const targetPath = path.join(targetDir, file);
             
             if (fs.statSync(sourcePath).isDirectory()) {
-                await this.copyDirectory(sourcePath, targetPath);
+                await this.moveDirectory(sourcePath, targetPath);
             } else {
-                fs.copyFileSync(sourcePath, targetPath);
+                fs.renameSync(sourcePath, targetPath);
             }
+        }
+        
+        // 移动完成后删除空目录
+        try {
+            fs.rmdirSync(sourceDir);
+        } catch (error) {
+            // 忽略删除失败
         }
     }
 
@@ -620,6 +852,13 @@ class GameOrganize {
         const archiver = (await import('archiver')).default;
         
         const zipPath = path.join(this.zipDir, `${gameInfo.name}.zip`);
+        const organizedGameDir = path.join(this.organizedDir, gameInfo.name);
+        
+        // 检查整理目录是否存在
+        if (!fs.existsSync(organizedGameDir)) {
+            console.log(`  ⚠️  整理目录不存在,跳过压缩`);
+            return;
+        }
         
         return new Promise((resolve, reject) => {
             const output = fs.createWriteStream(zipPath);
@@ -637,7 +876,7 @@ class GameOrganize {
             });
             
             archive.pipe(output);
-            archive.directory(gameInfo.organizedPath, gameInfo.name);
+            archive.directory(organizedGameDir, gameInfo.name);
             archive.finalize();
         });
     }
@@ -715,3 +954,4 @@ class GameOrganize {
 }
 
 export default GameOrganize;
+

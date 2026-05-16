@@ -11,7 +11,8 @@
     "test": "node ace test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "organize-games": "node --loader ts-node-maintained/esm app/services/run-organize.ts"
   },
   "imports": {
     "#controllers/*": "./app/controllers/*.js",
@@ -43,8 +44,11 @@
     "@japa/plugin-adonisjs": "^3.0.1",
     "@japa/runner": "^3.1.4",
     "@swc/core": "^1.7.22",
+    "@types/archiver": "^7.0.0",
     "@types/luxon": "^3.4.2",
     "@types/node": "^22.5.1",
+    "@types/node-7z": "^2.1.11",
+    "@types/unzipper": "^0.10.11",
     "eslint": "^9.9.1",
     "hot-hook": "^0.3.0",
     "pino-pretty": "^11.2.2",
@@ -62,11 +66,13 @@
     "axios": "^1.7.7",
     "better-sqlite3": "^11.3.0",
     "luxon": "^3.5.0",
+    "node-7z": "^3.0.0",
     "node-cron": "^3.0.3",
     "puppeteer": "^24.6.1",
     "puppeteer-core": "^24.6.1",
     "reflect-metadata": "^0.2.2",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "unzipper": "^0.12.3"
   },
   "hotHook": {
     "boundaries": [
