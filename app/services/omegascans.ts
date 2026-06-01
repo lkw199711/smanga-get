@@ -430,6 +430,13 @@ export default class OmegaScans {
         fs.copyFileSync(fullPath, targetFile)
       } else {
         // 是文件夹 压缩
+        const files = fs.readdirSync(fullPath)
+        if (files.length === 0) {
+          // 空文件夹，删除并跳过
+          fs.rmdirSync(fullPath)
+          write_log(`[compress] 章节 ${chapter} 为空，跳过压缩并删除空目录`)
+          continue
+        }
         const compressChapterName = path.join(this.mangaCompressPath, chapter + '.zip')
         if (fs.existsSync(compressChapterName)) continue
         await zip_directory(fullPath, compressChapterName)
