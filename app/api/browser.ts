@@ -54,6 +54,27 @@ class UseBrowser {
         }
     }
 
+    /**
+     * 获取代理启动参数
+     */
+    private get proxyArgs(): string[] {
+        const proxy = this.config.proxy
+        if (proxy?.enable && proxy.server) {
+            return [`--proxy-server=${proxy.server}`]
+        }
+        return []
+    }
+
+    /**
+     * 设置页面代理认证
+     */
+    protected async setProxyAuth(page: puppeteer.Page) {
+        const proxy = this.config.proxy
+        if (proxy?.enable && proxy.username) {
+            await page.authenticate({ username: proxy.username, password: proxy.password || '' })
+        }
+    }
+
     async init() {
         this.browser = await puppeteer.launch({
             headless: this.config.headless,
@@ -64,7 +85,7 @@ class UseBrowser {
                 '--disable-web-security',
                 ...(this.config.headless ? ['--disable-gpu', '--disable-software-rasterizer'] : []),
                 '--lang=zh-CN,zh', // 设置浏览器语言
-                '--proxy-server=http://192.168.5.2:7893',
+                ...this.proxyArgs,
                 '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
             ],
             defaultViewport: {
@@ -117,7 +138,7 @@ class UseBrowser {
         let navigator: any;
 
         // 代理认证
-        await page.authenticate({ username: 'Clash', password: 'ykt3thsw' });
+        await this.setProxyAuth(page);
 
         /**
          * 以下三段为浏览仿真
@@ -170,10 +191,10 @@ class UseBrowser {
 
 
 class UseToomicsBrowser extends UseBrowser {
-    private CACHE_ROOT: string = 'C:\\11manga\\toomics-cache';
+    private CACHE_ROOT: string = '';
     constructor() {
         super({ nouser: false, website: 'toomics' });
-        this.CACHE_ROOT = this.config.coverCache || this.CACHE_ROOT;
+        this.CACHE_ROOT = this.config.coverCache || this.config.cacheRoot || '';
     }
 
     async new_page() {
@@ -182,7 +203,7 @@ class UseToomicsBrowser extends UseBrowser {
         let navigator: any;
 
         // 代理认证
-        await page.authenticate({ username: 'Clash', password: 'ykt3thsw' });
+        await this.setProxyAuth(page);
 
         /**
          * 以下三段为浏览仿真

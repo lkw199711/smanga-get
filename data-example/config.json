@@ -1,5 +1,11 @@
 {
   "headless": 1,
+  "proxy": {
+    "server": "http://192.168.5.2:7893",
+    "username": "Clash",
+    "password": "ykt3thsw",
+    "enable": true
+  },
   "immediately": {
     "subscribeTask": 0,
     "toomicsUpdateSc": 0,
