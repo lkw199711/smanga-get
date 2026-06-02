@@ -4,14 +4,14 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 
-let liunxStr = get_os() === 'Linux' ? '/' : ''
 const dataDir = process.env.DATA_DIR
-if (dataDir) {
-  liunxStr = dataDir[dataDir.length - 1] === '/' ? dataDir : dataDir + '/'
-}
-const configFile = liunxStr + 'data/config.json'
-const failedChaptersFile = liunxStr + 'data/failed-chapters.json'
-const logFile = liunxStr + 'data/log.txt'
+export const dataRoot = dataDir
+  ? (dataDir.endsWith('/') ? dataDir : dataDir + '/')
+  : (get_os() === 'Linux' ? '/' : '')
+
+const configFile = dataRoot + 'data/config.json'
+const failedChaptersFile = dataRoot + 'data/failed-chapters.json'
+const logFile = dataRoot + 'data/log.txt'
 
 export function get_os() {
   const platform = os.platform()

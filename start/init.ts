@@ -6,7 +6,7 @@ const cron = require('node-cron');
 import { subscribe_read } from '#api/subsribe';
 import { bilibiliTask, mangaTask, omegascansTask, toomicsTask } from '#api/task';
 import { subsribeType } from '#type/index.js'
-import { get_config, set_config, get_os, write_json } from '#utils/index';
+import { get_config, set_config, dataRoot, write_json } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
@@ -20,8 +20,7 @@ let toomicsTcUpdateCron: any = { stop: () => { } }
 
 const crons = [subsribeCron, toomicsScAllCoversCron, toomicsTcAllCoversCron, toomicsScUpdateCron, toomicsTcUpdateCron];
 
-const linuxStr = get_os() === 'Linux' ? '/' : ''
-const dataPath = linuxStr + 'data/'
+const dataPath = dataRoot + 'data/'
 
 export function create_config() {
   if (!fs.existsSync(dataPath)) {

@@ -1,8 +1,7 @@
 import fs from 'fs'
-import { get_os } from '#utils/index'
+import { dataRoot } from '#utils/index'
 
-const linuxStr = get_os() === 'Linux' ? '/' : ''
-const subscribeFile = linuxStr + 'data/subscribe.json'
+const subscribeFile = dataRoot + 'data/subscribe.json'
 /**
  * 读取订阅文件
  * @description: 读取订阅文件
