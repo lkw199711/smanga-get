@@ -91,7 +91,8 @@ create_scan_cron();
 // process.exit(0)
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
 // console.log(get_all_file("A:\\02manga\\02压缩处理\\toomics"));
-
+  // console.log(immediately)
+  // process.exit()
 if (immediately.subscribeTask) {
   // 执行订阅
   task_allocation()
@@ -143,6 +144,19 @@ if (immediately.omegascansSyncCloud) {
   // 同步OmegaScans到云盘
   mangaTask.add({ website: 'sync-omegascans', id: 0, name: '' })
 }
+
+if (immediately.debugOmegascans) {
+  mangaTask.add({
+    website: 'omegascans',
+    id: 770,
+    name: 'Pure Perverted Love',
+    series_slug: 'pure-perverted-love',
+    chapterCount: 7,
+    url: `https://omegascans.org/comics/pure-perverted-love`,
+  })
+}
+  
+
 
 /*
 mangaTask.add({

@@ -164,6 +164,25 @@ class UseBrowser {
             });
         });
 
+        // 拦截广告和追踪请求，防止广告导致 networkidle2 超时
+        const AD_DOMAINS = [
+            'magsrv.com', 'pubadx.one', 'bkcdn.net', 'exoclick.com',
+            'wpncdn.com', 'juicyads.com', 'trafficjunky.com',
+            'doubleclick.net', 'googlesyndication.com', 'googletagmanager.com',
+            'googleadservices.com', 'google-analytics.com',
+        ];
+        await page.setRequestInterception(true);
+        page.on('request', (request) => {
+            const resourceType = request.resourceType();
+            const url = request.url();
+            if ((resourceType === 'script' || resourceType === 'ping') &&
+                AD_DOMAINS.some(domain => url.includes(domain))) {
+                request.abort().catch(() => {});
+            } else {
+                request.continue().catch(() => {});
+            }
+        });
+
         /**
          * * 监听图片加载事件，保存图片到内存
          * * 这里的图片是指漫画封面图，可能会有其他图片也会被保存

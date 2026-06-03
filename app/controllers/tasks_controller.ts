@@ -35,11 +35,11 @@ export default class TasksController {
             toomicsTask.remove(id)
         } else if (website === 'bilibili') {
             bilibiliTask.remove(id)
+        } else if (website === 'omegascans') {
+            omegascansTask.remove(id)
         } else {
-            return {
-                code: 400,
-                message: 'Invalid website',
-            }
+            // 主任务队列 mangaTask 处理所有类型
+            mangaTask.remove(id)
         }
 
         return {

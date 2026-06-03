@@ -62,9 +62,10 @@ export default class OmegaScans {
 
     if (!omegascansBrowser.browser) {
       await omegascansBrowser.init()
+      await omegascansBrowser.get_cookie()
     }
     if (!omegascansBrowser.browser) return
-    this.page = await omegascansBrowser.browser.newPage()
+    this.page = await omegascansBrowser.new_page()
 
     await this.get_meta()
 
@@ -161,7 +162,7 @@ export default class OmegaScans {
     const [res, error] = await this.page
       .goto(chapterUrl, {
         waitUntil: 'domcontentloaded',
-        timeout: 60 * 1000, // 设置超时时间为30秒
+        timeout: 60 * 1000,
       })
       .then((res: any) => [res, null])
       .catch((error: any) => [null, error])
@@ -179,30 +180,33 @@ export default class OmegaScans {
       write_log(`[chapter download]重试第 ${this.retry} 次`)
       await this.download_chapter(chapter) // 重试下载
       return
-    } else {
-      this.retry = 0 // 重置重试次数
     }
 
-    const imagesHtml = chapterHtml.match(/<div class=\"container\">.+<nav class/s)?.[0]
-    if (!imagesHtml) {
-      // console.log(chapterHtml);
-      // process.exit(0);
+    // page.goto 成功，不重置 retry（下面还有 HTML 匹配可能失败）
+    
+    // 提取章节图片：<img> 标签，src 指向 uploads 目录的 omegascans CDN 图片
+    const imageUrls = [
+      ...chapterHtml.matchAll(/<img[^>]+src="([^"]+\/uploads\/[^"]+)"/g)
+    ].map((m) => m[1])
+    
+    // 兼容旧格式：<link rel="preload" as="image">
+    if (imageUrls.length === 0) {
+      const preloadUrls = [
+        ...chapterHtml.matchAll(/<link[^>]*rel="preload"[^>]*as="image"[^>]*href="([^"]+)"[^>]*>/g)
+      ].map((m) => m[1])
+      imageUrls.push(...preloadUrls)
+    }
+
+    if (imageUrls.length === 0) {
+      write_log(`[chapter download]HTML结构不匹配 ${chapter.name}，前2000字符: ${String(chapterHtml).substring(0, 2000)}`)
       write_log(`[chapter download]章节页打开失败 ${chapter.name} from ${chapterUrl}`)
       this.retry++
       if (this.retry > 3) {
         this.retry = 0 // 重置重试次数
-        throw error // 重新抛出错误以便上层处理
+        throw new Error(`chapter download failed after ${this.retry} retries`)
       }
       write_log(`[chapter download]重试第 ${this.retry} 次`)
       await this.download_chapter(chapter) // 重试下载
-      return
-    }
-
-    const imageUrls = imagesHtml
-      .match(/<img[^>]+/gs)
-      ?.map((img: string) => img.match(/src="([^"]+)"/)?.[1])
-    if (!imageUrls || imageUrls.length === 0) {
-      console.error(`No images found for chapter ${chapter.name}`)
       return
     }
     for (let i = 0; i < imageUrls.length; i++) {
@@ -235,6 +239,7 @@ export default class OmegaScans {
       }
     }
 
+    this.retry = 0 // 成功，重置重试次数
     write_log(`[chapter download]漫画 ${this.name} ${chapter.name} 章节下载完成 `)
   }
 
@@ -242,6 +247,9 @@ export default class OmegaScans {
     let meta: any = {}
     const allManga = read_json('data/omegascans.json')
     const manga = allManga.find((item: any) => item.id === this.id)
+    if (!manga) {
+      throw new Error(`未在 omegascans.json 中找到 id=${this.id} 的漫画，请先运行 omegascans-update 任务更新数据`)
+    }
 
     meta.id = manga.id
     meta.title = manga.title
@@ -263,7 +271,7 @@ export default class OmegaScans {
     await this.page
       .goto(`https://omegascans.org/series/${manga.series_slug}`, {
         waitUntil: 'domcontentloaded',
-        timeout: 40 * 1000, // 设置超时时间为30秒
+        timeout: 40 * 1000,
       })
       .catch((error: any) => {
         write_log(`[manga meta]漫画页打开失败 ${manga.title}`)
@@ -419,7 +427,7 @@ export default class OmegaScans {
     // 复制元数据
     copy_folder(this.metaFolder, path.join(this.mangaCompressPath, '.smanga'))
     const chapters = fs.readdirSync(this.mangaPath);
-    const failedChapters = get_failed_chapters();
+    const failedChapters = get_failed_chapters() || [];
     for (const chapter of chapters) {
       const fullPath = path.join(this.mangaPath, chapter)
       if (chapter.startsWith('.')) continue

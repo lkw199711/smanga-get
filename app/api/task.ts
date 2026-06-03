@@ -229,6 +229,7 @@ class MangaTask extends Task {
         break;
       case 'omegascans':
         taskService = new Omegascans(task);
+        break;
       case 'gentleman':
         console.log('执行绅士漫画任务')
         taskService = new (await import('#services/gentleman')).default(task);
@@ -277,7 +278,7 @@ class MangaTask extends Task {
 
     await taskService.start()
       .catch((err) => {
-        write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
+        write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err?.message || err}`)
         if (this.taskErrors > 10) {
           write_log(`[Task] 任务重试超过10次,退出`)
           return;

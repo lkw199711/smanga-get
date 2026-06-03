@@ -1,4 +1,4 @@
-import { end_app, read_json, write_log, delay, make_can_be_floder, get_config } from "#utils/index";
+import { end_app, read_json, write_log, delay, make_can_be_floder, get_config, dataRoot } from "#utils/index";
 import { omegascansBrowser } from "#api/browser";
 import { mangaTask } from "#api/task";
 import fs, { writeFileSync } from "fs";
@@ -15,21 +15,22 @@ export default class OmegaScansUpdate {
   async start() {
     if (!omegascansBrowser.browser) {
       await omegascansBrowser.init();
+      await omegascansBrowser.get_cookie();
     }
     if (!omegascansBrowser.browser) return;
-    this.page = await omegascansBrowser.browser.newPage();
+    this.page = await omegascansBrowser.new_page();
 
     const res = await this.request_interface(`https://api.omegascans.org/query?series_type=Comic&perPage=9999&adult=true&order=desc&orderBy=latest&page=1`);
     const mangaList = res.data || [];
 
     if (mangaList && mangaList.length > 0) {
-      writeFileSync('data/omegascans.json', JSON.stringify(mangaList, null, 2), 'utf-8');
+      writeFileSync(`${dataRoot}data/omegascans.json`, JSON.stringify(mangaList, null, 2), 'utf-8');
     } else {
       write_log('[manga update]漫画列表获取失败');
       return;
     }
-    // console.log(res.data);
-    // process.exit();
+    // console.log(mangaList.length);
+    // process.exit(0)
     mangaList.filter((manga: any) => {
       if (manga.status === 'Dropped') return false; // 跳过已放弃的漫画
 
@@ -74,7 +75,7 @@ export default class OmegaScansUpdate {
   async request_interface(url: string) {
     await this.page_open(); // 确保页面已打开
     await this.page.goto(url, {
-      waitUntil: 'domcontentloaded',
+      waitUntil: 'networkidle2',
     }).catch((error: any) => {
       write_log(`[manga update]漫画列表获取失败`);
       throw error; // 重新抛出错误以便上层处理
