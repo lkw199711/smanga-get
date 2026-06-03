@@ -22,6 +22,7 @@
     "interval": "0 0 1,13 * * *"
   },
   "endAfterSetCookie": false,
+  "cacheRoot": "C:\\11manga\\toomics-cache",
   "gentleman": {
     "cookieFile": "./data/cookies/gentleman-cookies.json",
     "downloadPath": "A:\\05temp\\01软件\\manga-reptile\\download\\绅士漫画",
