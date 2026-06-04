@@ -80,7 +80,8 @@ export default class TasksController {
         const { type } = request.all() as { type?: TaskTriggerType }
 
         if (type === 'toomics') {
-            mangaTask.add({ website: 'toomics-covers-sc', id: 0, name: 'Toomics 简体订阅扫描' })
+            // 由于简体中文 大陆地区漫画停更 暂不执行sc任务
+            // mangaTask.add({ website: 'toomics-covers-sc', id: 0, name: 'Toomics 简体订阅扫描' })
             mangaTask.add({ website: 'toomics-covers-tc', id: 0, name: 'Toomics 繁体订阅扫描' })
 
             write_log('[task]Toomics 订阅任务已添加')
