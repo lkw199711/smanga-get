@@ -29,7 +29,7 @@ export default class OmegaScans {
   mangaCompressPath: string
   mangaPath: string
   config: any
-  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void; subProgress: (current: number, total: number) => void }
   constructor(params: any, onProgress?: any) {
     const config = get_config()?.omegascans || {}
     this.id = params.id || 0
@@ -220,6 +220,9 @@ export default class OmegaScans {
       const imageUrl = imageUrls[i]
       const imageName = `${i.toString().padStart(5, '0')}.jpg`
       const imagePath = `${chapterFolder}/${imageName}`
+
+      this.onProgress?.message(`正在下载章节: ${chapter.name} (${i + 1}/${imageUrls.length})`)
+      this.onProgress?.subProgress(i + 1, imageUrls.length)
 
       if (!fs.existsSync(imagePath)) {
         let [res, err] = await this.download_image(imageUrl, imagePath)

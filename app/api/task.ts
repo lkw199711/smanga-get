@@ -168,12 +168,18 @@ class Task {
         this.setProgress({
           stage: '下载中',
           message,
+          subCurrent: undefined,
+          subTotal: undefined,
         })
         update()
       },
       /** 仅更新消息，不推进计数 */
       message: (message: string) => {
         this.setProgress({ message })
+      },
+      /** 更新副进度（章节内图片下载进度） */
+      subProgress: (current: number, total: number) => {
+        this.setProgress({ subCurrent: current, subTotal: total })
       },
     }
   }

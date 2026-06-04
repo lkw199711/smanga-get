@@ -25,6 +25,8 @@ type taskProgressType = {
   message: string
   current?: number
   total?: number
+  subCurrent?: number
+  subTotal?: number
   updatedAt: string
 }
 
