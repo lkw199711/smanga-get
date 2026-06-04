@@ -11,6 +11,7 @@ type subsribeType = {
   status?: string
   chapterCount?: number
   nameMatch?: boolean
+  moveEndSubscribe?: boolean
 }
 
 type commandType = {

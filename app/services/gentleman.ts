@@ -36,7 +36,12 @@ export default class Gentleman {
   private textPrefix: string = '' // 添加textPrefix属性
   private mangaStatus: string = '' // 添加mangaStatus属性
   private params: any
-  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+  private onProgress?: {
+    setTotal: (n: number) => void
+    report: (msg: string) => void
+    message: (msg: string) => void
+    subProgress?: (current: number, total: number) => void
+  }
   constructor(params: subsribeType, onProgress?: any) {
     const config = get_config(this.website) || {}
     this.params = params
@@ -388,9 +393,14 @@ export default class Gentleman {
     if (!fs.existsSync(chapterPath)) {
       fs.mkdirSync(chapterPath, { recursive: true })
     }
-    for (const img of item.images) {
+    for (let i = 0; i < item.images.length; i++) {
+      const img = item.images[i]
       const fileName = img.split('/').pop() || ''
       const filePath = path.join(chapterPath, fileName)
+
+      this.onProgress?.message(`正在下载章节: ${item.name} (${i + 1}/${item.images.length})`)
+      this.onProgress?.subProgress?.(i + 1, item.images.length)
+
       await this.donwload_image(img, filePath)
     }
     // 暂时为空实现，需要根据实际情况修改

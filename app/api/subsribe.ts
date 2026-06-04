@@ -1,7 +1,45 @@
 import fs from 'fs'
+import type { subsribeType } from '#type/index.js'
 import { dataRoot } from '#utils/index'
 
 const subscribeFile = dataRoot + 'data/subscribe.json'
+
+function getSubscribeIdentity(subscribe: Partial<subsribeType>) {
+    return [
+        subscribe.website ?? '',
+        subscribe.id ?? '',
+        subscribe.name ?? '',
+        subscribe.url ?? '',
+    ].join('\u0000')
+}
+
+function reorderSubscribe(current: subsribeType[], ordered: subsribeType[]) {
+    const buckets = new Map<string, subsribeType[]>()
+
+    current.forEach((item) => {
+        const key = getSubscribeIdentity(item)
+        buckets.set(key, [...(buckets.get(key) ?? []), item])
+    })
+
+    const next: subsribeType[] = []
+
+    ordered.forEach((item) => {
+        const key = getSubscribeIdentity(item)
+        const bucket = buckets.get(key)
+        const matched = bucket?.shift()
+
+        if (matched) {
+            next.push(matched)
+        }
+    })
+
+    buckets.forEach((items) => {
+        next.push(...items)
+    })
+
+    return next
+}
+
 /**
  * 读取订阅文件
  * @description: 读取订阅文件
@@ -34,6 +72,15 @@ export function subscribe_add(params: any) {
     const subscribe = subscribe_read()
     subscribe.push( params )
     subscribe_write(subscribe)
+}
+
+export function subscribe_reorder(ordered: subsribeType[]) {
+    const subscribe = subscribe_read()
+    const nextSubscribe = reorderSubscribe(subscribe, ordered)
+
+    subscribe_write(nextSubscribe)
+
+    return nextSubscribe
 }
 
 /**

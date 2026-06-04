@@ -21,11 +21,14 @@ router.get('/', async () => {
 
 router.post('/task', [TaskController, 'add'])
 router.get('/task', [TaskController, 'get'])
+router.post('/task/trigger', [TaskController, 'trigger'])
+router.put('/task/reorder', [TaskController, 'reorder'])
 router.delete('/task', [TaskController, 'remove'])
 router.delete('/task/clear', [TaskController, 'clear'])
 
 router.post('/subscribe', [SubscribeController, 'add'])
 router.get('/subscribe', [SubscribeController, 'get'])
+router.put('/subscribe/reorder', [SubscribeController, 'reorder'])
 router.delete('/subscribe', [SubscribeController, 'remove'])
 router.delete('/subscribe/clear', [SubscribeController, 'clear'])
 

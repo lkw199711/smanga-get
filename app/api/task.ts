@@ -3,6 +3,43 @@ import fs from 'fs'
 import { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser } from '#api/browser';
 
 const taskFile = process.cwd() + '/task.json'
+
+function getTaskIdentity(task: Partial<taskType>) {
+  return [
+    task.website ?? '',
+    task.id ?? '',
+    task.name ?? '',
+    task.url ?? '',
+  ].join('\u0000')
+}
+
+function reorderTasks(current: taskType[], ordered: taskType[]) {
+  const buckets = new Map<string, taskType[]>()
+
+  current.forEach((item) => {
+    const key = getTaskIdentity(item)
+    buckets.set(key, [...(buckets.get(key) ?? []), item])
+  })
+
+  const next: taskType[] = []
+
+  ordered.forEach((item) => {
+    const key = getTaskIdentity(item)
+    const bucket = buckets.get(key)
+    const matched = bucket?.shift()
+
+    if (matched) {
+      next.push(matched)
+    }
+  })
+
+  buckets.forEach((items) => {
+    next.push(...items)
+  })
+
+  return next
+}
+
 /**
  * 读取订阅文件
  * @description: 读取订阅文件
@@ -243,6 +280,12 @@ class Task {
       this.tasks.splice(index, 1)
       task_write(this.tasks)
     }
+  }
+
+  reorder(tasks: taskType[]) {
+    this.tasks = reorderTasks(this.tasks, tasks)
+
+    return this.tasks
   }
 
   clear() {

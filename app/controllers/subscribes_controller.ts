@@ -1,7 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { bilibiliTask, toomicsTask, mangaTask } from '#api/task'
 import { write_log } from '#utils/index'
-import { subscribe_add, subscribe_remove, subscribe_clear, subscribe_read } from '#api/subsribe'
+import { subscribe_add, subscribe_remove, subscribe_clear, subscribe_read, subscribe_reorder } from '#api/subsribe'
 
 export default class SubscribesController {
     get() {
@@ -64,8 +64,27 @@ export default class SubscribesController {
         }
     }
 
+    reorder({ request }: HttpContext) {
+        const { subscribes } = request.all()
+
+        if (!Array.isArray(subscribes)) {
+            return {
+                code: 400,
+                message: '订阅排序参数无效',
+            }
+        }
+
+        const nextSubscribes = subscribe_reorder(subscribes)
+
+        return {
+            code: 200,
+            message: '订阅顺序已更新',
+            subscribes: nextSubscribes,
+        }
+    }
+
     remove({ request }: HttpContext) {
-        const { website, id, mangaUrl, moveEndSubscribe, name } = request.all()
+        const { website, id, name } = request.all()
 
         if (!website || !id) {
             return {
@@ -97,7 +116,7 @@ export default class SubscribesController {
         }
     }
 
-    clear({ request }: HttpContext) {
+    clear() {
         subscribe_clear();
 
         return {
