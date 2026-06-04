@@ -87,7 +87,7 @@ export function subscribe_reorder(ordered: subsribeType[]) {
  * 移除订阅
  * @param param0 
  */
-export function subscribe_remove({ website, id, name }: { website: string, id: number, name: string }) {
+export function subscribe_remove({ website, id, name }: { website: string, id: number | string, name?: string }) {
     const subscribe = subscribe_read()
     let index = -1
     if (website === 'gentleman') {

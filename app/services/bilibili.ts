@@ -40,7 +40,7 @@ export default class Bilibili {
     private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
     constructor(params: subsribeType, onProgress?: any) {
         const config = get_config().bilibili
-        this.mangaId = params.id
+        this.mangaId = Number(params.id)
         this.mangaName = params.name
         this.downloadLockedMeta = config.downloadLockedMeta
         this.cookieFile = config?.cookieFile

@@ -13,7 +13,7 @@ export class Bilibili {
   private useMoblie: boolean = false
   constructor(params: subsribeType) {
     this.website = params.website
-    this.mangaId = params.id
+    this.mangaId = Number(params.id)
     this.mangaName = params.name
     this.downloadLockedMeta = false
   }

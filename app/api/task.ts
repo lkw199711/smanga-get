@@ -1,10 +1,50 @@
 import type { subsribeType, taskProgressType, runningTaskType, taskType } from '#type/index.js';
 import fs from 'fs'
 import { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser } from '#api/browser';
+import { randomUUID } from 'node:crypto'
 
 const taskFile = process.cwd() + '/task.json'
+type TaskIdentifier = number | string
+
+const noMangaIdWebsites = new Set([
+  'toomics-covers-sc',
+  'toomics-covers-tc',
+  'omegascans-update',
+  'toomics-update-sc',
+  'toomics-update-tc',
+  'toomics-compress-sc',
+  'toomics-compress-tc',
+  'omegascans-compress',
+  'bilibili-compress',
+  'sync-toomics-sc',
+  'sync-toomics-tc',
+  'sync-omegascans',
+])
+
+function taskHasRealMangaId(task: Partial<taskType>) {
+  if (noMangaIdWebsites.has(task.website ?? '')) return false
+  if (task.website === 'gentleman' && String(task.id) === '1') return false
+  if (task.id === null || task.id === undefined || task.id === '') return false
+  if (typeof task.id === 'number' && (!Number.isFinite(task.id) || task.id <= 0)) return false
+  if (typeof task.id === 'string' && !task.id.trim()) return false
+
+  return true
+}
+
+function ensureTaskIdentity(task: taskType): taskType {
+  const taskId = task.taskId || randomUUID()
+  const nextTask = { ...task, taskId }
+
+  if (!taskHasRealMangaId(nextTask)) {
+    nextTask.id = taskId
+  }
+
+  return nextTask
+}
 
 function getTaskIdentity(task: Partial<taskType>) {
+  if (task.taskId) return task.taskId
+
   return [
     task.website ?? '',
     task.id ?? '',
@@ -64,12 +104,12 @@ export function task_write(json: any) {
  * 新增订阅
  * @param param0
  */
-export function task_add({ tasks, website, id, name }: { tasks: subsribeType[], website: string, name: string, id: number }) {
+export function task_add({ tasks, website, id, name }: { tasks: subsribeType[], website: string, name: string, id: TaskIdentifier }) {
   const task = task_read()
   if (tasks) {
-    task.push(...tasks)
+    task.push(...tasks.map((item) => ensureTaskIdentity(item)))
   } else {
-    task.push({ website, id, name })
+    task.push(ensureTaskIdentity({ website, id, name }))
   }
 
   task_write(task)
@@ -79,9 +119,15 @@ export function task_add({ tasks, website, id, name }: { tasks: subsribeType[], 
  * 移除订阅
  * @param param0
  */
-export function task_remove({ website, id }: { website: string, id: number }) {
+export function task_remove({ website, id, name, taskId }: { website: string, id: TaskIdentifier, name?: string, taskId?: string }) {
   const task = task_read()
-  const index = task.findIndex((item: any) => item.website === website && item.id === id)
+  const index = task.findIndex((item: any) => {
+    if (taskId) return item.taskId === taskId
+
+    return item.website === website
+      && item.id === id
+      && (!name || item.name === name)
+  })
   if (index !== -1) {
     task.splice(index, 1)
     task_write(task)
@@ -270,12 +316,23 @@ class Task {
   }
 
   add(task: taskType) {
-    this.tasks.push(task)
+    this.tasks.push(ensureTaskIdentity(task))
     this.run()
   }
 
-  remove(mangaId: number) {
-    const index = this.tasks.findIndex((item) => item.id === mangaId)
+  remove(target: Partial<taskType> | TaskIdentifier) {
+    const taskId = typeof target === 'object' ? target.taskId : undefined
+    const mangaId = typeof target === 'object' ? target.id : target
+    const website = typeof target === 'object' ? target.website : undefined
+    const name = typeof target === 'object' ? target.name : undefined
+
+    const index = this.tasks.findIndex((item) => {
+      if (taskId) return item.taskId === taskId
+
+      return item.id === mangaId
+        && (!website || item.website === website)
+        && (!name || item.name === name)
+    })
     if (index !== -1) {
       this.tasks.splice(index, 1)
       task_write(this.tasks)

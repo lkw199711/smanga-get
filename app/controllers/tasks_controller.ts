@@ -131,17 +131,17 @@ export default class TasksController {
     }
 
     remove({ request }: HttpContext) {
-        const { website, id } = request.all()
+        const { website, id, name, taskId } = request.all()
+        const target = { website, id, name, taskId }
 
         if (website === 'toomics') {
-            toomicsTask.remove(id)
+            toomicsTask.remove(target)
         } else if (website === 'bilibili') {
-            bilibiliTask.remove(id)
+            bilibiliTask.remove(target)
         } else if (website === 'omegascans') {
-            omegascansTask.remove(id)
+            omegascansTask.remove(target)
         } else {
-            // 主任务队列 mangaTask 处理所有类型
-            mangaTask.remove(id)
+            mangaTask.remove(target)
         }
 
         return {

@@ -17,7 +17,7 @@ type chapterType = {
 export default class Gentleman {
   private domain = 'https://www.wnacg.ru'
   private website: string = 'gentleman'
-  private mangaId: number
+  private mangaId: number | string
   private mangaName: string
   private mangaUrl: string = ''
   private downloadPath: string
@@ -49,7 +49,7 @@ export default class Gentleman {
     this.organizePath = config?.organizePath || ''
     this.compressPath = config?.compressPath || ''
     this.config = config
-    this.mangaId = Number(params.id)
+    this.mangaId = params.id
     this.mangaName = this.make_can_be_floder(params.name)
     // 替换域名
     this.mangaUrl = params.url?.replace(/https?:\/\/[^/]+/, this.domain) || ''
@@ -114,7 +114,7 @@ export default class Gentleman {
     console.log(this.mangaName + ' 订阅完毕')
     // 移除完结的订阅
     if (this.mangaStatus === 'finished') {
-      subscribe_remove({ website: this.website, id: this.mangaId })
+      subscribe_remove({ website: this.website, id: this.mangaId, name: this.params.name })
       write_log(`[subscribe]${this.mangaName} 已移除订阅链接`)
     }
 

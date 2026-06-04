@@ -1,6 +1,7 @@
 type subsribeType = {
   website: string
-  id: number
+  id: number | string
+  taskId?: string
   name: string
   adult?: boolean
   finished?: boolean
