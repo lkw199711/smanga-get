@@ -31,3 +31,7 @@ router.delete('/subscribe/clear', [SubscribeController, 'clear'])
 
 router.get('/log', [LogController, 'get'])
 router.delete('/log', [LogController, 'clear'])
+
+router.get('/config', [ConfigController, 'get'])
+router.put('/config', [ConfigController, 'update'])
+router.patch('/config', [ConfigController, 'patch'])

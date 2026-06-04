@@ -55,10 +55,10 @@ import RemoveDuplicates from '#services/remove-duplicates'
 import { delay, get_config } from '#utils/index'
 import { mangaTask } from '#api/task'
 
-const immediately = get_config().immediately ?? {}
-
-// 创建配置文件
+// 先创建配置目录和默认配置文件，防止首次启动空指针
 create_config()
+
+const immediately = get_config()?.immediately ?? {}
 
 // 检查小压缩包
 // check_small_zip('C:\\12manga-compress')

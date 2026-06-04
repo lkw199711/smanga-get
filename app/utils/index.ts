@@ -109,10 +109,44 @@ export function get_config(website: string = '') {
 }
 
 /**
+ * 深合并对象，用于局部更新配置时保持嵌套结构
+ */
+export function deep_merge(target: any, source: any): any {
+  if (source === null || source === undefined) return target
+  if (target === null || target === undefined) return source
+
+  if (Array.isArray(source)) {
+    return source
+  }
+
+  if (typeof source !== 'object' || typeof target !== 'object') {
+    return source
+  }
+
+  const result = { ...target }
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deep_merge(target[key] || {}, source[key])
+    } else {
+      result[key] = source[key]
+    }
+  }
+  return result
+}
+
+/**
+ * 获取配置文件路径，用于返回元信息
+ */
+export function get_config_path(): string {
+  return configFile
+}
+
+/**
  *
  * @param config 配置文件内容
  */
 export function set_config(config: any) {
+  ensure_data_dir()
   if (!fs.existsSync(configFile)) {
     fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf-8')
   } else {
@@ -120,6 +154,39 @@ export function set_config(config: any) {
     const oldConfig = JSON.parse(configStr)
     const newConfig = { ...oldConfig, ...config }
     fs.writeFileSync(configFile, JSON.stringify(newConfig, null, 2), 'utf-8')
+  }
+}
+
+/**
+ * 深合并更新配置，用于 PATCH 局部保存，不会破坏嵌套结构
+ */
+export function patch_config(partial: any) {
+  ensure_data_dir()
+  if (!fs.existsSync(configFile)) {
+    fs.writeFileSync(configFile, JSON.stringify(partial, null, 2), 'utf-8')
+    return
+  }
+  const configStr = fs.readFileSync(configFile, 'utf-8')
+  const oldConfig = JSON.parse(configStr)
+  const newConfig = deep_merge(oldConfig, partial)
+  fs.writeFileSync(configFile, JSON.stringify(newConfig, null, 2), 'utf-8')
+}
+
+/**
+ * 完整替换配置文件
+ */
+export function replace_config(config: any) {
+  ensure_data_dir()
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf-8')
+}
+
+/**
+ * 确保 data 目录存在
+ */
+function ensure_data_dir() {
+  const dir = path.dirname(configFile)
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
   }
 }
 
