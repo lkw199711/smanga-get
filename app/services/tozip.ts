@@ -11,7 +11,8 @@ class ToZip {
   mangaFloder: string = ''
   outFloder: string = ''
   deleteSource: boolean = false
-  constructor(website: string, deleteSource: boolean = false) {
+  private onProgress?: any
+  constructor(website: string, deleteSource: boolean = false, onProgress?: any) {
     const websiteConfig = get_config(website)
     if (!websiteConfig) {
       console.log('未配置网站', website)

@@ -29,7 +29,8 @@ export default class OmegaScans {
   mangaCompressPath: string
   mangaPath: string
   config: any
-  constructor(params: any) {
+  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+  constructor(params: any, onProgress?: any) {
     const config = get_config()?.omegascans || {}
     this.id = params.id || 0
     this.name = params.name || 'OmegaScans'
@@ -45,6 +46,7 @@ export default class OmegaScans {
     this.metaFolder = `${this.downloadPath}/${this.name}/.smanga`
     this.mangaPath = `${this.downloadPath}/${this.name}`
     this.mangaCompressPath = `${this.compressPath}/${this.name}`
+    if (onProgress) this.onProgress = onProgress
   }
 
   async start() {
@@ -69,6 +71,9 @@ export default class OmegaScans {
 
     await this.get_meta()
 
+    const validChapters = this.meta.chapters.filter((c: any) => c.price <= 0)
+    this.onProgress?.setTotal(validChapters.length)
+
     for (let i = 0; i < this.meta.chapters.length; i++) {
       const chapter = this.meta.chapters[i]
       if (chapter.price > 0) {
@@ -78,7 +83,9 @@ export default class OmegaScans {
         continue
       }
       end_app() // 结束应用
+      this.onProgress?.message(`正在下载章节: ${chapter.name}`)
       await this.download_chapter(chapter)
+      this.onProgress?.report(`${chapter.name} 下载完成`)
       omegascansBrowser.clear_buffs() // 清除浏览器缓存
     }
 

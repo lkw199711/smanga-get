@@ -49,7 +49,9 @@ export default class Toomics {
   private failedChapters: any[] = []
   private mangaPath: string = ''
   private mangaCompressPath: string = ''
-  constructor(params: subsribeType) {
+  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+
+  constructor(params: subsribeType, onProgress?: any) {
     if (params?.url && /tc/.test(params.url)) {
       this.langTag = 'tc'
       this.website = 'toomics-tc'
@@ -81,6 +83,7 @@ export default class Toomics {
     if (params.langTag) this.langTag = params.langTag
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
     this.params = params
+    if (onProgress) this.onProgress = onProgress
   }
 
   /**
@@ -106,6 +109,7 @@ export default class Toomics {
 
     // 获取元数据
     await this.get_meta()
+    this.onProgress?.message('元数据获取完成，准备下载章节')
 
     let chapters = []
     for (let chapter of this.chapters) {
@@ -145,6 +149,8 @@ export default class Toomics {
     if (pretendNum > 0) pretendDownload = chaptersToNotDownload.slice(-pretendNum)
 
     if (chaptersToDownload.length > 0) {
+      this.onProgress?.setTotal(chaptersToDownload.length)
+
       // 假装下载章节
       for (let chapter of pretendDownload) {
         await this.download_chapter(chapter)
@@ -667,6 +673,7 @@ export default class Toomics {
 
     // 开始下载章节
     console.log('正在下载章节:', chapterName)
+    this.onProgress?.message(`正在下载章节: ${chapterName}`)
 
     await this.chapterPage
       .goto(url + '/viewer/S', {
@@ -732,6 +739,7 @@ export default class Toomics {
        */
       await this.chapterPage.close()
       write_log(`[chapter download]${chapterName} 下载已禁用,跳过`)
+      this.onProgress?.report(`${chapterName} 已跳过`)
       return
     }
 
@@ -743,6 +751,7 @@ export default class Toomics {
     })
 
     // 数量正确 进行下载
+    this.onProgress?.message(`正在保存 ${chapterName} 图片 (共 ${imageUrls.length} 张)`)
     for (let i = 0; i < imageUrls.length; i++) {
       const imageUrl = imageUrls[i]
       const picName = i.toString().padStart(5, '0')
@@ -818,6 +827,7 @@ export default class Toomics {
       })
     } else {
       write_log(`[chapter download]${chapterName} 下载完成.`)
+      this.onProgress?.report(`${chapterName} 下载完成`)
     }
 
     await delay(1000)

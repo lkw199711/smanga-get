@@ -36,7 +36,8 @@ export default class Gentleman {
   private textPrefix: string = '' // 添加textPrefix属性
   private mangaStatus: string = '' // 添加mangaStatus属性
   private params: any
-  constructor(params: subsribeType) {
+  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+  constructor(params: subsribeType, onProgress?: any) {
     const config = get_config(this.website) || {}
     this.params = params
     this.downloadPath = config?.downloadPath || ''
@@ -55,6 +56,7 @@ export default class Gentleman {
     this.organizeMetaPath = path.join(this.organizePath, this.mangaName, '.smanga')
 
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
+    if (onProgress) this.onProgress = onProgress
   }
 
   /**
@@ -75,15 +77,20 @@ export default class Gentleman {
 
     await this.get_chapters()
 
-    for (const item of this.chapters) {
+    // 过滤需要下载的章节（跳过已存在的）
+    const newChapters = this.chapters.filter((item) => {
       const chapterPath = path.join(this.mangaPath, item.name)
-      if (fs.existsSync(chapterPath) && fs.readdirSync(chapterPath).length > 0) {
-        continue
-      }
+      return !(fs.existsSync(chapterPath) && fs.readdirSync(chapterPath).length > 0)
+    })
+    this.onProgress?.setTotal(newChapters.length)
+
+    for (const item of newChapters) {
 
       write_log(`[chapter]${item.name} 正在下载`)
+      this.onProgress?.message(`正在下载章节: ${item.name}`)
       await this.get_chapter_images(item)
       await this.download_chapter_images(item)
+      this.onProgress?.report(`${item.name} 下载完成`)
 
       if (item.name.includes('完結')) {
         this.mangaStatus = 'finished'

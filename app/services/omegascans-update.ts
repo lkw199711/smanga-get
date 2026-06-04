@@ -6,8 +6,9 @@ import fs, { writeFileSync } from "fs";
 export default class OmegaScansUpdate {
   page: any; // Puppeteer 页面对象
   downloadPath: string; // 下载路径
+  private onProgress?: any
 
-  constructor(params: any) {
+  constructor(params: any, onProgress?: any) {
     const config = get_config('omegascans') || {}
     this.downloadPath = config.downloadPath
   }

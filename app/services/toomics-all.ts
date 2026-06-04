@@ -10,7 +10,8 @@ export default class ToomicsAll {
   private scrollStep: number = 400 // 滚动的步长
   private scrollDelay: number = 500 // 滚动的延迟时间
   public browser: any
-  constructor(langTag = 'sc', nouser = false) {
+  private onProgress?: any
+  constructor(langTag = 'sc', nouser = false, onProgress?: any) {
     this.langTag = langTag || 'sc'; // 默认为简体中文
     const config = get_config().toomics;
     if (config.scrollStep) this.scrollStep = config.scrollStep;

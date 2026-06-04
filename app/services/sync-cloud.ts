@@ -9,7 +9,8 @@ class SyncCloud {
   deleteSource: boolean = false
   latestSyncCloud: number = 0
   website: string = ''
-  constructor(website = '', outPutMetaFloderType = '.', deleteSource = false) {
+  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+  constructor(website = '', outPutMetaFloderType = '.', deleteSource = false, onProgress?: any) {
     const config = get_config(website)
     if (!config) {
       console.log('未配置网站', website)
@@ -21,11 +22,16 @@ class SyncCloud {
     this.deleteSource = deleteSource
     this.latestSyncCloud = config.latestSyncCloud
     this.website = website
+    if (onProgress) this.onProgress = onProgress
     console.log(this.mangaFloder, this.outFloder, '最新同步时间', this.latestSyncCloud)
   }
 
   async start() {
     const items = fs.readdirSync(this.mangaFloder)
+    // 过滤出需要处理的项
+    const validItems = items.filter((item) => !/zip/.test(item) && !/smanga-info/.test(item))
+    this.onProgress?.setTotal(validItems.length)
+
     for (let i = 0; i < items.length; i++) {
       const fileName = items[i]
       const filePath = path.join(this.mangaFloder, fileName)
@@ -36,6 +42,7 @@ class SyncCloud {
         continue
       } else if (/smanga-info/.test(fileName)) {
       } else {
+        this.onProgress?.message(`正在同步: ${fileName}`)
         if (!fs.existsSync(outMangaPath)) {
           fs.mkdirSync(outMangaPath, { recursive: true })
         }
@@ -76,6 +83,7 @@ class SyncCloud {
         update_sync_cloud_time(this.website)
 
         console.log('压缩完成', fileName)
+        this.onProgress?.report(`${fileName} 同步完成`)
         end_app()
       }
     }

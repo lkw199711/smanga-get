@@ -6,7 +6,8 @@ export default class ToomicsDayUpdate {
     private url = 'https://toomics.com/sc/webtoon/ongoing_all'
     private updateOnlyDay: boolean;
     watting: boolean = false
-    constructor(langTag?: string) {
+    private onProgress?: any
+    constructor(langTag?: string, onProgress?: any) {
         this.langTag = langTag || 'sc'; // 默认为简体中文
         this.url = `https://toomics.com/${langTag}/webtoon/ongoing_all`
         const config = get_config()?.toomics || {}

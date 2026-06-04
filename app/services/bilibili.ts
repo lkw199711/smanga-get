@@ -37,7 +37,8 @@ export default class Bilibili {
     private cookieFile: string
     private scrollStep: number
     private scrollDelay: number
-    constructor(params: subsribeType) {
+    private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+    constructor(params: subsribeType, onProgress?: any) {
         const config = get_config().bilibili
         this.mangaId = params.id
         this.mangaName = params.name
@@ -46,6 +47,7 @@ export default class Bilibili {
         this.scrollStep = config?.scrollStep || 1000
         this.scrollDelay = config?.scrollDelay || 500
         this.downloadPath = path.join(config?.downloadPath || '', this.website);
+        if (onProgress) this.onProgress = onProgress
     }
 
     /**
@@ -137,6 +139,8 @@ export default class Bilibili {
         }
 
         // 下载章节
+        const chaptersToDownload = this.chapters.filter((c: chapterType) => !c.isLocked)
+        this.onProgress?.setTotal(chaptersToDownload.length)
         for (let i = 0; i < this.chapters.length; i++) {
             const chapter = this.chapters[i]
             const chapterName = make_can_be_floder(chapter.title)
@@ -168,9 +172,13 @@ export default class Bilibili {
 
             // 下载章节
             if (this.meta.isPaginated) {
+                this.onProgress?.message(`正在下载章节: ${chapter.title}`)
                 await this.download_chapter_paged(chapter, chapterFolder)
+                this.onProgress?.report(`${chapter.title} 下载完成`)
             } else {
+                this.onProgress?.message(`正在下载章节: ${chapter.title}`)
                 await this.download_chapter(chapter, chapterFolder)
+                this.onProgress?.report(`${chapter.title} 下载完成`)
             }
         }
 
