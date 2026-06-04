@@ -1,4 +1,4 @@
-import { subsribeType, taskType } from '#type/index.js';
+import type { subsribeType, taskProgressType, runningTaskType, taskType } from '#type/index.js';
 import fs from 'fs'
 import { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser } from '#api/browser';
 
@@ -61,6 +61,7 @@ export async function close_all_browsers() {
 class Task {
   tasks: taskType[] = []
   running: boolean | number = false
+  protected runningTask: runningTaskType | null = null
 
   constructor(tasks: taskType[]) {
     this.tasks = tasks
@@ -70,6 +71,83 @@ class Task {
 
   get() {
     return this.tasks
+  }
+
+  getRunning() {
+    return this.runningTask
+  }
+
+  protected startCurrentTask(task: taskType, stage = '准备执行') {
+    const now = new Date().toISOString()
+    this.runningTask = {
+      status: 'running',
+      task,
+      progress: {
+        percent: 0,
+        stage,
+        message: `${task.website} ${task.name || task.id} 任务开始执行`,
+        updatedAt: now,
+      },
+      startedAt: now,
+      updatedAt: now,
+    }
+  }
+
+  protected setProgress(progress: Partial<Omit<taskProgressType, 'updatedAt'>>) {
+    if (!this.runningTask) return
+
+    const now = new Date().toISOString()
+    this.runningTask = {
+      ...this.runningTask,
+      progress: {
+        ...this.runningTask.progress,
+        ...progress,
+        percent: Math.max(0, Math.min(progress.percent ?? this.runningTask.progress.percent, 100)),
+        updatedAt: now,
+      },
+      updatedAt: now,
+    }
+  }
+
+  protected finishCurrentTask(message = '任务执行完成') {
+    if (!this.runningTask) return
+
+    const now = new Date().toISOString()
+    this.runningTask = {
+      ...this.runningTask,
+      status: 'success',
+      progress: {
+        ...this.runningTask.progress,
+        percent: 100,
+        stage: '执行完成',
+        message,
+        updatedAt: now,
+      },
+      updatedAt: now,
+    }
+  }
+
+  protected failCurrentTask(error: unknown) {
+    if (!this.runningTask) return
+
+    const message = error instanceof Error ? error.message : String(error)
+    const now = new Date().toISOString()
+    this.runningTask = {
+      ...this.runningTask,
+      status: 'failed',
+      error: message,
+      progress: {
+        ...this.runningTask.progress,
+        stage: '执行失败',
+        message,
+        updatedAt: now,
+      },
+      updatedAt: now,
+    }
+  }
+
+  protected clearCurrentTask() {
+    this.runningTask = null
   }
 
   add(task: taskType) {
@@ -105,7 +183,10 @@ class BilibiliTask extends Task {
   }
 
   async run() {
-    if (this.tasks.length === 0) return;
+    if (this.tasks.length === 0) {
+      this.clearCurrentTask()
+      return;
+    }
     if (this.running) return;
 
     this.running = true
@@ -113,16 +194,25 @@ class BilibiliTask extends Task {
 
     if (!task) {
       this.running = false
+      this.clearCurrentTask()
       return
     }
 
+    this.startCurrentTask(task, '执行 Bilibili 任务')
     const bilibili = new Bilibili(task)
+    let taskFailed = false
 
     await bilibili.start()
       .catch((err) => {
+        taskFailed = true
+        this.failCurrentTask(err)
         bilibili.browser?.close()
         write_log(`[Bilibili] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
       })
+
+    if (!taskFailed) {
+      this.finishCurrentTask('Bilibili 任务执行完成')
+    }
 
     this.running = false
 
@@ -136,7 +226,10 @@ class ToomicsTask extends Task {
   }
 
   async run() {
-    if (this.tasks.length === 0) return;
+    if (this.tasks.length === 0) {
+      this.clearCurrentTask()
+      return;
+    }
     if (this.running) return;
 
     this.running = true
@@ -144,16 +237,25 @@ class ToomicsTask extends Task {
 
     if (!task) {
       this.running = false
+      this.clearCurrentTask()
       return
     }
 
+    this.startCurrentTask(task, '执行 Toomics 任务')
     const toomics = new Toomics(task)
+    let taskFailed = false
     await toomics.start()
       .catch((err) => {
+        taskFailed = true
+        this.failCurrentTask(err)
         write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
         // 任务放到末尾再次执行
         this.tasks.push(task)
       })
+
+    if (!taskFailed) {
+      this.finishCurrentTask('Toomics 任务执行完成')
+    }
 
     this.running = false
 
@@ -169,7 +271,10 @@ class OmegascansTask extends Task {
   }
 
   async run() {
-    if (this.tasks.length === 0) return;
+    if (this.tasks.length === 0) {
+      if (this.running === 0) this.clearCurrentTask()
+      return;
+    }
     if (this.running >= this.concurrency) {
       return;
     }
@@ -179,16 +284,25 @@ class OmegascansTask extends Task {
 
     if (!task) {
       this.running--
+      this.clearCurrentTask()
       return
     }
 
+    this.startCurrentTask(task, '执行 OmegaScans 任务')
     const omegascans = new Omegascans(task)
+    let taskFailed = false
     await omegascans.start()
       .catch((err) => {
+        taskFailed = true
+        this.failCurrentTask(err)
         write_log(`[Omegascans] ${task?.id} ${task.name} 任务执行失败: ${err?.message}`)
         // 任务放到末尾再次执行
         this.tasks.push(task)
       })
+
+    if (!taskFailed) {
+      this.finishCurrentTask('OmegaScans 任务执行完成')
+    }
 
     this.running--;
 
@@ -215,10 +329,12 @@ class MangaTask extends Task {
       write_log('[MangaTask] 所有任务执行完毕')
       await close_all_browsers()
       this.running = false
+      this.clearCurrentTask()
       shut_down()
       return
     }
 
+    this.startCurrentTask(task, '准备任务服务')
     let taskService;
     switch (task.website) {
       case 'toomics':
@@ -272,12 +388,22 @@ class MangaTask extends Task {
         break;
       default:
         write_log(`[MangaTask] 未知网站: ${task.website}`);
+        this.failCurrentTask(`未知网站: ${task.website}`)
         this.running = false;
         return;
     }
 
+    this.setProgress({
+      percent: 5,
+      stage: '执行中',
+      message: `${task.website} ${task.name || task.id} 正在执行`,
+    })
+
+    let taskFailed = false
     await taskService.start()
       .catch((err) => {
+        taskFailed = true
+        this.failCurrentTask(err)
         write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err?.message || err}`)
         if (this.taskErrors > 10) {
           write_log(`[Task] 任务重试超过10次,退出`)
@@ -287,6 +413,11 @@ class MangaTask extends Task {
         // 任务放到末尾再次执行
         this.tasks.push(task)
       })
+
+    if (!taskFailed) {
+      this.taskErrors = 0
+      this.finishCurrentTask('任务执行完成')
+    }
 
     end_app();
     this.running = false

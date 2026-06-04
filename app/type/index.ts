@@ -19,6 +19,22 @@ type commandType = {
 
 type taskType = subsribeType
 
+type taskProgressType = {
+  percent: number
+  stage: string
+  message: string
+  current?: number
+  total?: number
+  updatedAt: string
+}
 
+type runningTaskType = {
+  status: 'running' | 'success' | 'failed'
+  task: taskType
+  progress: taskProgressType
+  startedAt: string
+  updatedAt: string
+  error?: string
+}
 
-export type { subsribeType, taskType }
+export type { subsribeType, taskType, taskProgressType, runningTaskType }

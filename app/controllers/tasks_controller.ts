@@ -25,6 +25,12 @@ export default class TasksController {
             toomics: toomicsTask.get(),
             omegascans: omegascansTask.get(),
             manga: mangaTask.get(),
+            running: {
+                bilibili: bilibiliTask.getRunning(),
+                toomics: toomicsTask.getRunning(),
+                omegascans: omegascansTask.getRunning(),
+                manga: mangaTask.getRunning(),
+            },
         }
     }
 
