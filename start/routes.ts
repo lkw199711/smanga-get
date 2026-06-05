@@ -12,6 +12,7 @@ const TaskController = () => import('#controllers/tasks_controller')
 const SubscribeController = () => import('#controllers/subscribes_controller')
 const LogController = () => import('#controllers/logs_controller')
 const ConfigController = () => import('#controllers/configs_controller')
+const ManualAuthController = () => import('#controllers/manual_auth_controller')
 
 router.get('/', async () => {
   return {
@@ -39,3 +40,6 @@ router.get('/config', [ConfigController, 'get'])
 router.put('/config', [ConfigController, 'update'])
 router.patch('/config', [ConfigController, 'patch'])
 router.delete('/config/toomics-cookie', [ConfigController, 'clearToomicsCookie'])
+
+router.post('/auth/manual/start', [ManualAuthController, 'start'])
+router.post('/auth/manual/finish', [ManualAuthController, 'finish'])

@@ -58,7 +58,7 @@ class ToZip {
   }
 
   getMangaList(directoryPath: string) {
-    const items = fs.readdirSync(directoryPath, { withFileTypes: false })
+    const items = fs.readdirSync(directoryPath, { encoding: 'utf8', withFileTypes: false })
     const folders = items.filter((item) => {
       if (/smanga-info/.test(item)) {
         return false

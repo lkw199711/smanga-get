@@ -61,7 +61,7 @@ class ToZip {
     }
 
     getMangaList(directoryPath: string) {
-        const items = fs.readdirSync(directoryPath, { withFileTypes: false });
+        const items = fs.readdirSync(directoryPath, { encoding: 'utf8', withFileTypes: false });
         const folders = items.filter(item => {
             if (/smanga-info/.test(item)) {
                 return false;
@@ -112,7 +112,7 @@ class ToZip {
                 });
 
                 // 监听错误
-                archive.on('error', (err) => {
+                archive.on('error', (err: any) => {
                     throw err;
                 });
 
@@ -270,7 +270,7 @@ function zipAndRemoveFoldersSync(directoryPath: string) {
             });
 
             // 使用Promise确保同步完成
-            const zipPromise = new Promise((resolve, reject) => {
+            const zipPromise = new Promise<void>((resolve, reject) => {
                 output.on('close', () => {
                     console.log(`${folder.name} 创建完成 (${archive.pointer()} bytes)`);
                     resolve();

@@ -102,15 +102,16 @@ class UseBrowser {
         }
     }
 
-    async init() {
+    async init(options: { headless?: boolean } = {}) {
+        const headless = options.headless ?? this.config.headless
         this.browser = await puppeteer.launch({
-            headless: this.config.headless,
+            headless,
             timeout: 60 * 1000,
             args: ['--no-sandbox', '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
                 '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
                 '--disable-web-security',
-                ...(this.config.headless ? ['--disable-gpu', '--disable-software-rasterizer'] : []),
+                ...(headless ? ['--disable-gpu', '--disable-software-rasterizer'] : []),
                 '--lang=zh-CN,zh', // 设置浏览器语言
                 ...this.proxyArgs,
                 '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
@@ -137,7 +138,7 @@ class UseBrowser {
         }
     }
 
-    async save_cookie() {
+    async save_cookie(runEndApp = true) {
         if (!this.browser) return;
         const cookies = await this.browser.cookies().catch(() => null);
         if (!cookies) {
@@ -147,7 +148,34 @@ class UseBrowser {
         };
         fs.writeFileSync(this.cookieFile, JSON.stringify(cookies, null, 2));
         console.log('cookie更新成功', new Date().toLocaleString());
-        end_app()
+        if (runEndApp) end_app()
+    }
+
+    async start_manual_auth(url: string) {
+        if (this.browser && (this.browser as any).connected) {
+            throw new Error(`${this.website} 手动认证浏览器已打开`)
+        }
+
+        await this.init({ headless: false })
+        await this.get_cookie()
+        const page = await this.new_page()
+        if (!page) throw new Error('打开手动认证页面失败')
+        await page.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeout: 60 * 1000,
+        }).catch((error) => {
+            write_log(`[manual auth] ${this.website} 打开页面失败: ${error.message}`)
+        })
+    }
+
+    async finish_manual_auth() {
+        if (!this.browser || !(this.browser as any).connected) {
+            throw new Error(`${this.website} 手动认证浏览器未打开`)
+        }
+
+        await this.save_cookie(false)
+        await this.browser.close()
+        this.browser = null
     }
 
     async new_page() {
@@ -356,4 +384,4 @@ const toomicsBrowserNoUser = new UseBrowser({ nouser: true, website: 'toomics' }
 const omegascansBrowser = new UseBrowser({ website: 'omegascans' });
 const gentlemanBrowser = new UseBrowser({ website: 'gentleman' });
 
-export { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser, gentlemanBrowser };
+export { UseBrowser, toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser, gentlemanBrowser };

@@ -45,7 +45,13 @@ function downloadImage(url: string, savePath: string): Promise<void> {
         https.get(url, (response) => {
             response.pipe(file);
             file.on('finish', () => {
-                file.close(resolve);
+                file.close((err) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve();
+                });
             });
         }).on('error', (err) => {
             fs.unlinkSync(savePath); // 删除无效文件

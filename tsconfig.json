@@ -3,6 +3,8 @@
   "compilerOptions": {
     "rootDir": "./",
     "outDir": "./build",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "paths": {
       "#type/*": [
         "./app/type/*"

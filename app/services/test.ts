@@ -53,7 +53,7 @@ async function demo1() {
 
     // 获取 img 元素的 Base64 数据
     const base64Image = await page.evaluate(() => {
-        const img = document.querySelector('img');
+        const img = (globalThis as any).document.querySelector('img') as { src?: string } | null;
         return img ? img.src : null;
     });
 
@@ -108,7 +108,7 @@ function check_img_num(dir: string) {
         return;
     }
 
-    imgs = imgs.sort((a, b) => a - b);
+    imgs = imgs.sort((a: string, b: string) => Number.parseInt(path.basename(a)) - Number.parseInt(path.basename(b)));
     const maxImg = imgs[imgs.length - 1];
     const maxImgName = path.basename(maxImg);
     const maxImgNum = parseInt(maxImgName);

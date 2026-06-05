@@ -42,6 +42,9 @@ export default class Bilibili {
     private meta: any = null
     private metaUpdate: boolean = false
     private chapters: any = null
+    private ComicDetailResponse: any = null
+    private retry: number = 0
+    private chapterPagesImages: (string | null)[][] = []
     private cookieFile: string
     private scrollStep: number
     private scrollDelay: number

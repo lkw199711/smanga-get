@@ -2,13 +2,14 @@ import * as fs from 'fs'
 import { downloadImage, get_meta, image_index, image_token } from '#api/index'
 import { log } from 'console'
 import { subsribeType } from '#type/index.js'
+import sharp from 'sharp'
 
 // import { downloadImage } from '#utils/index'
 export class Bilibili {
   private website: string
   private mangaId: number
   private mangaName: string
-  private downloadPath: string
+  private downloadPath: string = ''
   private downloadLockedMeta: boolean
   private useMoblie: boolean = false
   constructor(params: subsribeType) {
@@ -129,5 +130,13 @@ export class Bilibili {
     if (arr.length > 1) return arr[0].padStart(5, '0') + '.' + arr[1]
 
     return ord.toString().padStart(5, '0')
+  }
+}
+
+async function avifToJpg(inputPath: string, outputPath: string) {
+  const targetPath = inputPath === outputPath ? `${outputPath}.tmp.jpg` : outputPath
+  await sharp(inputPath).jpeg().toFile(targetPath)
+  if (targetPath !== outputPath) {
+    fs.renameSync(targetPath, outputPath)
   }
 }

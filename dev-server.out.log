@@ -1,0 +1,13 @@
+
+> manga-get@0.0.0 dev
+> node ace serve --hmr
+
+c[ info ] starting HTTP server...
+╭─────────────────────────────────────────────────╮
+│                                                 │
+│    Server address: http://127.0.0.1:9800        │
+│    Watch Mode: HMR                              │
+│    Ready in: 1.32 s                             │
+│                                                 │
+╰─────────────────────────────────────────────────╯
+[00:48:48.246] [32mINFO[39m (22156): [36mstarted HTTP server on 0.0.0.0:9800[39m
