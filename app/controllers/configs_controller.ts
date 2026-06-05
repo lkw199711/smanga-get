@@ -1,13 +1,23 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { get_config, replace_config, patch_config, get_config_path } from '#utils/index'
+import { dataRoot, get_config, replace_config, patch_config, get_config_path } from '#utils/index'
 import { create_scan_cron } from '../../start/init.js'
 import fs from 'fs'
 import path from 'path'
 
-function resolveCookiePath(cookieFile: string) {
-  return path.isAbsolute(cookieFile)
-    ? cookieFile
-    : path.resolve(process.cwd(), cookieFile)
+function normalizeRelativePath(filePath: string) {
+  return filePath.replace(/^[.][\\/]/, '')
+}
+
+function resolveCookiePaths(cookieFile: string) {
+  if (path.isAbsolute(cookieFile)) return [cookieFile]
+
+  const normalizedPath = normalizeRelativePath(cookieFile)
+
+  return Array.from(new Set([
+    path.resolve(process.cwd(), cookieFile),
+    path.resolve(process.cwd(), normalizedPath),
+    path.resolve(dataRoot || process.cwd(), normalizedPath),
+  ]))
 }
 
 export default class ConfigsController {
@@ -111,18 +121,24 @@ export default class ConfigsController {
   clearToomicsCookie({ response }: HttpContext) {
     try {
       const config = get_config()
+      const toomicsCookieFiles = ['toomics', 'toomics-sc', 'toomics-tc']
+        .map((key) => config?.[key]?.cookieFile)
+        .filter((cookieFile): cookieFile is string => typeof cookieFile === 'string' && Boolean(cookieFile.trim()))
       const cookieFiles = Array.from(new Set([
-        config?.toomics?.cookieFile || 'data/toomics-cookie.json',
+        ...toomicsCookieFiles,
         'data/toomics-cookie.json',
         'data/toomics-cookies.json',
+        'data/cookies/toomics-cookie.json',
+        'data/cookies/toomics-cookies.json',
       ]))
 
-      const clearedFiles = cookieFiles.map((cookieFile) => {
-        const fullPath = resolveCookiePath(cookieFile)
-        fs.mkdirSync(path.dirname(fullPath), { recursive: true })
-        fs.writeFileSync(fullPath, '[]', 'utf-8')
+      const clearedFiles = cookieFiles.flatMap((cookieFile) => {
+        return resolveCookiePaths(cookieFile).map((fullPath) => {
+          fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+          fs.writeFileSync(fullPath, '[]', 'utf-8')
 
-        return cookieFile
+          return fullPath
+        })
       })
 
       return {
