@@ -1,6 +1,14 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { get_config, replace_config, patch_config, get_config_path } from '#utils/index'
 import { create_scan_cron } from '../../start/init.js'
+import fs from 'fs'
+import path from 'path'
+
+function resolveCookiePath(cookieFile: string) {
+  return path.isAbsolute(cookieFile)
+    ? cookieFile
+    : path.resolve(process.cwd(), cookieFile)
+}
 
 export default class ConfigsController {
   /**
@@ -93,6 +101,41 @@ export default class ConfigsController {
       return response.status(500).json({
         code: 500,
         message: `更新配置失败: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * DELETE /config/toomics-cookie - 清空玩漫 cookie 文件
+   */
+  clearToomicsCookie({ response }: HttpContext) {
+    try {
+      const config = get_config()
+      const cookieFiles = Array.from(new Set([
+        config?.toomics?.cookieFile || 'data/toomics-cookie.json',
+        'data/toomics-cookie.json',
+        'data/toomics-cookies.json',
+      ]))
+
+      const clearedFiles = cookieFiles.map((cookieFile) => {
+        const fullPath = resolveCookiePath(cookieFile)
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+        fs.writeFileSync(fullPath, '[]', 'utf-8')
+
+        return cookieFile
+      })
+
+      return {
+        code: 200,
+        message: '玩漫 cookie 已清除',
+        data: {
+          files: clearedFiles,
+        },
+      }
+    } catch (e: any) {
+      return response.status(500).json({
+        code: 500,
+        message: `清除玩漫 cookie 失败: ${e.message}`,
       })
     }
   }

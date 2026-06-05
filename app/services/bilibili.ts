@@ -20,6 +20,14 @@ type chapterType = {
     count: number
 }
 
+function readCookieFile(cookieFile: string) {
+    const cookieText = fs.readFileSync(cookieFile, 'utf-8').trim()
+    if (!cookieText) return []
+
+    const cookies = JSON.parse(cookieText)
+    return Array.isArray(cookies) ? cookies : []
+}
+
 export default class Bilibili {
     private domain = 'https://manga.bilibili.com'
     private website: string = 'bilibili'
@@ -207,12 +215,14 @@ export default class Bilibili {
         });
 
         if (fs.existsSync(this.cookieFile)) {
-            const cookies = JSON.parse(fs.readFileSync(this.cookieFile, 'utf-8'));
-            await this.browser.setCookie(...cookies);
+            const cookies = readCookieFile(this.cookieFile);
+            if (cookies.length) {
+                await this.browser.setCookie(...cookies);
+            }
         } else {
             // 示例：将字符串 "session=abc; user=123" 转为 Puppeteer 所需格式
             const cookieStr = process.env.BILIBILI_COOKIE || '';
-            const cookies = cookieStr.split(';').map(pair => {
+            const cookies = cookieStr.trim() ? cookieStr.split(';').map(pair => {
                 const [name, value] = pair.trim().split('=');
                 return {
                     name: name,
@@ -223,8 +233,10 @@ export default class Bilibili {
                     sameParty: false,
                     httpOnly: false
                 };
-            });
-            this.browser.setCookie(...cookies);
+            }).filter((cookie) => cookie.name) : [];
+            if (cookies.length) {
+                await this.browser.setCookie(...cookies);
+            }
         }
 
         await this.set_cookie()

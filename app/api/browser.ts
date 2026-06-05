@@ -31,6 +31,33 @@ type configType = {
     cookieFileNoUser: string
 }
 
+function readCookieFile(cookieFile: string) {
+    const cookieText = fs.readFileSync(cookieFile, 'utf-8').trim()
+    if (!cookieText) return []
+
+    const cookies = JSON.parse(cookieText)
+    return Array.isArray(cookies) ? cookies : []
+}
+
+function parseCookieString(cookieStr: string, domain: string) {
+    if (!cookieStr.trim()) return []
+
+    return cookieStr.split(';').map(pair => {
+        const [name, value] = pair.trim().split('=');
+        if (!name) return null
+
+        return {
+            name,
+            value: value || '',
+            domain,
+            path: '/',
+            secure: false,
+            sameParty: false,
+            httpOnly: false
+        };
+    }).filter(Boolean)
+}
+
 const defaultParams = {
     nouser: false,
     website: 'toomics'
@@ -97,24 +124,15 @@ class UseBrowser {
 
     async get_cookie() {
         if (!this.browser) return;
+        let cookies: any[] = []
         if (fs.existsSync(this.cookieFile)) {
-            const cookie1 = fs.readFileSync(this.cookieFile, 'utf-8')
-            const cookie = JSON.parse(cookie1)
-            await this.browser.setCookie(...cookie)
+            cookies = readCookieFile(this.cookieFile)
         } else {
             const cookieStr = process.env.TOOMICS_COOKIE || '';
-            const cookies = cookieStr.split(';').map(pair => {
-                const [name, value] = pair.trim().split('=');
-                return {
-                    name: name,
-                    value: value,
-                    domain: '.toomics.com', // 替换为目标网站主域名
-                    path: '/',
-                    secure: false,
-                    sameParty: false,
-                    httpOnly: false
-                };
-            });
+            cookies = parseCookieString(cookieStr, '.toomics.com')
+        }
+
+        if (cookies.length) {
             await this.browser.setCookie(...cookies);
         }
     }
