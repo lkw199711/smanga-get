@@ -1,7 +1,8 @@
 
 import { toomicsBrowser, toomicsBrowserNoUser } from '#api/browser';
 import fs from 'fs';
-import { delay, get_config, dataRoot, read_json, write_log } from '#utils/index';
+import { delay, get_config, dataRoot, read_json, write_log } from '#utils/index'
+import { humanScroll } from '#utils/human';
 import { mangaTask } from '#api/task';
 export default class ToomicsAll {
   private langTag: string = 'sc' // 语言标签
@@ -44,30 +45,23 @@ export default class ToomicsAll {
     await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => { })
 
     await this.browser.save_cookie()
-    // 不断滚动 直到页面底部
+    // 人类化滚动
     console.log('开始滚动页面,等待加载图片');
-    let scrollY = -1;
-    let window: any, document: any;
     await page.mouse.move(1000, 1000)
 
-    // 向下滚动到底部
-    while (1) {
-      let protocolError = false
-      await page.mouse.wheel({ deltaY: this.scrollStep }).catch(() => { protocolError = true })
-      await delay(this.scrollDelay)
-      const nowScrollY = await page.evaluate(() => window.scrollY).catch(() => { protocolError = true })
-      if (protocolError) continue
-
-      if (nowScrollY === scrollY) break
-      scrollY = nowScrollY
-    }
+    await humanScroll({
+      page,
+      scrollStep: this.scrollStep,
+      scrollDelay: this.scrollDelay,
+    })
 
     await page.waitForNetworkIdle().catch(() => { })
     await delay(2000)
 
     const mangas = await page.evaluate(() => {
+      const doc = (globalThis as any).document
       function get_end() {
-        const lis = document.querySelectorAll('.list_wrap li')
+        const lis = doc.querySelectorAll('.list_wrap li')
         return Array.from(lis).map((li: any) => {
           const website = 'toomics'
           const name = li.querySelector('h4')?.innerText.trim()

@@ -372,165 +372,65 @@ class Task {
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import Omegascans from '#services/omegascans'
-import { end_app, isTaskPauseError, shut_down, write_log } from '#utils/index';
+import { end_app, isTaskAbortError, isTaskPauseError, shut_down, write_log } from '#utils/index';
 import ToomicsDayUpdate from '#services/toomics-update';
 import ToomicsAll from '#services/toomics-all';
 import ToZip from '#services/tozip';
 import OmegaScansUpdate from '#services/omegascans-update';
 import SyncCloud from '#services/sync-cloud';
-class BilibiliTask extends Task {
-  constructor(tasks: taskType[]) {
-    super(tasks)
-  }
-
-  async run() {
-    if (this.tasks.length === 0) {
-      this.clearCurrentTask()
-      return;
+import { PassThroughScheduler, type TaskScheduler } from '#services/scheduler';
+/**
+ * 根据 task.website 创建对应的 service 实例
+ * 所有网站的 service 工厂集中在此，方便扩展和维护
+ */
+async function createTaskService(task: taskType, reporter: ReturnType<Task['createChapterReporter']>) {
+  switch (task.website) {
+    case 'toomics':
+      return new Toomics(task, reporter);
+    case 'bilibili':
+      return new Bilibili(task, reporter);
+    case 'omegascans':
+      return new Omegascans(task, reporter);
+    case 'gentleman': {
+      const Gentleman = (await import('#services/gentleman')).default;
+      return new Gentleman(task, reporter);
     }
-    if (this.running) return;
-
-    this.running = true
-    const task = this.tasks.shift()
-
-    if (!task) {
-      this.running = false
-      this.clearCurrentTask()
-      return
-    }
-
-    this.startCurrentTask(task, '执行 Bilibili 任务')
-    const reporter = this.createChapterReporter()
-    const bilibili = new Bilibili(task, reporter)
-    let taskFailed = false
-
-    await bilibili.start()
-      .catch((err) => {
-        taskFailed = true
-        this.failCurrentTask(err)
-        bilibili.browser?.close()
-        write_log(`[Bilibili] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
-      })
-
-    if (!taskFailed) {
-      this.finishCurrentTask('Bilibili 任务执行完成')
-    }
-
-    this.running = false
-
-    await this.run()
-  }
-}
-
-class ToomicsTask extends Task {
-  constructor(tasks: taskType[]) {
-    super(tasks)
-  }
-
-  async run() {
-    if (this.tasks.length === 0) {
-      this.clearCurrentTask()
-      return;
-    }
-    if (this.running) return;
-
-    this.running = true
-    const task = this.tasks.shift()
-
-    if (!task) {
-      this.running = false
-      this.clearCurrentTask()
-      return
-    }
-
-    this.startCurrentTask(task, '执行 Toomics 任务')
-    const reporter = this.createChapterReporter()
-    const toomics = new Toomics(task, reporter)
-    let taskFailed = false
-    let taskPaused = false
-    await toomics.start()
-      .catch((err) => {
-        if (isTaskPauseError(err)) {
-          taskPaused = true
-          this.pauseCurrentTask(err)
-          write_log(`[Toomics] ${task.id} ${task.name} 任务已暂停: ${err.message}`)
-          return
-        }
-
-        taskFailed = true
-        this.failCurrentTask(err)
-        write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
-        // 任务放到末尾再次执行
-        this.tasks.push(task)
-      })
-
-    if (taskPaused) {
-      this.running = false
-      return
-    }
-
-    if (!taskFailed) {
-      this.finishCurrentTask('Toomics 任务执行完成')
-    }
-
-    this.running = false
-
-    await this.run()
-  }
-}
-
-class OmegascansTask extends Task {
-  running = 0;
-  private concurrency: number = 1;
-  constructor(tasks: taskType[]) {
-    super(tasks)
-  }
-
-  async run() {
-    if (this.tasks.length === 0) {
-      if (this.running === 0) this.clearCurrentTask()
-      return;
-    }
-    if (this.running >= this.concurrency) {
-      return;
-    }
-
-    this.running++;
-    const task = this.tasks.shift()
-
-    if (!task) {
-      this.running--
-      this.clearCurrentTask()
-      return
-    }
-
-    this.startCurrentTask(task, '执行 OmegaScans 任务')
-    const reporter = this.createChapterReporter()
-    const omegascans = new Omegascans(task, reporter)
-    let taskFailed = false
-    await omegascans.start()
-      .catch((err) => {
-        taskFailed = true
-        this.failCurrentTask(err)
-        write_log(`[Omegascans] ${task?.id} ${task.name} 任务执行失败: ${err?.message}`)
-        // 任务放到末尾再次执行
-        this.tasks.push(task)
-      })
-
-    if (!taskFailed) {
-      this.finishCurrentTask('OmegaScans 任务执行完成')
-    }
-
-    this.running--;
-
-    await this.run()
+    case 'omegascans-update':
+      return new OmegaScansUpdate({}, reporter);
+    case 'toomics-update-sc':
+      return new ToomicsDayUpdate('sc', reporter);
+    case 'toomics-update-tc':
+      return new ToomicsDayUpdate('tc', reporter);
+    case 'toomics-covers-sc':
+      return new ToomicsAll('sc', false, reporter);
+    case 'toomics-covers-tc':
+      return new ToomicsAll('tc', false, reporter);
+    case 'toomics-compress-sc':
+      return new ToZip('toomics-sc', false, reporter);
+    case 'toomics-compress-tc':
+      return new ToZip('toomics-tc', false, reporter);
+    case 'omegascans-compress':
+      return new ToZip('omegascans', true, reporter);
+    case 'bilibili-compress':
+      return new ToZip('bilibili', true, reporter);
+    case 'sync-toomics-sc':
+      return new SyncCloud('toomics-sc', '.', false, reporter);
+    case 'sync-toomics-tc':
+      return new SyncCloud('toomics-tc', '.', false, reporter);
+    case 'sync-omegascans':
+      return new SyncCloud('omegascans', '.', false, reporter);
+    default:
+      return null;
   }
 }
 
 class MangaTask extends Task {
   taskErrors = 0
+  scheduler: TaskScheduler
+
   constructor(tasks: taskType[]) {
     super(tasks)
+    this.scheduler = new PassThroughScheduler()
   }
 
   async run() {
@@ -551,64 +451,18 @@ class MangaTask extends Task {
       return
     }
 
+    // 调度器：任务执行前钩子（可阻塞等待时间窗口等）
+    await this.scheduler.beforeTask(task)
+
     this.startCurrentTask(task, '准备任务服务')
     const reporter = this.createChapterReporter()
-    let taskService;
-    switch (task.website) {
-      case 'toomics':
-        taskService = new Toomics(task, reporter);
-        break;
-      case 'bilibili':
-        taskService = new Bilibili(task, reporter);
-        break;
-      case 'omegascans':
-        taskService = new Omegascans(task, reporter);
-        break;
-      case 'gentleman':
-        console.log('执行绅士漫画任务')
-        taskService = new (await import('#services/gentleman')).default(task, reporter);
-        break;
-      case 'omegascans-update':
-        taskService = new OmegaScansUpdate({}, reporter);
-        break;
-      case 'toomics-update-sc':
-        taskService = new ToomicsDayUpdate('sc', reporter);
-        break;
-      case 'toomics-update-tc':
-        taskService = new ToomicsDayUpdate('tc', reporter);
-        break;
-      case 'toomics-covers-sc':
-        taskService = new ToomicsAll('sc', false, reporter);
-        break;
-      case 'toomics-covers-tc':
-        taskService = new ToomicsAll('tc', false, reporter);
-        break;
-      case 'toomics-compress-sc':
-        taskService = new ToZip('toomics-sc', false, reporter);
-        break;
-      case 'toomics-compress-tc':
-        taskService = new ToZip('toomics-tc', false, reporter);
-        break;
-      case 'omegascans-compress':
-        taskService = new ToZip('omegascans', true, reporter);
-        break;
-      case 'bilibili-compress':
-        taskService = new ToZip('bilibili', true, reporter);
-        break;
-      case 'sync-toomics-sc':
-        taskService = new SyncCloud('toomics-sc', '.', false, reporter);
-        break;
-      case 'sync-toomics-tc':
-        taskService = new SyncCloud('toomics-tc', '.', false, reporter);
-        break;
-      case 'sync-omegascans':
-        taskService = new SyncCloud('omegascans', '.', false, reporter);
-        break;
-      default:
-        write_log(`[MangaTask] 未知网站: ${task.website}`);
-        this.failCurrentTask(`未知网站: ${task.website}`)
-        this.running = false;
-        return;
+
+    const taskService = await createTaskService(task, reporter)
+    if (!taskService) {
+      write_log(`[MangaTask] 未知网站: ${task.website}`);
+      this.failCurrentTask(`未知网站: ${task.website}`)
+      this.running = false;
+      return;
     }
 
     reporter.message(`${task.website} ${task.name || task.id} 正在执行`)
@@ -616,17 +470,24 @@ class MangaTask extends Task {
     let taskFailed = false
     let taskPaused = false
     await taskService.start()
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (isTaskPauseError(err)) {
           taskPaused = true
           this.pauseCurrentTask(err)
-          write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${err?.message || err}`)
+          write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${err instanceof Error ? err.message : String(err)}`)
+          return
+        }
+
+        if (isTaskAbortError(err)) {
+          write_log(`[Task] 检测到异常状态，清空所有任务: ${err instanceof Error ? err.message : String(err)}`)
+          this.tasks = []
+          this.running = false
           return
         }
 
         taskFailed = true
         this.failCurrentTask(err)
-        write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err?.message || err}`)
+        write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err instanceof Error ? err.message : String(err)}`)
         if (this.taskErrors > 10) {
           write_log(`[Task] 任务重试超过10次,退出`)
           return;
@@ -646,15 +507,22 @@ class MangaTask extends Task {
       this.finishCurrentTask('任务执行完成')
     }
 
+    // 调度器：任务执行后钩子
+    await this.scheduler.afterTask(task, !taskFailed && !taskPaused)
+
     end_app();
     this.running = false
+
+    // 调度器：检查是否继续执行
+    if (!this.scheduler.shouldContinue()) {
+      write_log('[MangaTask] 调度器要求暂停，停止任务循环')
+      return
+    }
+
     await this.run()
   }
 }
 
-const bilibiliTask = new BilibiliTask([])
-const toomicsTask = new ToomicsTask([])
-const omegascansTask = new OmegascansTask([])
 const mangaTask = new MangaTask([])
 
-export { bilibiliTask, toomicsTask, omegascansTask, mangaTask }
+export { mangaTask }

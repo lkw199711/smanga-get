@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import { downloadImage } from '#api/bilibili'
 import { subsribeType } from '#type/index.js'
 import { delay, end_app, saveBase64Image, write_log, get_config, make_can_be_floder } from '#utils/index'
+import { betweenChapterDelay } from '#utils/human'
 import puppeteer from 'rebrowser-puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
@@ -191,6 +192,7 @@ export default class Bilibili {
                 await this.download_chapter(chapter, chapterFolder)
                 this.onProgress?.report(`${chapter.title} 下载完成`)
             }
+            await betweenChapterDelay()
         }
 
         this.chapterPage?.close()

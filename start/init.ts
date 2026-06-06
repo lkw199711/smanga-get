@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url)
 const cron = require('node-cron');
 
 import { subscribe_read } from '#api/subsribe';
-import { bilibiliTask, mangaTask, omegascansTask, toomicsTask } from '#api/task';
+import { mangaTask } from '#api/task';
 import { subsribeType } from '#type/index.js'
 import { get_config, set_config, dataRoot, write_json } from '#utils/index';
 import ToomicsAll from '#services/toomics-all'

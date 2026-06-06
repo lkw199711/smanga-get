@@ -18,6 +18,9 @@
       "#api/*": [
         "./app/api/*"
       ],
+      "#services/*": [
+        "./app/services/*"
+      ],
     },
   }
 }

@@ -1,15 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { bilibiliTask, mangaTask, omegascansTask, toomicsTask } from '#api/task'
+import { mangaTask } from '#api/task'
 import { subscribe_read } from '#api/subsribe'
 import type { subsribeType } from '#type/index.js'
 import { write_log } from '#utils/index'
-
-const taskQueues = {
-    bilibili: bilibiliTask,
-    toomics: toomicsTask,
-    omegascans: omegascansTask,
-    manga: mangaTask,
-}
 
 type TaskTriggerType = 'toomics' | 'toptoon' | 'omegascans' | 'gentleman'
 
@@ -43,31 +36,22 @@ export default class TasksController {
 
     get() {
         return {
-            bilibili: bilibiliTask.get(),
-            toomics: toomicsTask.get(),
-            omegascans: omegascansTask.get(),
             manga: mangaTask.get(),
-            running: {
-                bilibili: bilibiliTask.getRunning(),
-                toomics: toomicsTask.getRunning(),
-                omegascans: omegascansTask.getRunning(),
-                manga: mangaTask.getRunning(),
-            },
+            running: mangaTask.getRunning(),
         }
     }
 
     reorder({ request }: HttpContext) {
-        const { queue, tasks } = request.all()
-        const taskQueue = taskQueues[queue as keyof typeof taskQueues]
+        const { tasks } = request.all()
 
-        if (!taskQueue || !Array.isArray(tasks)) {
+        if (!Array.isArray(tasks)) {
             return {
                 code: 400,
                 message: '任务排序参数无效',
             }
         }
 
-        const nextTasks = taskQueue.reorder(tasks)
+        const nextTasks = mangaTask.reorder(tasks)
 
         return {
             code: 200,
@@ -132,17 +116,7 @@ export default class TasksController {
 
     remove({ request }: HttpContext) {
         const { website, id, name, taskId } = request.all()
-        const target = { website, id, name, taskId }
-
-        if (website === 'toomics') {
-            toomicsTask.remove(target)
-        } else if (website === 'bilibili') {
-            bilibiliTask.remove(target)
-        } else if (website === 'omegascans') {
-            omegascansTask.remove(target)
-        } else {
-            mangaTask.remove(target)
-        }
+        mangaTask.remove({ website, id, name, taskId })
 
         return {
             code: 200,
@@ -150,28 +124,8 @@ export default class TasksController {
         }
     }
 
-    clear({ request }: HttpContext) {
-        const { website } = request.all()
-
-        if (website === 'toomics') {
-            toomicsTask.clear()
-        } else if (website === 'bilibili') {
-            bilibiliTask.clear()
-        } else if (website === 'omegascans') {
-            omegascansTask.clear()
-        } else if (website === 'manga') {
-            mangaTask.clear()
-        } else if (!website) {
-            bilibiliTask.clear()
-            toomicsTask.clear()
-            omegascansTask.clear()
-            mangaTask.clear()
-        } else {
-            return {
-                code: 400,
-                message: '任务队列无效',
-            }
-        }
+    clear() {
+        mangaTask.clear()
 
         return {
             code: 200,

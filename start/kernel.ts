@@ -54,6 +54,10 @@ import MoveMeta from '#services/move-meta'
 import RemoveDuplicates from '#services/remove-duplicates'
 import { delay, get_config } from '#utils/index'
 import { mangaTask } from '#api/task'
+import GameOrganize from '#services/game-organize'
+
+await new GameOrganize('D:\\17H-game整理\\05').execute()
+process.exit()
 
 // 先创建配置目录和默认配置文件，防止首次启动空指针
 create_config()

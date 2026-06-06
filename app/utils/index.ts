@@ -27,6 +27,24 @@ export function isTaskPauseError(error: unknown): error is TaskPauseError {
     || (typeof error === 'object' && error !== null && (error as { pauseTask?: unknown }).pauseTask === true)
 }
 
+/**
+ * 任务中断错误：连续检测到异常状态（如空章节、cookie 失效、封控触发），
+ * 抛出此错误将清空整个任务队列，停止所有后续任务。
+ */
+export class TaskAbortError extends Error {
+  abortTask = true
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'TaskAbortError'
+  }
+}
+
+export function isTaskAbortError(error: unknown): error is TaskAbortError {
+  return error instanceof TaskAbortError
+    || (typeof error === 'object' && error !== null && (error as { abortTask?: unknown }).abortTask === true)
+}
+
 export function get_os() {
   const platform = os.platform()
   if (platform === 'win32') {
@@ -69,16 +87,7 @@ export function write_json(file: string, json: any) {
  * @returns
  */
 export async function delay(ms: number) {
-  return new Promise((resolve) => {
-    const now = new Date().getTime()
-    const target = now + ms
-
-    while (new Date().getTime() < target) {
-      continue
-    }
-
-    resolve(true) // 延时结束，返回结果
-  })
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function saveBase64Image(base64Data: any, filepath: string) {

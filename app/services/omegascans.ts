@@ -3,6 +3,7 @@ import {
   copy_folder,
   get_failed_chapters,
 } from '#utils/index'
+import { betweenChapterDelay } from '#utils/human'
 import { zip_directory } from '#utils/zip'
 import { get_config, make_can_be_floder } from '#utils/index'
 import fs from 'fs'
@@ -87,6 +88,7 @@ export default class OmegaScans {
       await this.download_chapter(chapter)
       this.onProgress?.report(`${chapter.name} 下载完成`)
       omegascansBrowser.clear_buffs() // 清除浏览器缓存
+      await betweenChapterDelay()
     }
 
     if (this.config?.autoCompress) {

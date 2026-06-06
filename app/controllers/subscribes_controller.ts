@@ -1,5 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { bilibiliTask, toomicsTask, mangaTask } from '#api/task'
+import { mangaTask } from '#api/task'
 import { write_log } from '#utils/index'
 import { subscribe_add, subscribe_remove, subscribe_clear, subscribe_read, subscribe_reorder } from '#api/subsribe'
 
@@ -93,18 +93,7 @@ export default class SubscribesController {
             }
         }
 
-        if (website === 'toomics') {
-            toomicsTask.remove(id)
-        } else if (website === 'bilibili') {
-            bilibiliTask.remove(id)
-        } else if (website === 'gentleman') {
-            mangaTask.remove(id)
-        } else{
-            return {
-                code: 400,
-                message: 'Invalid website',
-            }
-        }
+        mangaTask.remove(id)
 
         subscribe_remove({ website, id, name })
 
