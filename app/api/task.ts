@@ -1,10 +1,51 @@
-import type { subsribeType, taskProgressType, runningTaskType, taskType } from '#type/index.js';
-import fs from 'fs'
-import { toomicsBrowser, bilibiliBrowser, toomicsBrowserNoUser, omegascansBrowser } from '#api/browser';
+import fs from 'node:fs'
+import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import type { runningTaskType, subsribeType, taskProgressType, taskType } from '#type/index.js'
+import {
+  bilibiliBrowser,
+  omegascansBrowser,
+  toomicsBrowser,
+  toomicsBrowserNoUser,
+} from '#api/browser'
+import Bilibili from '#services/bilibili'
+import OmegaScansUpdate from '#services/omegascans-update'
+import Omegascans from '#services/omegascans'
+import { PassThroughScheduler, type TaskScheduler } from '#services/scheduler'
+import SyncCloud from '#services/sync-cloud'
+import Toomics from '#services/toomics'
+import ToomicsAll from '#services/toomics-all'
+import ToomicsDayUpdate from '#services/toomics-update'
+import ToZip from '#services/tozip'
+import { end_app, isTaskAbortError, isTaskPauseError, shut_down, write_log } from '#utils/index'
 
-const taskFile = process.cwd() + '/task.json'
+const taskFile = path.join(process.cwd(), 'task.json')
+const maxRetryCount = 10
+
 type TaskIdentifier = number | string
+type TaskRunResult = 'success' | 'failed' | 'paused' | 'aborted'
+type TaskService = {
+  start(): Promise<void> | void
+}
+type ChapterReporter = {
+  setTotal(total: number): void
+  report(message: string): void
+  message(message: string): void
+  subProgress(current: number, total: number): void
+}
+type TaskAddOptions = {
+  tasks?: subsribeType[]
+  website?: string
+  name?: string
+  id?: TaskIdentifier
+}
+type TaskRemoveOptions = {
+  website?: string
+  id?: TaskIdentifier
+  name?: string
+  taskId?: string
+  url?: string
+}
 
 const noMangaIdWebsites = new Set([
   'toomics-covers-sc',
@@ -21,9 +62,28 @@ const noMangaIdWebsites = new Set([
   'sync-omegascans',
 ])
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function isPresent(value: unknown) {
+  return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+function normalizeId(id: unknown) {
+  return isPresent(id) ? String(id).trim() : ''
+}
+
+function safeLog(message: string) {
+  try {
+    write_log(message)
+  } catch {
+    console.warn(message)
+  }
+}
+
 function taskHasRealMangaId(task: Partial<taskType>) {
   if (noMangaIdWebsites.has(task.website ?? '')) return false
-  if (task.website === 'gentleman' && String(task.id) === '1') return false
   if (task.id === null || task.id === undefined || task.id === '') return false
   if (typeof task.id === 'number' && (!Number.isFinite(task.id) || task.id <= 0)) return false
   if (typeof task.id === 'string' && !task.id.trim()) return false
@@ -31,26 +91,51 @@ function taskHasRealMangaId(task: Partial<taskType>) {
   return true
 }
 
+// taskId 是队列内部身份，不再覆盖原始 id，避免订阅删除和 service 参数被污染。
 function ensureTaskIdentity(task: taskType): taskType {
-  const taskId = task.taskId || randomUUID()
-  const nextTask = { ...task, taskId }
-
-  if (!taskHasRealMangaId(nextTask)) {
-    nextTask.id = taskId
+  return {
+    ...task,
+    taskId: task.taskId || randomUUID(),
   }
-
-  return nextTask
 }
 
 function getTaskIdentity(task: Partial<taskType>) {
-  if (task.taskId) return task.taskId
+  if (task.taskId) return `task:${task.taskId}`
 
-  return [
-    task.website ?? '',
-    task.id ?? '',
-    task.name ?? '',
-    task.url ?? '',
-  ].join('\u0000')
+  if (taskHasRealMangaId(task)) {
+    return [
+      'manga',
+      task.website ?? '',
+      normalizeId(task.id),
+      task.name ?? '',
+      task.url ?? '',
+    ].join('\u0000')
+  }
+
+  return ['job', task.website ?? '', task.name ?? '', task.url ?? ''].join('\u0000')
+}
+
+function isSameTask(item: taskType, target: TaskRemoveOptions) {
+  if (target.taskId) return item.taskId === target.taskId
+  if (target.website && item.website !== target.website) return false
+
+  if (isPresent(target.url) && isPresent(item.url)) {
+    return item.url === target.url
+  }
+
+  if (target.website === 'gentleman' && isPresent(target.name)) {
+    return item.name === target.name
+  }
+
+  if (isPresent(target.id) && isPresent(item.id)) {
+    return normalizeId(item.id) === normalizeId(target.id)
+  }
+
+  if (isPresent(target.name)) {
+    return item.name === target.name
+  }
+
+  return false
 }
 
 function reorderTasks(current: taskType[], ordered: taskType[]) {
@@ -80,77 +165,125 @@ function reorderTasks(current: taskType[], ordered: taskType[]) {
   return next
 }
 
+function ensureTaskFileDir() {
+  fs.mkdirSync(path.dirname(taskFile), { recursive: true })
+}
+
+function backupInvalidTaskFile() {
+  if (!fs.existsSync(taskFile)) return
+
+  const backupFile = `${taskFile}.invalid-${Date.now()}`
+  fs.copyFileSync(taskFile, backupFile)
+  safeLog(`[task] 任务文件解析失败，已备份到 ${backupFile}`)
+}
+
+function readTaskFile(): taskType[] {
+  if (!fs.existsSync(taskFile)) {
+    return []
+  }
+
+  try {
+    const jsonStr = fs.readFileSync(taskFile, 'utf-8').trim()
+    if (!jsonStr) return []
+
+    const json = JSON.parse(jsonStr)
+    if (!Array.isArray(json)) {
+      safeLog('[task] 任务文件不是数组，已按空列表处理')
+      return []
+    }
+
+    return json.map((task) => ensureTaskIdentity(task))
+  } catch (error) {
+    backupInvalidTaskFile()
+    safeLog(`[task] 读取任务文件失败: ${getErrorMessage(error)}`)
+
+    return []
+  }
+}
+
+function writeTaskFile(tasks: taskType[]) {
+  ensureTaskFileDir()
+
+  const tempFile = `${taskFile}.${process.pid}.${Date.now()}.tmp`
+  fs.writeFileSync(tempFile, JSON.stringify(tasks, null, 2), 'utf-8')
+  fs.renameSync(tempFile, taskFile)
+}
+
 /**
- * 读取订阅文件
- * @description: 读取订阅文件
- * @returns
+ * 读取历史任务文件。
+ *
+ * 当前实际运行队列由 mangaTask 内存队列负责；这个函数保留给旧调用方。
  */
 export function task_read() {
-  const jsonStr = fs.readFileSync(taskFile, 'utf-8')
-  const json = JSON.parse(jsonStr)
-  return json;
+  return readTaskFile()
 }
 
 /**
- * 写入订阅文件
- * @description: 写入订阅文件
- * @param json
+ * 写入完整历史任务文件。
+ *
+ * 注意：这不是运行队列持久化，只是旧文件 API 的兼容入口。
  */
-export function task_write(json: any) {
-  fs.writeFileSync(taskFile, JSON.stringify(json, null, 2), 'utf-8')
+export function task_write(json: taskType[]) {
+  writeTaskFile(json)
 }
 
 /**
- * 新增订阅
- * @param param0
+ * 旧任务文件 API：新增任务到 task.json。
+ *
+ * 运行中的下载队列请继续使用 mangaTask.add。
  */
-export function task_add({ tasks, website, id, name }: { tasks: subsribeType[], website: string, name: string, id: TaskIdentifier }) {
+export function task_add({ tasks, website, id, name }: TaskAddOptions) {
   const task = task_read()
-  if (tasks) {
+
+  if (tasks?.length) {
     task.push(...tasks.map((item) => ensureTaskIdentity(item)))
-  } else {
-    task.push(ensureTaskIdentity({ website, id, name }))
+  } else if (website && isPresent(id) && name !== undefined) {
+    task.push(ensureTaskIdentity({ website, id: id as TaskIdentifier, name }))
   }
 
   task_write(task)
 }
 
 /**
- * 移除订阅
- * @param param0
+ * 旧任务文件 API：从 task.json 移除一条任务。
  */
-export function task_remove({ website, id, name, taskId }: { website: string, id: TaskIdentifier, name?: string, taskId?: string }) {
+export function task_remove({ website, id, name, taskId, url }: TaskRemoveOptions) {
   const task = task_read()
-  const index = task.findIndex((item: any) => {
-    if (taskId) return item.taskId === taskId
+  const index = task.findIndex((item) => isSameTask(item, { website, id, name, taskId, url }))
 
-    return item.website === website
-      && item.id === id
-      && (!name || item.name === name)
-  })
   if (index !== -1) {
     task.splice(index, 1)
     task_write(task)
   }
 }
 
+async function closeBrowser(name: string, browser?: { close(): Promise<void> } | null) {
+  if (!browser) return
+
+  await browser.close().catch((error) => {
+    safeLog(`[browser] 关闭 ${name} 浏览器失败: ${getErrorMessage(error)}`)
+  })
+}
+
 export async function close_all_browsers() {
-  await toomicsBrowser.browser?.close();
-  await bilibiliBrowser.browser?.close();
-  await toomicsBrowserNoUser.browser?.close();
-  await omegascansBrowser.browser?.close();
+  await Promise.all([
+    closeBrowser('toomics', toomicsBrowser.browser),
+    closeBrowser('bilibili', bilibiliBrowser.browser),
+    closeBrowser('toomics-no-user', toomicsBrowserNoUser.browser),
+    closeBrowser('omegascans', omegascansBrowser.browser),
+  ])
 }
 
 class Task {
   tasks: taskType[] = []
-  running: boolean | number = false
+  running = false
   protected runningTask: runningTaskType | null = null
 
   constructor(tasks: taskType[]) {
-    this.tasks = tasks
+    this.tasks = tasks.map((task) => ensureTaskIdentity(task))
   }
 
-  run() { }
+  run(): void | Promise<void> {}
 
   get() {
     return this.tasks
@@ -193,9 +326,9 @@ class Task {
   }
 
   /**
-   * 创建进度报告回调，供 service 类在下载过程中调用
-   * @param total 总章节数（从 5% 到 95% 的进度空间分配给章节下载）
-   * @returns 返回 (current, message) => void
+   * 创建固定总数的进度报告器。
+   *
+   * 目前多数 service 使用 createChapterReporter；此方法保留给已知总数的任务。
    */
   protected createProgressReporter(total: number) {
     let completedCount = 0
@@ -204,9 +337,10 @@ class Task {
 
     return (message: string) => {
       completedCount++
-      const percent = total > 0
-        ? startPercent + ((endPercent - startPercent) * completedCount) / total
-        : startPercent
+      const percent =
+        total > 0
+          ? startPercent + ((endPercent - startPercent) * completedCount) / total
+          : startPercent
       this.setProgress({
         percent: Math.round(percent),
         stage: '下载中',
@@ -218,19 +352,21 @@ class Task {
   }
 
   /**
-   * 创建可动态设置 total 的进度报告器
-   * 适用于 service 在执行中才发现总章节数的场景
+   * 创建可动态设置章节总数的进度报告器。
+   *
+   * service 可先调用 setTotal 设置总章节数，再通过 report/subProgress 推进进度。
    */
-  protected createChapterReporter() {
+  protected createChapterReporter(): ChapterReporter {
     let completedCount = 0
     let totalChapters = 0
     const startPercent = 5
     const endPercent = 95
 
     const update = () => {
-      const percent = totalChapters > 0
-        ? startPercent + ((endPercent - startPercent) * completedCount) / totalChapters
-        : startPercent
+      const percent =
+        totalChapters > 0
+          ? startPercent + ((endPercent - startPercent) * completedCount) / totalChapters
+          : startPercent
       this.setProgress({
         percent: Math.round(percent),
         stage: '下载中',
@@ -240,12 +376,10 @@ class Task {
     }
 
     return {
-      /** 设置总章节数 */
       setTotal: (total: number) => {
         totalChapters = total
         update()
       },
-      /** 报告一个章节下载完成 */
       report: (message: string) => {
         completedCount++
         this.setProgress({
@@ -256,20 +390,15 @@ class Task {
         })
         update()
       },
-      /** 仅更新消息，不推进计数 */
       message: (message: string) => {
         this.setProgress({ message })
       },
-      /** 更新副进度（章节内图片下载进度） */
       subProgress: (current: number, total: number) => {
         this.setProgress({ subCurrent: current, subTotal: total })
       },
     }
   }
 
-  /**
-   * 更新消息而不推进进度百分比
-   */
   protected updateMessage(message: string) {
     this.setProgress({ message })
   }
@@ -295,7 +424,7 @@ class Task {
   protected failCurrentTask(error: unknown) {
     if (!this.runningTask) return
 
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     const now = new Date().toISOString()
     this.runningTask = {
       ...this.runningTask,
@@ -314,7 +443,7 @@ class Task {
   protected pauseCurrentTask(error: unknown) {
     if (!this.runningTask) return
 
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     const now = new Date().toISOString()
     this.runningTask = {
       ...this.runningTask,
@@ -336,25 +465,25 @@ class Task {
 
   add(task: taskType) {
     this.tasks.push(ensureTaskIdentity(task))
-    this.run()
+    void this.run()
   }
 
   remove(target: Partial<taskType> | TaskIdentifier) {
-    const taskId = typeof target === 'object' ? target.taskId : undefined
-    const mangaId = typeof target === 'object' ? target.id : target
-    const website = typeof target === 'object' ? target.website : undefined
-    const name = typeof target === 'object' ? target.name : undefined
+    const removeTarget: TaskRemoveOptions =
+      typeof target === 'object'
+        ? {
+            taskId: target.taskId,
+            id: target.id,
+            website: target.website,
+            name: target.name,
+            url: target.url,
+          }
+        : { id: target }
 
-    const index = this.tasks.findIndex((item) => {
-      if (taskId) return item.taskId === taskId
+    const index = this.tasks.findIndex((item) => isSameTask(item, removeTarget))
 
-      return item.id === mangaId
-        && (!website || item.website === website)
-        && (!name || item.name === name)
-    })
     if (index !== -1) {
       this.tasks.splice(index, 1)
-      task_write(this.tasks)
     }
   }
 
@@ -369,63 +498,58 @@ class Task {
   }
 }
 
-import Toomics from '#services/toomics'
-import Bilibili from '#services/bilibili'
-import Omegascans from '#services/omegascans'
-import { end_app, isTaskAbortError, isTaskPauseError, shut_down, write_log } from '#utils/index';
-import ToomicsDayUpdate from '#services/toomics-update';
-import ToomicsAll from '#services/toomics-all';
-import ToZip from '#services/tozip';
-import OmegaScansUpdate from '#services/omegascans-update';
-import SyncCloud from '#services/sync-cloud';
-import { PassThroughScheduler, type TaskScheduler } from '#services/scheduler';
 /**
- * 根据 task.website 创建对应的 service 实例
- * 所有网站的 service 工厂集中在此，方便扩展和维护
+ * 根据 task.website 创建对应的 service。
+ *
+ * 工厂集中在这里，MangaTask 只负责调度，不直接关心每个网站的构造细节。
  */
-async function createTaskService(task: taskType, reporter: ReturnType<Task['createChapterReporter']>) {
+async function createTaskService(
+  task: taskType,
+  reporter: ReturnType<Task['createChapterReporter']>
+): Promise<TaskService | null> {
   switch (task.website) {
     case 'toomics':
-      return new Toomics(task, reporter);
+      return new Toomics(task, reporter)
     case 'bilibili':
-      return new Bilibili(task, reporter);
+      return new Bilibili(task, reporter)
     case 'omegascans':
-      return new Omegascans(task, reporter);
+      return new Omegascans(task, reporter)
     case 'gentleman': {
-      const Gentleman = (await import('#services/gentleman')).default;
-      return new Gentleman(task, reporter);
+      const gentlemanModule = await import('#services/gentleman')
+      const Gentleman = gentlemanModule.default
+      return new Gentleman(task, reporter)
     }
     case 'omegascans-update':
-      return new OmegaScansUpdate({}, reporter);
+      return new OmegaScansUpdate({}, reporter)
     case 'toomics-update-sc':
-      return new ToomicsDayUpdate('sc', reporter);
+      return new ToomicsDayUpdate('sc', reporter)
     case 'toomics-update-tc':
-      return new ToomicsDayUpdate('tc', reporter);
+      return new ToomicsDayUpdate('tc', reporter)
     case 'toomics-covers-sc':
-      return new ToomicsAll('sc', false, reporter);
+      return new ToomicsAll('sc', false, reporter)
     case 'toomics-covers-tc':
-      return new ToomicsAll('tc', false, reporter);
+      return new ToomicsAll('tc', false, reporter)
     case 'toomics-compress-sc':
-      return new ToZip('toomics-sc', false, reporter);
+      return new ToZip('toomics-sc', false, reporter)
     case 'toomics-compress-tc':
-      return new ToZip('toomics-tc', false, reporter);
+      return new ToZip('toomics-tc', false, reporter)
     case 'omegascans-compress':
-      return new ToZip('omegascans', true, reporter);
+      return new ToZip('omegascans', true, reporter)
     case 'bilibili-compress':
-      return new ToZip('bilibili', true, reporter);
+      return new ToZip('bilibili', true, reporter)
     case 'sync-toomics-sc':
-      return new SyncCloud('toomics-sc', '.', false, reporter);
+      return new SyncCloud('toomics-sc', '.', false, reporter)
     case 'sync-toomics-tc':
-      return new SyncCloud('toomics-tc', '.', false, reporter);
+      return new SyncCloud('toomics-tc', '.', false, reporter)
     case 'sync-omegascans':
-      return new SyncCloud('omegascans', '.', false, reporter);
+      return new SyncCloud('omegascans', '.', false, reporter)
     default:
-      return null;
+      return null
   }
 }
 
 class MangaTask extends Task {
-  taskErrors = 0
+  private retryCounts = new Map<string, number>()
   scheduler: TaskScheduler
 
   constructor(tasks: taskType[]) {
@@ -434,92 +558,139 @@ class MangaTask extends Task {
   }
 
   async run() {
-
-    if (this.running) {
-      return;
-    }
+    if (this.running) return
 
     this.running = true
-    const task = this.tasks.shift()
 
-    if (!task) {
-      write_log('[MangaTask] 所有任务执行完毕')
-      await close_all_browsers()
+    try {
+      while (true) {
+        const task = this.tasks.shift()
+
+        if (!task) {
+          await this.finishQueue()
+          return
+        }
+
+        const result = await this.runTask(task)
+        if (result === 'paused' || result === 'aborted') return
+
+        if (!this.scheduler.shouldContinue()) {
+          write_log('[MangaTask] 调度器要求暂停，停止任务循环')
+          return
+        }
+      }
+    } finally {
       this.running = false
-      this.clearCurrentTask()
-      shut_down()
-      return
     }
+  }
 
-    // 调度器：任务执行前钩子（可阻塞等待时间窗口等）
-    await this.scheduler.beforeTask(task)
+  private async finishQueue() {
+    write_log('[MangaTask] 所有任务执行完毕')
+    await close_all_browsers()
+    this.clearCurrentTask()
+    this.shutdownSafely()
+  }
 
-    this.startCurrentTask(task, '准备任务服务')
-    const reporter = this.createChapterReporter()
+  private async runTask(task: taskType): Promise<TaskRunResult> {
+    this.startCurrentTask(task, '等待调度')
 
-    const taskService = await createTaskService(task, reporter)
-    if (!taskService) {
-      write_log(`[MangaTask] 未知网站: ${task.website}`);
-      this.failCurrentTask(`未知网站: ${task.website}`)
-      this.running = false;
-      return;
-    }
+    let result: TaskRunResult = 'failed'
+    let shouldRunCleanup = true
 
-    reporter.message(`${task.website} ${task.name || task.id} 正在执行`)
-
-    let taskFailed = false
-    let taskPaused = false
-    await taskService.start()
-      .catch((err: unknown) => {
-        if (isTaskPauseError(err)) {
-          taskPaused = true
-          this.pauseCurrentTask(err)
-          write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${err instanceof Error ? err.message : String(err)}`)
-          return
-        }
-
-        if (isTaskAbortError(err)) {
-          write_log(`[Task] 检测到异常状态，清空所有任务: ${err instanceof Error ? err.message : String(err)}`)
-          this.tasks = []
-          this.running = false
-          return
-        }
-
-        taskFailed = true
-        this.failCurrentTask(err)
-        write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err instanceof Error ? err.message : String(err)}`)
-        if (this.taskErrors > 10) {
-          write_log(`[Task] 任务重试超过10次,退出`)
-          return;
-        }
-        this.taskErrors++;
-        // 任务放到末尾再次执行
-        this.tasks.push(task)
+    try {
+      await this.scheduler.beforeTask(task)
+      this.setProgress({
+        stage: '准备任务服务',
+        message: `${task.website} ${task.name || task.id} 正在准备`,
       })
 
-    if (taskPaused) {
-      this.running = false
-      return
-    }
+      const reporter = this.createChapterReporter()
+      const taskService = await createTaskService(task, reporter)
 
-    if (!taskFailed) {
-      this.taskErrors = 0
+      if (!taskService) {
+        const error = new Error(`未知网站: ${task.website}`)
+        write_log(`[MangaTask] ${error.message}`)
+        this.failCurrentTask(error)
+        return result
+      }
+
+      reporter.message(`${task.website} ${task.name || task.id} 正在执行`)
+      await taskService.start()
+
+      result = 'success'
+      this.clearRetryCount(task)
       this.finishCurrentTask('任务执行完成')
+
+      return result
+    } catch (error) {
+      if (isTaskPauseError(error)) {
+        result = 'paused'
+        shouldRunCleanup = false
+        this.pauseCurrentTask(error)
+        write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${getErrorMessage(error)}`)
+        return result
+      }
+
+      if (isTaskAbortError(error)) {
+        result = 'aborted'
+        this.failCurrentTask(error)
+        this.tasks = []
+        this.retryCounts.clear()
+        write_log(`[Task] 检测到异常状态，清空所有任务: ${getErrorMessage(error)}`)
+        return result
+      }
+
+      this.failCurrentTask(error)
+      write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${getErrorMessage(error)}`)
+      this.requeueFailedTask(task)
+
+      return result
+    } finally {
+      if (shouldRunCleanup) {
+        await this.afterTaskSafely(task, result === 'success')
+        this.endAppSafely()
+      }
     }
+  }
 
-    // 调度器：任务执行后钩子
-    await this.scheduler.afterTask(task, !taskFailed && !taskPaused)
+  private requeueFailedTask(task: taskType) {
+    const retryKey = getTaskIdentity(task)
+    const retryCount = (this.retryCounts.get(retryKey) ?? 0) + 1
 
-    end_app();
-    this.running = false
-
-    // 调度器：检查是否继续执行
-    if (!this.scheduler.shouldContinue()) {
-      write_log('[MangaTask] 调度器要求暂停，停止任务循环')
+    if (retryCount > maxRetryCount) {
+      write_log(`[Task] ${task.id} ${task.name} 任务重试超过${maxRetryCount}次，跳过`)
+      this.retryCounts.delete(retryKey)
       return
     }
 
-    await this.run()
+    this.retryCounts.set(retryKey, retryCount)
+    this.tasks.push(task)
+  }
+
+  private clearRetryCount(task: taskType) {
+    this.retryCounts.delete(getTaskIdentity(task))
+  }
+
+  private async afterTaskSafely(task: taskType, success: boolean) {
+    await this.scheduler.afterTask(task, success).catch((error) => {
+      write_log(`[MangaTask] 调度器 afterTask 执行失败: ${getErrorMessage(error)}`)
+    })
+  }
+
+  private endAppSafely() {
+    try {
+      end_app()
+    } catch (error) {
+      write_log(`[MangaTask] end_app 执行失败: ${getErrorMessage(error)}`)
+    }
+  }
+
+  private shutdownSafely() {
+    try {
+      shut_down()
+    } catch (error) {
+      write_log(`[MangaTask] shut_down 执行失败: ${getErrorMessage(error)}`)
+    }
   }
 }
 

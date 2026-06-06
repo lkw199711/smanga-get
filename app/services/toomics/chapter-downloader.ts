@@ -4,19 +4,34 @@ import { delay, end_app, make_can_be_floder, write_log, set_failed_chapters, Tas
 import { humanScroll, randomMouseMove, readingDelay } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 
+/** 章节下载所需的参数 */
 export interface ChapterInfo {
-  chapterName: string
-  url: string
-  downloadPath: string
-  reloadImageindexs?: number[]
-  doNotDownload?: boolean
+  chapterName: string          // 章节名（已清理为合法目录名）
+  url: string                  // 章节详情页 URL（不含 /viewer/S 后缀）
+  downloadPath: string         // 本地保存目录路径
+  reloadImageindexs?: number[] // 重试模式下需重新下载的图片索引列表
+  doNotDownload?: boolean      // 标记为「假装下载」的章节（仅浏览不保存）
 }
 
+/**
+ * Toomics 章节下载器
+ *
+ * 下载流程（单章节）：
+ *   1. 打开章节查看页（/viewer/S 模式）
+ *   2. 保存 cookie → 人类化滚动 → 随机鼠标移动 → 等待网络空闲 → 模拟阅读延迟
+ *   3. 若为「假装下载」模式，仅浏览后关闭页面（模拟真人行为）
+ *   4. 从 DOM 提取所有图片 URL → 从浏览器内存 buffer 读取并写入磁盘
+ *   5. 检测干扰图片（< 250 字节）和失败图片（buffer 不存在），触发重试
+ *   6. 检测图片序号连续性，不连续则重新下载缺失部分
+ *   7. 连续空章节 ≥ 2 触发 TaskAbortError 熔断
+ *
+ * 重试机制（迭代式，非递归，避免栈溢出）：
+ *   - 干扰图片 + 失败图片 → 合并重试（最多 3 次）
+ *   - 图片序号不连续 → 全量重试（最多 3 次）
+ */
 export class ToomicsChapterDownloader {
-  /** 连续空章节计数（从外部注入，以便 Toomics 主类访问） */
+  /** 连续空章节计数（跨章节保持，由外部读取以触发熔断） */
   consecutiveEmptyChapters = 0
-  private retry = 0
-  private maxRetry: number
   private failedChapters: string[] = []
   private mangaName: string
   private mangaUrl: string
@@ -24,6 +39,7 @@ export class ToomicsChapterDownloader {
   private compressPath: string
   private scrollStep: number
   private scrollDelay: number
+  private maxRetry: number
   private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
 
   constructor(opts: {
@@ -47,137 +63,165 @@ export class ToomicsChapterDownloader {
   }
 
   /**
-   * 下载章节
-   * @description 通过浏览器模拟下载。图片下载失败分两种：请求失败（无图片）、请求成功但内容为空。
-   * 重试三次后仍未成功则跳过。连续两次空章节触发 TaskAbortError 熔断。
+   * 下载单个章节（迭代重试，最多 maxRetry 次）
+   *
+   * 注意：此方法不在此调用 end_app()，由上层调度器统一控制进程生命周期
    */
   async downloadChapter(chapter: ChapterInfo): Promise<void> {
-    const { chapterName, url, downloadPath, reloadImageindexs = [], doNotDownload = false } = chapter
-    const errImgs: number[] = []
-    const interfereImages: number[] = []
-
-    if (reloadImageindexs.length > 0) {
-      this.retry++
-      if (this.retry > 3) {
-        write_log(`[chapter download]${chapterName} 重试次数过多,跳过`)
-        this.failedChapters.push(chapterName)
-        set_failed_chapters(this.failedChapters)
-        this.retry = 0
-        return
-      }
-    } else {
-      this.retry = 0
-    }
+    const { chapterName, url, downloadPath, doNotDownload = false } = chapter
 
     if (!toomicsBrowser.browser) return
-    const chapterPage = await toomicsBrowser.new_page()
-    if (!chapterPage) return
 
-    // 开始下载章节
-    console.log('正在下载章节:', chapterName)
-    this.onProgress?.message(`正在下载章节: ${chapterName}`)
+    // 迭代重试循环（替代原来的递归调用，避免栈溢出）
+    let retryCount = 0
+    let reloadImageindexs: number[] = chapter.reloadImageindexs || []
 
-    await chapterPage
-      .goto(url + '/viewer/S', {
-        waitUntil: 'networkidle2',
-        timeout: 60 * 1000,
-        referer: this.mangaUrl,
-      })
-      .catch(() => { })
-
-    // 获取最新cookie
-    await toomicsBrowser.save_cookie()
-
-    // 人类化滚动
-    console.log('开始滚动页面,等待加载图片')
-    await chapterPage.mouse.move(1000, 1000)
-    await humanScroll({
-      page: chapterPage,
-      scrollStep: this.scrollStep,
-      scrollDelay: this.scrollDelay,
-    })
-
-    // 随机鼠标移动（模拟阅读中移动鼠标）
-    await randomMouseMove(chapterPage)
-
-    // 等待图片网络请求完成
-    await chapterPage.waitForNetworkIdle().catch(() => { })
-
-    // 模拟阅读等待时间（预估 30 张图片的阅读时间）
-    await readingDelay(30)
-
-    if (doNotDownload) {
-      /**
-       * 每部漫画仅下载最后一章节,可能会遭到cookie禁用
-       * 因此首先尝试随机浏览一些其他章节
-       */
-      await chapterPage.close()
-      write_log(`[chapter download]${chapterName} 下载已禁用,跳过`)
-      this.onProgress?.report(`${chapterName} 已跳过`)
-      return
-    }
-
-    // 获取所有图片的url
-    const imageUrls = await chapterPage.evaluate(() => {
-      const doc = (globalThis as any).document
-      const els = doc.querySelectorAll('img[id^="set_image_"]')
-      const urls = Array.from(els).map((el: any) => el.src)
-      return urls
-    })
-
-    // 数量正确 进行下载
-    this.onProgress?.message(`正在保存 ${chapterName} 图片 (共 ${imageUrls.length} 张)`)
-    for (let i = 0; i < imageUrls.length; i++) {
-      const imageUrl = imageUrls[i]
-      const picName = i.toString().padStart(5, '0')
-      const localPath = `${downloadPath}/${picName}.jpg`
-
-      // 如果为重试模式 仅下载指定图片
-      if (reloadImageindexs.length > 0 && !reloadImageindexs.includes(i)) {
-        continue
+    while (true) {
+      // 重试模式下的次数限制
+      if (reloadImageindexs.length > 0) {
+        retryCount++
+        if (retryCount > this.maxRetry) {
+          write_log(`[chapter download] ${chapterName} 重试次数过多，跳过`)
+          this.failedChapters.push(chapterName)
+          set_failed_chapters(this.failedChapters)
+          return
+        }
       }
 
-      // 记录错误图片
-      if (!toomicsBrowser.buffs[imageUrl]) {
-        errImgs.push(i)
-        continue
-      }
-
-      // 记录干扰图片
-      if (toomicsBrowser.buffs[imageUrl].length < 250) {
-        interfereImages.push(i)
-        continue
-      }
-
-      fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])
-    }
-
-    toomicsBrowser.clear_buffs()
-    chapterPage.close()
-
-    if (interfereImages.length === 1 && interfereImages[0] === imageUrls.length - 1) {
-      // 如果错误图片为最后一张
-      write_log(`[chapter download]${chapterName} 最后一张为干扰图.`)
-    } else if (interfereImages.length > 0) {
-      const interfereStr = interfereImages.length > 0 ? `, 检测到干扰图片:${interfereImages}` : ''
-      const errorStr = errImgs.length > 0 ? `, 请求失败图片:${errImgs}` : ''
-      write_log(`[chapter download]${chapterName}下载失败${interfereStr}${errorStr},进行重新下载`)
-      await this.downloadChapter({
+      const result = await this.downloadChapterOnce({
         chapterName,
         url,
         downloadPath,
-        reloadImageindexs: interfereImages.concat(errImgs),
+        reloadImageindexs,
+        doNotDownload,
       })
-      return
+
+      // 下载成功或已跳过，退出重试循环
+      if (!result.needsRetry) return
+
+      // 设置下一轮重试的图片索引
+      reloadImageindexs = result.retryIndexes
+    }
+  }
+
+  /**
+   * 单次下载尝试（不含重试逻辑）
+   *
+   * 每次成功下载完成后调用 end_app()，在 cookie 已刷新的状态下尽快退出进程，
+   * 由任务调度器在下次启动时继续后续章节。
+   *
+   * @returns needsRetry=false 表示成功或已跳过；needsRetry=true 时 retryIndexes 为需重试的图片索引
+   */
+  private async downloadChapterOnce(chapter: ChapterInfo & { reloadImageindexs: number[] }): Promise<{
+    needsRetry: boolean
+    retryIndexes: number[]
+  }> {
+    const { chapterName, url, downloadPath, reloadImageindexs, doNotDownload } = chapter
+    const errImgs: number[] = []
+    const interfereImages: number[] = []
+
+    const chapterPage = await toomicsBrowser.new_page()
+    if (!chapterPage) return { needsRetry: false, retryIndexes: [] }
+
+    try {
+      // 打开章节查看页（/viewer/S 为单页滚动模式）
+      console.log('正在下载章节:', chapterName)
+      this.onProgress?.message(`正在下载章节: ${chapterName}`)
+
+      await chapterPage
+        .goto(url + '/viewer/S', {
+          waitUntil: 'networkidle2',
+          timeout: 60 * 1000,
+          referer: this.mangaUrl,
+        })
+        .catch(() => {})
+
+      // 保存最新 cookie
+      await toomicsBrowser.save_cookie()
+
+      // 人类化滚动 + 随机鼠标移动（模拟真人阅读行为）
+      console.log('开始滚动页面,等待加载图片')
+      await chapterPage.mouse.move(1000, 1000)
+      await humanScroll({
+        page: chapterPage,
+        scrollStep: this.scrollStep,
+        scrollDelay: this.scrollDelay,
+      })
+      await randomMouseMove(chapterPage)
+
+      // 等待图片网络请求完成
+      await chapterPage.waitForNetworkIdle().catch(() => {})
+
+      // 模拟阅读等待时间（基于预估图片数量）
+      await readingDelay(30)
+
+      // 「假装下载」模式：仅浏览不保存图片（模拟真人随机翻阅其他章节）
+      if (doNotDownload) {
+        write_log(`[chapter download] ${chapterName} 下载已禁用，跳过`)
+        this.onProgress?.report(`${chapterName} 已跳过`)
+        return { needsRetry: false, retryIndexes: [] }
+      }
+
+      // 从 DOM 提取所有图片 URL（id 以 "set_image_" 开头的 img 元素）
+      const imageUrls: string[] = await chapterPage.evaluate(() => {
+        const doc = (globalThis as any).document
+        const els = doc.querySelectorAll('img[id^="set_image_"]')
+        return Array.from(els).map((el: any) => el.src)
+      })
+
+      // 从浏览器内存 buffer 读取图片并写入磁盘
+      this.onProgress?.message(`正在保存 ${chapterName} 图片 (共 ${imageUrls.length} 张)`)
+      for (let i = 0; i < imageUrls.length; i++) {
+        const imageUrl = imageUrls[i]
+        const picName = i.toString().padStart(5, '0')
+        const localPath = `${downloadPath}/${picName}.jpg`
+
+        // 重试模式下仅下载指定索引的图片
+        if (reloadImageindexs.length > 0 && !reloadImageindexs.includes(i)) continue
+
+        // buffer 不存在 → 请求失败
+        if (!toomicsBrowser.buffs[imageUrl]) {
+          errImgs.push(i)
+          continue
+        }
+
+        // buffer 体积过小（< 250 字节）→ 干扰图/占位图
+        if (toomicsBrowser.buffs[imageUrl].length < 250) {
+          interfereImages.push(i)
+          continue
+        }
+
+        fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])
+      }
+    } finally {
+      toomicsBrowser.clear_buffs()
+      await chapterPage.close().catch(() => {})
     }
 
-    // 检测图片序号连续性
-    let imgs = fs
+    // ── 结果检查与重试判定 ────────────────────────────────────────
+
+    // 仅最后一张为干扰图 → 通常是站点水印/广告，不影响正文
+    if (interfereImages.length === 1 && interfereImages[0] === 0) {
+      // 没有 errImgs 且只有最后一张干扰图，视为成功（见下方序号连续性检查）
+    } else if (interfereImages.length > 0 || errImgs.length > 0) {
+      // 存在干扰图或失败图片 → 合并后重试
+      const interfereStr = interfereImages.length > 0 ? `, 干扰图片: ${interfereImages}` : ''
+      const errorStr = errImgs.length > 0 ? `, 请求失败: ${errImgs}` : ''
+      write_log(`[chapter download] ${chapterName} 下载异常${interfereStr}${errorStr}，准备重试`)
+      return { needsRetry: true, retryIndexes: interfereImages.concat(errImgs) }
+    }
+
+    // 检查下载结果
+    const imgs = fs
       .readdirSync(downloadPath)
       .filter((file) => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+
+    // 空章节处理
     if (imgs.length === 0) {
       this.consecutiveEmptyChapters++
-      write_log(`[chapter download]${chapterName} 下载完成,没有图片 (连续空章节: ${this.consecutiveEmptyChapters})`)
+      write_log(
+        `[chapter download] ${chapterName} 下载完成，没有图片 (连续空章节: ${this.consecutiveEmptyChapters})`
+      )
 
       if (this.consecutiveEmptyChapters >= 2) {
         const abortMsg = `[CRITICAL] 连续 ${this.consecutiveEmptyChapters} 个章节下载为空！可能原因：cookie 失效、网络异常、或触发风控验证。已中断所有任务，请检查状态后手动重试。`
@@ -186,41 +230,38 @@ export class ToomicsChapterDownloader {
         throw new TaskAbortError(abortMsg)
       }
 
-      return
+      return { needsRetry: false, retryIndexes: [] }
     }
-    imgs.sort((a, b) => {
-      const numA = parseInt(a.split('.')[0], 10)
-      const numB = parseInt(b.split('.')[0], 10)
-      return numA - numB
-    })
 
-    const maxImg = imgs[imgs.length - 1]
-    const maxImgName = path.basename(maxImg)
+    // 检测图片序号连续性（判断是否有遗漏）
+    imgs.sort((a, b) => parseInt(a.split('.')[0], 10) - parseInt(b.split('.')[0], 10))
+    const maxImgName = path.basename(imgs[imgs.length - 1])
     const maxImgNum = parseInt(maxImgName)
 
     if (maxImgNum + 1 > imgs.length) {
       write_log(
-        `[chapter download]${chapterName} 下载完成,但是图片序号不连续,最大序号: ${maxImgNum}, 实际图片数量: ${imgs.length}`
+        `[chapter download] ${chapterName} 图片序号不连续，最大序号: ${maxImgNum}，实际数量: ${imgs.length}`
       )
-      // 如果图片序号不连续 重新下载
-      await this.downloadChapter({
-        chapterName,
-        url,
-        downloadPath,
-        reloadImageindexs: Array.from({ length: maxImgNum + 1 }, (_, i) => i),
-      })
-    } else {
-      // 成功下载到图片 → 重置空章节计数
-      if (this.consecutiveEmptyChapters > 0) {
-        write_log(`[chapter download] 空章节计数已重置 (之前: ${this.consecutiveEmptyChapters})`)
-        this.consecutiveEmptyChapters = 0
+      // 全量重试以补齐缺失图片
+      return {
+        needsRetry: true,
+        retryIndexes: Array.from({ length: maxImgNum + 1 }, (_, i) => i),
       }
-      write_log(`[chapter download]${chapterName} 下载完成.`)
-      this.onProgress?.report(`${chapterName} 下载完成`)
     }
+
+    // 下载成功 → 重置空章节计数
+    if (this.consecutiveEmptyChapters > 0) {
+      write_log(`[chapter download] 空章节计数已重置 (之前: ${this.consecutiveEmptyChapters})`)
+      this.consecutiveEmptyChapters = 0
+    }
+    write_log(`[chapter download] ${chapterName} 下载完成.`)
+    this.onProgress?.report(`${chapterName} 下载完成`)
 
     await delay(1000)
 
+    // 章节下载完成，尽快退出以保存最新 cookie
     end_app()
+
+    return { needsRetry: false, retryIndexes: [] }
   }
 }
