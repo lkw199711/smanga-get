@@ -1,4 +1,4 @@
-import puppeteer from "puppeteer";
+import puppeteer from "rebrowser-puppeteer";
 import fs from "fs";
 import { end_app, get_config, write_log } from "#utils/index";
 import crypto from "crypto";
@@ -104,17 +104,19 @@ class UseBrowser {
 
     async init(options: { headless?: boolean } = {}) {
         const headless = options.headless ?? this.config.headless
+        const executablePath = this.config.executablePath
+            || process.env.PUPPETEER_EXECUTABLE_PATH
+            || puppeteer.executablePath()
         this.browser = await puppeteer.launch({
             headless,
+            executablePath,
             timeout: 60 * 1000,
-            args: ['--no-sandbox', '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
-                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
-                '--disable-web-security',
-                ...(headless ? ['--disable-gpu', '--disable-software-rasterizer'] : []),
-                '--lang=zh-CN,zh', // 设置浏览器语言
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--lang=zh-CN,zh',
                 ...this.proxyArgs,
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
             ],
             defaultViewport: {
                 width: 1920,
@@ -196,17 +198,57 @@ class UseBrowser {
             'Upgrade-Insecure-Requests': '1'
         });
 
-        // 消除navigator.webdriver属性‌:ml-citation{ref="3" data="citationList"}
+        // 消除navigator.webdriver属性（rebrowser 已处理，这里设为 false 更安全）
         await page.evaluateOnNewDocument(() => {
             Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
+                get: () => false
             });
         });
 
-        // 覆盖plugins属性
-        await page.evaluate(() => {
+        // 覆盖plugins属性，模拟真实 Chrome 插件
+        await page.evaluateOnNewDocument(() => {
+            const makePlugin = (name: string) => ({
+                name,
+                filename: `${name.toLowerCase().replace(/\s+/g, '_')}.dll`,
+                description: `${name}`,
+                length: 1,
+                0: { type: 'application/x-google-chrome-plugin' },
+                item: () => null,
+                namedItem: () => null,
+            });
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3] // 返回非空数组
+                get: () => {
+                    const plugins = [
+                        makePlugin('Chrome PDF Plugin'),
+                        makePlugin('Chrome PDF Viewer'),
+                        makePlugin('Native Client'),
+                    ] as any;
+                    plugins.item = (i: number) => plugins[i] || null;
+                    plugins.namedItem = (name: string) => plugins.find((p: any) => p.name === name) || null;
+                    plugins.refresh = () => {};
+                    return plugins;
+                }
+            });
+        });
+
+        // 修复 chrome.runtime
+        await page.evaluateOnNewDocument(() => {
+            const win = globalThis as any;
+            if (!win.chrome) {
+                Object.defineProperty(globalThis, 'chrome', {
+                    get: () => ({ runtime: {} }),
+                });
+            }
+        });
+
+        // 修复 headless 模式下 window.outerWidth/outerHeight 可能为 0 的问题
+        await page.evaluateOnNewDocument(() => {
+            const win = globalThis as any;
+            Object.defineProperty(globalThis, 'outerWidth', {
+                get: () => win.innerWidth,
+            });
+            Object.defineProperty(globalThis, 'outerHeight', {
+                get: () => win.innerHeight + 100,
             });
         });
 
@@ -280,17 +322,57 @@ class UseToomicsBrowser extends UseBrowser {
             'Upgrade-Insecure-Requests': '1'
         });
 
-        // 消除navigator.webdriver属性‌:ml-citation{ref="3" data="citationList"}
+        // 消除navigator.webdriver属性（rebrowser 已处理，这里设为 false 更安全）
         await page.evaluateOnNewDocument(() => {
             Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
+                get: () => false
             });
         });
 
-        // 覆盖plugins属性
-        await page.evaluate(() => {
+        // 覆盖plugins属性，模拟真实 Chrome 插件
+        await page.evaluateOnNewDocument(() => {
+            const makePlugin = (name: string) => ({
+                name,
+                filename: `${name.toLowerCase().replace(/\s+/g, '_')}.dll`,
+                description: `${name}`,
+                length: 1,
+                0: { type: 'application/x-google-chrome-plugin' },
+                item: () => null,
+                namedItem: () => null,
+            });
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3] // 返回非空数组
+                get: () => {
+                    const plugins = [
+                        makePlugin('Chrome PDF Plugin'),
+                        makePlugin('Chrome PDF Viewer'),
+                        makePlugin('Native Client'),
+                    ] as any;
+                    plugins.item = (i: number) => plugins[i] || null;
+                    plugins.namedItem = (name: string) => plugins.find((p: any) => p.name === name) || null;
+                    plugins.refresh = () => {};
+                    return plugins;
+                }
+            });
+        });
+
+        // 修复 chrome.runtime
+        await page.evaluateOnNewDocument(() => {
+            const win = globalThis as any;
+            if (!win.chrome) {
+                Object.defineProperty(globalThis, 'chrome', {
+                    get: () => ({ runtime: {} }),
+                });
+            }
+        });
+
+        // 修复 headless 模式下 window.outerWidth/outerHeight 可能为 0 的问题
+        await page.evaluateOnNewDocument(() => {
+            const win = globalThis as any;
+            Object.defineProperty(globalThis, 'outerWidth', {
+                get: () => win.innerWidth,
+            });
+            Object.defineProperty(globalThis, 'outerHeight', {
+                get: () => win.innerHeight + 100,
             });
         });
 

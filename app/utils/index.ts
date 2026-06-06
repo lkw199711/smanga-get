@@ -13,6 +13,20 @@ const configFile = dataRoot + 'data/config.json'
 const failedChaptersFile = dataRoot + 'data/failed-chapters.json'
 const logFile = dataRoot + 'data/log.txt'
 
+export class TaskPauseError extends Error {
+  pauseTask = true
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'TaskPauseError'
+  }
+}
+
+export function isTaskPauseError(error: unknown): error is TaskPauseError {
+  return error instanceof TaskPauseError
+    || (typeof error === 'object' && error !== null && (error as { pauseTask?: unknown }).pauseTask === true)
+}
+
 export function get_os() {
   const platform = os.platform()
   if (platform === 'win32') {

@@ -3,8 +3,8 @@ import { downloadImage } from '#api/toomics'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
 import path from 'path'
-import { copy_folder, delay, end_app, get_config, make_can_be_floder, read_json, s_delete, set_failed_chapters, write_log, get_failed_chapters } from '#utils/index'
-import puppeteer from 'puppeteer'
+import { copy_folder, delay, end_app, get_config, make_can_be_floder, read_json, s_delete, set_failed_chapters, write_log, get_failed_chapters, TaskPauseError } from '#utils/index'
+import puppeteer from 'rebrowser-puppeteer'
 import { toomicsBrowser } from '#api/browser'
 import { close_all_browsers, mangaTask } from '#api/task'
 import { zip_directory } from '#utils/zip';
@@ -84,6 +84,43 @@ export default class Toomics {
     if (params.chapterCount) this.chapterCount = Number(params.chapterCount)
     this.params = params
     if (onProgress) this.onProgress = onProgress
+  }
+
+  private async pauseIfMobileVerificationVisible(page: puppeteer.Page, url: string) {
+    const verification = await page.evaluate(() => {
+      const doc = (globalThis as any).document
+      const win = (globalThis as any).window
+      const modal = doc.querySelector('#mobile_verify') as any
+      if (!modal) return null
+
+      const text = modal.innerText || ''
+      const style = win.getComputedStyle(modal)
+      const rect = modal.getBoundingClientRect()
+      const visible = modal.classList.contains('in')
+        && style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && rect.width > 0
+        && rect.height > 0
+      const hasVerificationControls = Boolean(
+        modal.querySelector('#phone, #sms_verify_send, #mobile_auth_verify_code')
+      )
+      const hasVerificationText = /请验证手机号|请输入验证码|信用卡付款时|需验证您的手机号码|获取验证码/.test(text)
+
+      if (!visible || !hasVerificationControls || !hasVerificationText) return null
+
+      return {
+        title: (modal.querySelector('.modal_title')?.textContent || '').trim(),
+        text: text.replace(/\s+/g, ' ').trim().slice(0, 160),
+      }
+    }).catch(() => null)
+
+    if (!verification) return
+
+    const message = `[toomics] ${this.mangaName} 打开漫画页面时检测到手机号验证码弹框，任务已暂停。请在配置页使用手动认证完成验证后再继续。页面: ${url}`
+    write_log(message)
+    this.onProgress?.message(message)
+    await toomicsBrowser.save_cookie(false).catch(() => { })
+    throw new TaskPauseError(message)
   }
 
   /**
@@ -569,6 +606,8 @@ export default class Toomics {
         timeout: 180 * 1000,
       })
       .catch(() => { })
+    await delay(1000)
+    await this.pauseIfMobileVerificationVisible(this.metaPage, this.mangaUrl)
     await toomicsBrowser.save_cookie()
 
     if (/ep\//.test(this.metaPage.url())) {

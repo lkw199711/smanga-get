@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import { downloadImage } from '#api/bilibili'
 import { subsribeType } from '#type/index.js'
 import { delay, end_app, saveBase64Image, write_log, get_config, make_can_be_floder } from '#utils/index'
-import puppeteer from 'puppeteer'
+import puppeteer from 'rebrowser-puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
 
@@ -202,14 +202,11 @@ export default class Bilibili {
     async init() {
         this.browser = await puppeteer.launch({
             headless: false,
-            args: ['--no-sandbox', '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',// 容器环境必备参数‌:ml-citation{ref="5,6" data="citationList"}
-                '--disable-blink-features=AutomationControlled', // 隐藏自动化特征‌:ml-citation{ref="3" data="citationList"}
-                '--disable-web-security',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--lang=zh-CN,zh', // 设置浏览器语言
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' // 最新版UA‌:ml-citation{ref="4" data="citationList"}
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--lang=zh-CN,zh',
             ],
             defaultViewport: {
                 width: 1080,

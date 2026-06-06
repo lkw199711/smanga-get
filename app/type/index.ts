@@ -33,7 +33,7 @@ type taskProgressType = {
 }
 
 type runningTaskType = {
-  status: 'running' | 'success' | 'failed'
+  status: 'running' | 'success' | 'failed' | 'paused'
   task: taskType
   progress: taskProgressType
   startedAt: string

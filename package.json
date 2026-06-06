@@ -68,8 +68,7 @@
     "luxon": "^3.5.0",
     "node-7z": "^3.0.0",
     "node-cron": "^3.0.3",
-    "puppeteer": "^24.6.1",
-    "puppeteer-core": "^24.6.1",
+    "rebrowser-puppeteer": "^24.8.1",
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.33.5",
     "unzipper": "^0.12.3"

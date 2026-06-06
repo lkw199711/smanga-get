@@ -311,6 +311,25 @@ class Task {
     }
   }
 
+  protected pauseCurrentTask(error: unknown) {
+    if (!this.runningTask) return
+
+    const message = error instanceof Error ? error.message : String(error)
+    const now = new Date().toISOString()
+    this.runningTask = {
+      ...this.runningTask,
+      status: 'paused',
+      error: message,
+      progress: {
+        ...this.runningTask.progress,
+        stage: '任务已暂停',
+        message,
+        updatedAt: now,
+      },
+      updatedAt: now,
+    }
+  }
+
   protected clearCurrentTask() {
     this.runningTask = null
   }
@@ -353,7 +372,7 @@ class Task {
 import Toomics from '#services/toomics'
 import Bilibili from '#services/bilibili'
 import Omegascans from '#services/omegascans'
-import { end_app, shut_down, write_log } from '#utils/index';
+import { end_app, isTaskPauseError, shut_down, write_log } from '#utils/index';
 import ToomicsDayUpdate from '#services/toomics-update';
 import ToomicsAll from '#services/toomics-all';
 import ToZip from '#services/tozip';
@@ -428,14 +447,27 @@ class ToomicsTask extends Task {
     const reporter = this.createChapterReporter()
     const toomics = new Toomics(task, reporter)
     let taskFailed = false
+    let taskPaused = false
     await toomics.start()
       .catch((err) => {
+        if (isTaskPauseError(err)) {
+          taskPaused = true
+          this.pauseCurrentTask(err)
+          write_log(`[Toomics] ${task.id} ${task.name} 任务已暂停: ${err.message}`)
+          return
+        }
+
         taskFailed = true
         this.failCurrentTask(err)
         write_log(`[Toomics] ${task.id} ${task.name} 任务执行失败: ${err.message}`)
         // 任务放到末尾再次执行
         this.tasks.push(task)
       })
+
+    if (taskPaused) {
+      this.running = false
+      return
+    }
 
     if (!taskFailed) {
       this.finishCurrentTask('Toomics 任务执行完成')
@@ -582,8 +614,16 @@ class MangaTask extends Task {
     reporter.message(`${task.website} ${task.name || task.id} 正在执行`)
 
     let taskFailed = false
+    let taskPaused = false
     await taskService.start()
       .catch((err) => {
+        if (isTaskPauseError(err)) {
+          taskPaused = true
+          this.pauseCurrentTask(err)
+          write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${err?.message || err}`)
+          return
+        }
+
         taskFailed = true
         this.failCurrentTask(err)
         write_log(`[Task] ${task.id} ${task.name} 任务执行失败: ${err?.message || err}`)
@@ -595,6 +635,11 @@ class MangaTask extends Task {
         // 任务放到末尾再次执行
         this.tasks.push(task)
       })
+
+    if (taskPaused) {
+      this.running = false
+      return
+    }
 
     if (!taskFailed) {
       this.taskErrors = 0
