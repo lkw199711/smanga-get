@@ -28,8 +28,8 @@ export function isTaskPauseError(error: unknown): error is TaskPauseError {
 }
 
 /**
- * 任务中断错误：连续检测到异常状态（如空章节、cookie 失效、封控触发），
- * 抛出此错误将清空整个任务队列，停止所有后续任务。
+ * 任务失败错误：检测到不可恢复的异常（如空章节、登录失败、cookie 失效），
+ * 抛出此错误将标记当前任务为失败，停止任务循环，但保留队列中剩余任务。
  */
 export class TaskAbortError extends Error {
   abortTask = true

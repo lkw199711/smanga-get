@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import path from 'path'
 import puppeteer from 'rebrowser-puppeteer'
-import { delay, write_log, TaskPauseError } from '#utils/index'
+import { delay, write_log, TaskPauseError, TaskAbortError } from '#utils/index'
 import { toomicsBrowser } from '#api/browser'
 
 /** 登录按钮的 Tailwind 样式类名，用于检测 cookie 是否过期 */
@@ -140,7 +140,7 @@ export class ToomicsBrowserSession {
     const afterLoginHtml = await page.content()
     if (LOGIN_BUTTON_CLASS.test(afterLoginHtml)) {
       write_log('登录失败，请检查账号密码')
-      throw new Error('登录失败，请检查账号密码')
+      throw new TaskAbortError('登录失败，请检查账号密码')
     }
 
     // 切换成人模式（调用站点全局对象 Base.setDisplay）

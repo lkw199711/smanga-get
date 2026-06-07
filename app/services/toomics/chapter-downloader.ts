@@ -23,7 +23,7 @@ export interface ChapterInfo {
  *   4. 从 DOM 提取所有图片 URL → 从浏览器内存 buffer 读取并写入磁盘
  *   5. 检测干扰图片（< 250 字节）和失败图片（buffer 不存在），触发重试
  *   6. 检测图片序号连续性，不连续则重新下载缺失部分
- *   7. 连续空章节 ≥ 2 触发 TaskAbortError 熔断
+ *   7. 空章节立即触发 TaskAbortError 熔断
  *
  * 重试机制（迭代式，非递归，避免栈溢出）：
  *   - 干扰图片 + 失败图片 → 合并重试（最多 3 次）
@@ -240,8 +240,8 @@ export class ToomicsChapterDownloader {
         `[chapter download] ${chapterName} 下载完成，没有图片 (连续空章节: ${this.consecutiveEmptyChapters})`
       )
 
-      if (this.consecutiveEmptyChapters >= 2) {
-        const abortMsg = `[CRITICAL] 连续 ${this.consecutiveEmptyChapters} 个章节下载为空！可能原因：cookie 失效、网络异常、或触发风控验证。已中断所有任务，请检查状态后手动重试。`
+      if (this.consecutiveEmptyChapters >= 1) {
+        const abortMsg = `[CRITICAL] ${chapterName} 下载结果为空！可能原因：cookie 失效、网络异常、或触发风控验证。已停止当前任务，请检查状态后手动重试。`
         write_log(abortMsg)
         console.error(abortMsg)
         throw new TaskAbortError(abortMsg)

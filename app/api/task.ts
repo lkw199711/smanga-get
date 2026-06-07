@@ -649,9 +649,7 @@ export class MangaTask extends Task {
       if (isTaskAbortError(error)) {
         result = 'aborted'
         this.failCurrentTask(error)
-        this.tasks = []
-        this.retryCounts.clear()
-        write_log(`[Task] 检测到异常状态，清空所有任务: ${getErrorMessage(error)}`)
+        write_log(`[Task] 检测到异常状态，停止当前任务: ${getErrorMessage(error)}`)
         return result
       }
 

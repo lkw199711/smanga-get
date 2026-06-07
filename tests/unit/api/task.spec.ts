@@ -108,7 +108,7 @@ test.group('task queue', (group) => {
     assert.equal(taskQueue.getRunning()?.error, '需要人工验证')
   })
 
-  test('TaskAbortError 会清空队列并标记当前任务失败', async ({ assert }) => {
+  test('TaskAbortError 会标记当前任务失败并停止，但不清空队列', async ({ assert }) => {
     const taskQueue = new MangaTask(
       [makeTask({ id: 1, name: 'A' }), makeTask({ id: 2, name: 'B' })],
       () => ({
@@ -121,7 +121,7 @@ test.group('task queue', (group) => {
     await taskQueue.run()
 
     assert.equal(taskQueue.running, false)
-    assert.equal(taskQueue.get().length, 0)
+    assert.equal(taskQueue.get().length, 1) // 任务 B 仍在队列
     assert.equal(taskQueue.getRunning()?.status, 'failed')
     assert.equal(taskQueue.getRunning()?.error, '连续空章节')
   })
