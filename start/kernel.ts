@@ -54,10 +54,16 @@ import MoveMeta from '#services/move-meta'
 import RemoveDuplicates from '#services/remove-duplicates'
 import { delay, get_config } from '#utils/index'
 import { mangaTask } from '#api/task'
-import GameOrganize from '#services/game-organize'
 
-await new GameOrganize('D:\\17H-game整理\\05').execute()
-process.exit()
+const isTestEnvironment = process.env.NODE_ENV === 'test'
+
+if (process.env.SMANGA_KERNEL_DEBUG === 'game-organize') {
+  const { default: GameOrganize } = await import('#services/game-organize')
+  await new GameOrganize('D:\\17H-game整理\\05').execute()
+  process.exit()
+}
+
+if (!isTestEnvironment) {
 
 // 先创建配置目录和默认配置文件，防止首次启动空指针
 create_config()
@@ -158,6 +164,7 @@ if (immediately.debugOmegascans) {
     chapterCount: 7,
     url: `https://omegascans.org/comics/pure-perverted-love`,
   })
+}
 }
   
 

@@ -23,7 +23,7 @@ import path from 'path'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
 import { copy_folder, end_app, get_config, make_can_be_floder, write_log, get_failed_chapters } from '#utils/index'
-import { betweenChapterDelay } from '#utils/human'
+import { betweenChapterDelay, betweenMangaDelay, fastScroll, randomDelay, randomInt, DEFAULT_PERSONA } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { zip_directory } from '#utils/zip'
 import { ToomicsBrowserSession } from './browser-session.js'
@@ -66,7 +66,9 @@ export default class Toomics {
   private meta: any = null
   private chapters: any = null
   private chapterCount: number = 0
-  private pretendNum: number = 2          // 「假装下载」的章节数（模拟真人浏览）
+  private pretendNum: number = 0          // 「假装下载」的章节数（每次投骰决定）
+  private antiBotConfig: any              // 反爬共享配置（来自 toomics 主配置节）
+  private mangaDownloadedCount = 0        // 噪声浏览间隔计数器
   private params: subsribeType
 
   // ── 子模块 ──────────────────────────────────────────────
@@ -110,6 +112,9 @@ export default class Toomics {
     this.params = params
     if (onProgress) this.onProgress = onProgress
 
+    // 读取反爬共享配置
+    this.antiBotConfig = get_config('toomics') || {}
+
     // 初始化子模块
     this.browserSession = new ToomicsBrowserSession({
       langTag: this.langTag,
@@ -126,6 +131,10 @@ export default class Toomics {
       scrollStep: this.scrollStep,
       scrollDelay: this.scrollDelay,
       maxRetry: this.maxRetry,
+      persona: this.antiBotConfig?.readerPersona || DEFAULT_PERSONA,
+      fastScrollDurationMs: this.antiBotConfig?.homePageScrollMin
+        ? randomInt(this.antiBotConfig.homePageScrollMin, this.antiBotConfig.homePageScrollMax)
+        : 20000,
       onProgress: this.onProgress,
     })
   }
@@ -152,6 +161,11 @@ export default class Toomics {
 
     // Step 1: 浏览器初始化（cookie + 登录检测）
     await this.browserSession.init()
+
+    // 登录后噪声浏览（模拟真人看完推荐才去追更）
+    if (this.antiBotConfig?.noiseEnabled !== false) {
+      await this.noiseBrowseAfterLogin()
+    }
 
     // Step 2: 获取元数据（标题、章节列表、封面等）
     const metaFetcher = new ToomicsMetaFetcher({
@@ -185,28 +199,34 @@ export default class Toomics {
         scrollStep: this.scrollStep,
         scrollDelay: this.scrollDelay,
         maxRetry: this.maxRetry,
+        persona: this.antiBotConfig?.readerPersona || DEFAULT_PERSONA,
+        fastScrollDurationMs: this.antiBotConfig?.homePageScrollMin
+          ? randomInt(this.antiBotConfig.homePageScrollMin, this.antiBotConfig.homePageScrollMax)
+          : 20000,
         onProgress: this.onProgress,
       })
     }
 
     this.onProgress?.message('元数据获取完成，准备下载章节')
 
-    // Step 3: 构建章节下载列表（标记已下载的章节）
+    // Step 3: 概率化 pretendNum（每次投骰决定回翻几话）
+    this.rollPretendNum()
+
+    // Step 4: 构建章节下载列表（标记已下载的章节）
     const chapterList: ChapterListItem[] = this.buildChapterList()
 
-    // Step 4: 筛选需要下载和假装下载的章节
+    // Step 5: 筛选需要下载和假装下载的章节
     const chaptersToDownload = chapterList.filter((c) => !c.alreadyHas)
     const chaptersToNotDownload = chapterList.filter((c) => c.doNotDownload)
 
-    // 计算「假装下载」数量：pretendNum - 实际需要下载的章节数
-    // 目的：让总请求数接近 pretendNum，模拟真人随机浏览行为
+    // 计算「假装下载」数量
     let pretendCount = this.pretendNum - chaptersToDownload.length
     const pretendDownload = pretendCount > 0 ? chaptersToNotDownload.slice(-pretendCount) : []
 
     if (chaptersToDownload.length > 0) {
       this.onProgress?.setTotal(chaptersToDownload.length)
 
-      // 先「假装下载」已存在的章节（仅浏览不保存，模拟真人行为）
+      // 先「假装下载」已存在的章节（足迹模式）
       for (const chapter of pretendDownload) {
         await this.chapterDownloader.downloadChapter(chapter)
         await betweenChapterDelay()
@@ -217,6 +237,13 @@ export default class Toomics {
         await this.chapterDownloader.downloadChapter(chapter)
         await betweenChapterDelay()
       }
+
+      // 漫画间延迟（切换到下一部漫画的间隔）
+      this.mangaDownloadedCount++
+      await betweenMangaDelay()
+
+      // 任务间隙噪声浏览（每 N 部漫画后模拟逛首页）
+      await this.noiseBrowseBetweenManga()
     }
 
     // Step 5: 可选压缩归档
@@ -339,6 +366,112 @@ export default class Toomics {
         if (fs.existsSync(zipPath)) continue // 已压缩则跳过（增量）
         await zip_directory(fullPath, zipPath)
       }
+    }
+  }
+
+  /**
+   * 概率化 pretendNum（每次下载漫画时掷骰）
+   *
+   * 根据 antiBotConfig.pretendNumWeights 决定回翻几话：
+   *   50% → 0（直接看新章节）
+   *   25% → 1（回翻 1 话，足迹模式）
+   *   25% → 2（回翻 2 话，足迹模式）
+   *
+   * 若配置为 'fixed' 策略，则固定回翻 2 话。
+   */
+  private rollPretendNum(): void {
+    const strategy = this.antiBotConfig?.pretendNumStrategy || 'probability'
+
+    if (strategy === 'fixed') {
+      this.pretendNum = 2
+      return
+    }
+
+    // 概率策略：按权重掷骰
+    const weights = this.antiBotConfig?.pretendNumWeights || [0.50, 0.25, 0.25]
+    const roll = Math.random()
+    let cumulative = 0
+
+    for (let i = 0; i < weights.length; i++) {
+      cumulative += weights[i]
+      if (roll < cumulative) {
+        this.pretendNum = i
+        break
+      }
+    }
+
+    write_log(`[toomics] ${this.mangaName} pretendNum 掷骰结果: ${this.pretendNum}`)
+  }
+
+  /**
+   * 登录后噪声浏览
+   *
+   * 模拟真人在登录后会先看推荐、逛首页，而不是直接开始下载。
+   * 浏览首页 30~60 秒（足迹模式），产生正常的浏览请求序列。
+   */
+  private async noiseBrowseAfterLogin(): Promise<void> {
+    if (!toomicsBrowser.browser) return
+
+    try {
+      write_log(`[toomics] ${this.mangaName} 登录后噪声浏览`)
+      const noisePage = await toomicsBrowser.new_page()
+      if (!noisePage) return
+
+      // 访问首页
+      await noisePage
+        .goto(`${this.domain}/${this.langTag}/`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30 * 1000,
+        })
+        .catch(() => {})
+
+      // 足迹模式滚动首页（像在浏览推荐）
+      const scrollMin = this.antiBotConfig?.homePageScrollMin || 30000
+      const scrollMax = this.antiBotConfig?.homePageScrollMax || 60000
+      const scrollDuration = randomInt(scrollMin, scrollMax)
+      await fastScroll(noisePage, scrollDuration)
+
+      // 关闭噪声页面
+      await noisePage.close().catch(() => {})
+    } catch {
+      // 噪声浏览失败不影响主流程
+    }
+  }
+
+  /**
+   * 任务间隙噪声浏览
+   *
+   * 每 noiseIntervalTaskCount 部漫画后暂停下载，逛首页 15~30 秒。
+   * 模拟真人在追完几部后会回去看推荐/搜索新漫画。
+   */
+  private async noiseBrowseBetweenManga(): Promise<void> {
+    if (this.antiBotConfig?.noiseEnabled === false) return
+
+    const interval = this.antiBotConfig?.noiseIntervalTaskCount || 4
+    if (this.mangaDownloadedCount % interval !== 0) return
+
+    if (!toomicsBrowser.browser) return
+
+    try {
+      write_log(`[toomics] ${this.mangaName} 任务间隙噪声浏览 (第 ${this.mangaDownloadedCount} 部)`)
+      const noisePage = await toomicsBrowser.new_page()
+      if (!noisePage) return
+
+      // 访问首页
+      await noisePage
+        .goto(`${this.domain}/${this.langTag}/`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30 * 1000,
+        })
+        .catch(() => {})
+
+      // 短期足迹滚动
+      await fastScroll(noisePage, randomInt(15000, 30000))
+
+      // 关闭噪声页面
+      await noisePage.close().catch(() => {})
+    } catch {
+      // 噪声浏览失败不影响主流程
     }
   }
 }

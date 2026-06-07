@@ -11,15 +11,22 @@ import {
 import Bilibili from '#services/bilibili'
 import OmegaScansUpdate from '#services/omegascans-update'
 import Omegascans from '#services/omegascans'
-import { PassThroughScheduler, type TaskScheduler } from '#services/scheduler'
+import { PassThroughScheduler, AntiBotScheduler, type TaskScheduler } from '#services/scheduler'
 import SyncCloud from '#services/sync-cloud'
 import Toomics from '#services/toomics'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import ToZip from '#services/tozip'
-import { end_app, isTaskAbortError, isTaskPauseError, shut_down, write_log } from '#utils/index'
+import {
+  dataRoot,
+  end_app,
+  isTaskAbortError,
+  isTaskPauseError,
+  shut_down,
+  write_log,
+} from '#utils/index'
 
-const taskFile = path.join(process.cwd(), 'task.json')
+const taskFile = path.join(dataRoot || '', 'data', 'task.json')
 const maxRetryCount = 10
 
 type TaskIdentifier = number | string
@@ -27,6 +34,10 @@ type TaskRunResult = 'success' | 'failed' | 'paused' | 'aborted'
 type TaskService = {
   start(): Promise<void> | void
 }
+type TaskServiceFactory = (
+  task: taskType,
+  reporter: ChapterReporter
+) => Promise<TaskService | null> | TaskService | null
 type ChapterReporter = {
   setTotal(total: number): void
   report(message: string): void
@@ -548,13 +559,15 @@ async function createTaskService(
   }
 }
 
-class MangaTask extends Task {
+export class MangaTask extends Task {
   private retryCounts = new Map<string, number>()
+  private serviceFactory: TaskServiceFactory
   scheduler: TaskScheduler
 
-  constructor(tasks: taskType[]) {
+  constructor(tasks: taskType[], serviceFactory: TaskServiceFactory = createTaskService) {
     super(tasks)
-    this.scheduler = new PassThroughScheduler()
+    this.serviceFactory = serviceFactory
+    this.scheduler = new AntiBotScheduler()
   }
 
   async run() {
@@ -605,7 +618,7 @@ class MangaTask extends Task {
       })
 
       const reporter = this.createChapterReporter()
-      const taskService = await createTaskService(task, reporter)
+      const taskService = await this.serviceFactory(task, reporter)
 
       if (!taskService) {
         const error = new Error(`未知网站: ${task.website}`)

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import path from 'path'
 import { delay, end_app, make_can_be_floder, write_log, set_failed_chapters, TaskAbortError } from '#utils/index'
-import { humanScroll, randomMouseMove, readingDelay } from '#utils/human'
+import { humanScroll, randomMouseMove, readingDelay, fastScroll, DEFAULT_PERSONA, type ReaderPersona } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 
 /** 章节下载所需的参数 */
@@ -40,6 +40,8 @@ export class ToomicsChapterDownloader {
   private scrollStep: number
   private scrollDelay: number
   private maxRetry: number
+  private persona: ReaderPersona
+  private fastScrollDurationMs: number
   private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
 
   constructor(opts: {
@@ -50,6 +52,8 @@ export class ToomicsChapterDownloader {
     scrollStep: number
     scrollDelay: number
     maxRetry: number
+    persona?: ReaderPersona
+    fastScrollDurationMs?: number
     onProgress?: any
   }) {
     this.mangaName = opts.mangaName
@@ -59,6 +63,8 @@ export class ToomicsChapterDownloader {
     this.scrollStep = opts.scrollStep
     this.scrollDelay = opts.scrollDelay
     this.maxRetry = opts.maxRetry
+    this.persona = opts.persona || DEFAULT_PERSONA
+    this.fastScrollDurationMs = opts.fastScrollDurationMs || 20000
     if (opts.onProgress) this.onProgress = opts.onProgress
   }
 
@@ -139,7 +145,20 @@ export class ToomicsChapterDownloader {
       // 保存最新 cookie
       await toomicsBrowser.save_cookie()
 
-      // 人类化滚动 + 随机鼠标移动（模拟真人阅读行为）
+      // 「假装下载」模式：足迹模式快速滚动（仅产生网络请求足迹，不保存图片）
+      if (doNotDownload) {
+        write_log(`[chapter download] ${chapterName} 足迹模式浏览`)
+        this.onProgress?.message(`足迹浏览: ${chapterName}`)
+
+        await chapterPage.mouse.move(1000, 1000)
+        await fastScroll(chapterPage, this.fastScrollDurationMs, this.scrollStep, this.scrollDelay)
+        await randomMouseMove(chapterPage)
+
+        this.onProgress?.report(`${chapterName} 足迹浏览完成`)
+        return { needsRetry: false, retryIndexes: [] }
+      }
+
+      // 精确模式：人类化滚动 + 等待图片加载（真实下载用）
       console.log('开始滚动页面,等待加载图片')
       await chapterPage.mouse.move(1000, 1000)
       await humanScroll({
@@ -152,22 +171,15 @@ export class ToomicsChapterDownloader {
       // 等待图片网络请求完成
       await chapterPage.waitForNetworkIdle().catch(() => {})
 
-      // 模拟阅读等待时间（基于预估图片数量）
-      await readingDelay(30)
-
-      // 「假装下载」模式：仅浏览不保存图片（模拟真人随机翻阅其他章节）
-      if (doNotDownload) {
-        write_log(`[chapter download] ${chapterName} 下载已禁用，跳过`)
-        this.onProgress?.report(`${chapterName} 已跳过`)
-        return { needsRetry: false, retryIndexes: [] }
-      }
-
       // 从 DOM 提取所有图片 URL（id 以 "set_image_" 开头的 img 元素）
       const imageUrls: string[] = await chapterPage.evaluate(() => {
         const doc = (globalThis as any).document
         const els = doc.querySelectorAll('img[id^="set_image_"]')
         return Array.from(els).map((el: any) => el.src)
       })
+
+      // 模拟阅读延迟（基于实际图片数量，融入重点页/回翻机制）
+      await readingDelay(imageUrls.length, this.persona)
 
       // 从浏览器内存 buffer 读取图片并写入磁盘
       this.onProgress?.message(`正在保存 ${chapterName} 图片 (共 ${imageUrls.length} 张)`)

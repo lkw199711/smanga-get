@@ -10,11 +10,19 @@
 */
 
 import { Env } from '@adonisjs/core/env'
+import os from 'node:os'
+import path from 'node:path'
 
-export default await Env.create(new URL('../', import.meta.url), {
+const env = await Env.create(new URL('../', import.meta.url), {
   NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
   PORT: Env.schema.number(),
   APP_KEY: Env.schema.string(),
   HOST: Env.schema.string({ format: 'host' }),
   LOG_LEVEL: Env.schema.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
 })
+
+if (env.get('NODE_ENV') === 'test') {
+  process.env.DATA_DIR = path.join(os.tmpdir(), 'smanga-get-tests')
+}
+
+export default env
