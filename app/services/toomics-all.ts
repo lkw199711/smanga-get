@@ -35,7 +35,7 @@ interface MangaInfo {
 }
 
 export default class ToomicsAll {
-  private langTag: string = 'sc'            // 语言标签，默认简体中文
+  private langTag: string = 'tc'            // 语言标签，默认繁体中文
   private coverPath: string = dataRoot + 'data/toomics-covers'  // 封面图片缓存目录
   private jsonFile: string = dataRoot + 'data/toomics-all.json' // 漫画列表 JSON 文件
   private scrollStep: number = 400          // 人类化滚动步长（像素）
@@ -43,8 +43,8 @@ export default class ToomicsAll {
   private browser: UseBrowser               // 浏览器实例（根据 nouser 选择有/无用户版本）
   private onProgress?: any
 
-  constructor(langTag = 'sc', nouser = false, onProgress?: any) {
-    this.langTag = langTag || 'sc'
+  constructor(langTag = 'tc', nouser = false, onProgress?: any) {
+    this.langTag = langTag || 'tc'
     const config = get_config().toomics
     if (config.scrollStep) this.scrollStep = config.scrollStep
     if (config.scrollDelay) this.scrollDelay = config.scrollDelay

@@ -103,29 +103,32 @@ export class ToomicsBrowserSession {
     await page.locator('div.close_popup').click().catch(() => {})
     await delay(2000)
 
-    // 打开菜单
-    await page.locator('button[title = "菜单"]').click().catch(() => {})
+    // 打开菜单（简 / 選單 兼用）
+    await page.locator('button[title="菜单"], button[title="選單"]').click().catch(() => {})
     await delay(2000)
 
-    // 点击「登录」按钮
+    // 点击「登录 / 登入」按钮（简繁兼用）
     await page
       .locator('button.bg-white')
-      .filter((button) => button.innerText.trim() === '登录')
+      .filter((button) => {
+        const t = button.innerText.trim()
+        return t === '登录' || t === '登入'
+      })
       .click()
       .catch(() => {})
     await delay(2000)
 
-    // 切换到邮箱登录表单
+    // 切换到邮箱登录表单（SC 旧版按钮；TC 版在 modal 内直接就是邮箱表单，此步静默跳过）
     await page
       .locator('button[onclick="Base.changeSignInForm();"]')
       .click()
       .catch(() => {})
     await delay(2000)
 
-    // 填充用户名和密码
-    await page.locator('input[name="user_id"]').fill(this.userName).catch(() => {})
+    // 填充用户名和密码（SC 用 name 属性；TC modal 内用 type 属性兜底）
+    await page.locator('input[name="user_id"], input[type="email"]').fill(this.userName).catch(() => {})
     await delay(1000)
-    await page.locator('input[name="user_pw"]').fill(this.passWord).catch(() => {})
+    await page.locator('input[name="user_pw"], input[type="password"]').fill(this.passWord).catch(() => {})
     await delay(1000)
 
     // 提交登录
@@ -144,7 +147,7 @@ export class ToomicsBrowserSession {
     await page
       .evaluate(() => {
         const Base = (globalThis as any).Base
-        Base.setDisplay('A', `/${(globalThis as any).__langTag || 'sc'}`)
+        Base.setDisplay('A', `/${(globalThis as any).__langTag || 'tc'}`)
       })
       .catch(() => {})
     await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})

@@ -125,6 +125,7 @@ export class ToomicsChapterDownloader {
     const { chapterName, url, downloadPath, reloadImageindexs, doNotDownload } = chapter
     const errImgs: number[] = []
     const interfereImages: number[] = []
+    let totalImages = 0
 
     const chapterPage = await toomicsBrowser.new_page()
     if (!chapterPage) return { needsRetry: false, retryIndexes: [] }
@@ -177,6 +178,7 @@ export class ToomicsChapterDownloader {
         const els = doc.querySelectorAll('img[id^="set_image_"]')
         return Array.from(els).map((el: any) => el.src)
       })
+      totalImages = imageUrls.length
 
       // 模拟阅读延迟（基于实际图片数量，融入重点页/回翻机制）
       await readingDelay(imageUrls.length, this.persona)
@@ -212,9 +214,12 @@ export class ToomicsChapterDownloader {
 
     // ── 结果检查与重试判定 ────────────────────────────────────────
 
-    // 仅最后一张为干扰图 → 通常是站点水印/广告，不影响正文
-    if (interfereImages.length === 1 && interfereImages[0] === 0) {
-      // 没有 errImgs 且只有最后一张干扰图，视为成功（见下方序号连续性检查）
+    // 仅最后一张为干扰图/请求失败 → 通常是站点水印/白图，不影响正文
+    const lastIdx = totalImages - 1
+    const lastOnlyInterfere = interfereImages.length === 1 && interfereImages[0] === lastIdx
+    const lastOnlyErr = errImgs.length === 1 && errImgs[0] === lastIdx
+    if ((lastOnlyInterfere || lastOnlyErr) && errImgs.length + interfereImages.length === 1) {
+      // 仅最后一张异常，视为成功（见下方序号连续性检查）
     } else if (interfereImages.length > 0 || errImgs.length > 0) {
       // 存在干扰图或失败图片 → 合并后重试
       const interfereStr = interfereImages.length > 0 ? `, 干扰图片: ${interfereImages}` : ''

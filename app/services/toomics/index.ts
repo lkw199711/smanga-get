@@ -72,7 +72,7 @@ export default class Toomics {
   private scrollDelay: number = 500
   private userName: string
   private passWord: string
-  private langTag: string = 'sc'
+  private langTag: string = 'tc'
   private jumpExist = true
   private maxRetry: number = 3
   private downloadChapterLimit: number = 0
@@ -105,8 +105,8 @@ export default class Toomics {
       this.langTag = 'en'
       this.website = 'toomics-en'
     } else {
-      this.langTag = 'sc'
-      this.website = 'toomics-sc'
+      this.langTag = 'tc'
+      this.website = 'toomics-tc'
     }
 
     const config = get_config(this.website) || {}

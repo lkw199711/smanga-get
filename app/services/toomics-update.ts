@@ -35,14 +35,14 @@ interface MangaInfo {
 type ScanMode = boolean
 
 export default class ToomicsDayUpdate {
-  private langTag: string        // 语言标签，如 'sc'（简中）/ 'tc'（繁中）/ 'en'
+  private langTag: string        // 语言标签，如 'tc'（繁中）/ 'en'（英文）
   private url: string            // 连载列表页 URL
   private updateOnlyDay: boolean // 是否仅扫描今日+昨日更新的漫画
   waiting: boolean = false       // 人工等待标记：为 true 时暂停扫描，直到外部置 false
   private onProgress?: any
 
   constructor(langTag?: string, onProgress?: any) {
-    this.langTag = langTag || 'sc'
+    this.langTag = langTag || 'tc'
     this.url = `https://toomics.com/${this.langTag}/webtoon/ongoing_all`
     const config = get_config()?.toomics || {}
     // 注意：config key "watting" 为历史遗留拼写，保持不变以兼容已有配置文件
