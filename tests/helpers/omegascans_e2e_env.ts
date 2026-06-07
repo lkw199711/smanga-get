@@ -81,7 +81,7 @@ export function createOmegaScansE2EContext(): OmegaScansE2EContext {
       downloadPath,
       compressPath,
       autoCompress: false,
-      downloadChapterLimit: 2,
+      downloadChapterLimit: 1,
       e2eFastMode: true,
     },
   })

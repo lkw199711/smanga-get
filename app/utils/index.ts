@@ -9,6 +9,11 @@ export const dataRoot = dataDir
   ? (dataDir.endsWith('/') ? dataDir : dataDir + '/')
   : (get_os() === 'Linux' ? '/' : '')
 
+/** 替代 os.tmpdir()：返回动态数据根路径（基于 DATA_DIR），测试环境即为隔离的临时目录 */
+export function testTmpDir() {
+  return dataRoot
+}
+
 const configFile = dataRoot + 'data/config.json'
 const failedChaptersFile = dataRoot + 'data/failed-chapters.json'
 const logFile = dataRoot + 'data/log.txt'

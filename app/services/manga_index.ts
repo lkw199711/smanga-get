@@ -432,8 +432,11 @@ function rowToItem(row: MangaResult): MangaResultItem {
 
 async function createSchema() {
   const schema = db.connection().schema
+
+  // ── manga_results 表 ──
   const hasMangaResults = await schema.hasTable(mangaResultsTable)
   if (!hasMangaResults) {
+    console.log(`[manga-index] creating table: ${mangaResultsTable}`)
     await schema.createTable(mangaResultsTable, (table) => {
       table.increments('id')
       table.string('identity_key').notNullable().unique()
@@ -461,8 +464,10 @@ async function createSchema() {
     })
   }
 
+  // ── manga_chapters 表 ──
   const hasMangaChapters = await schema.hasTable(mangaChaptersTable)
   if (!hasMangaChapters) {
+    console.log(`[manga-index] creating table: ${mangaChaptersTable}`)
     await schema.createTable(mangaChaptersTable, (table) => {
       table.increments('id')
       table
@@ -487,6 +492,10 @@ async function createSchema() {
       table.index(['manga_result_id', 'date'])
       table.unique(['manga_result_id', 'name'])
     })
+  }
+
+  if (!hasMangaResults || !hasMangaChapters) {
+    console.log(`[manga-index] schema ready (results=${hasMangaResults ? 'exists' : 'created'}, chapters=${hasMangaChapters ? 'exists' : 'created'})`)
   }
 }
 

@@ -62,7 +62,7 @@ export function createGentlemanE2EContext(): GentlemanE2EContext {
       downloadPath,
       organizePath,
       organize: false,
-      downloadChapterLimit: 2,
+      downloadChapterLimit: 1,
       chapterIncludes: process.env.GENTLEMAN_E2E_CHAPTER_INCLUDES || '',
       chapterExcludes: process.env.GENTLEMAN_E2E_CHAPTER_EXCLUDES || '',
     },

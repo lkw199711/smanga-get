@@ -54,6 +54,7 @@ import MoveMeta from '#services/move-meta'
 import RemoveDuplicates from '#services/remove-duplicates'
 import { delay, get_config } from '#utils/index'
 import { mangaTask } from '#api/task'
+import { ensureMangaIndexSchema } from '#services/manga_index'
 
 const isTestEnvironment = process.env.NODE_ENV === 'test'
 
@@ -67,6 +68,13 @@ if (!isTestEnvironment) {
 
 // 先创建配置目录和默认配置文件，防止首次启动空指针
 create_config()
+
+// 启动时主动初始化漫画索引数据库表，确保 manga_results / manga_chapters 表就绪
+try {
+  await ensureMangaIndexSchema()
+} catch (error) {
+  console.error('[kernel] manga index schema init failed:', error)
+}
 
 const immediately = get_config()?.immediately ?? {}
 

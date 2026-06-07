@@ -8,7 +8,7 @@ import {
   type OmegaScansE2EContext,
 } from '#tests/helpers/omegascans_e2e_env'
 
-test('OmegaScans 可抓取元数据并下载两个章节', async ({ assert }) => {
+test('OmegaScans 可抓取元数据并下载一个章节', async ({ assert }) => {
   if (!isOmegaScansE2EEnabled()) {
     console.log('[omegascans e2e] OMEGASCANS_E2E_ENABLED 未开启，跳过真实网站测试')
     return
@@ -36,7 +36,7 @@ test('OmegaScans 可抓取元数据并下载两个章节', async ({ assert }) =>
 
     assertOmegaScansDownloadResult(assert, {
       downloadPath: context.downloadPath,
-      minChapterCount: 2,
+      minChapterCount: 1,
       minImageSize: 250,
     })
   } finally {

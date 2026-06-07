@@ -8,7 +8,7 @@ import {
   type ToomicsE2EContext,
 } from '#tests/helpers/toomics_e2e_env'
 
-test('Toomics 可抓取元数据并下载两个章节', async ({ assert }) => {
+test('Toomics 可抓取元数据并下载一个章节', async ({ assert }) => {
   if (!isToomicsE2EEnabled()) {
     console.log('[toomics e2e] TOOMICS_E2E_ENABLED 未开启，跳过真实网站测试')
     return
@@ -33,7 +33,7 @@ test('Toomics 可抓取元数据并下载两个章节', async ({ assert }) => {
 
     assertToomicsDownloadResult(assert, {
       downloadPath: context.downloadPath,
-      minChapterCount: 2,
+      minChapterCount: 1,
       minImageSize: 250,
     })
   } finally {

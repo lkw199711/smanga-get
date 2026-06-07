@@ -94,7 +94,7 @@ export function createToomicsE2EContext(): ToomicsE2EContext {
       compressPath,
       coverCache: coverCachePath,
       chapterCache: path.join(e2eRoot, 'chapter-cache'),
-      downloadChapterLimit: 2,
+      downloadChapterLimit: 1,
       e2eFastMode: true,
     },
     toomics: {

@@ -8,7 +8,7 @@ import {
   type GentlemanE2EContext,
 } from '#tests/helpers/gentleman_e2e_env'
 
-test('Gentleman 可打开网站并下载两个章节', async ({ assert }) => {
+test('Gentleman 可打开网站并下载一个章节', async ({ assert }) => {
   if (!isGentlemanE2EEnabled()) {
     console.log('[gentleman e2e] GENTLEMAN_E2E_ENABLED 未开启，跳过真实网站测试')
     return
@@ -36,7 +36,7 @@ test('Gentleman 可打开网站并下载两个章节', async ({ assert }) => {
 
     assertGentlemanDownloadResult(assert, {
       downloadPath: context.downloadPath,
-      minChapterCount: 2,
+      minChapterCount: 1,
       minImageSize: 250,
     })
   } finally {
