@@ -67,6 +67,8 @@ export class ToomicsBrowserSession {
     const page = await toomicsBrowser.new_page()
     if (!page) return false
 
+    let pendingError: any = null
+
     try {
       await page
         .goto(this.domain + `/${this.langTag}`, {
@@ -84,9 +86,14 @@ export class ToomicsBrowserSession {
       }
 
       await toomicsBrowser.save_cookie()
+    } catch (e) {
+      pendingError = e
+      throw e
     } finally {
-      // 确保页面始终关闭，防止 Chromium 内存泄漏
-      await page.close().catch(() => {})
+      // 若错误携带 debugPage 则保留页面供任务队列截图，否则正常关闭
+      if (!pendingError?.debugPage) {
+        await page.close().catch(() => {})
+      }
     }
 
     return true
@@ -139,8 +146,10 @@ export class ToomicsBrowserSession {
     // 验证登录结果：若登录按钮仍然可见，说明凭据无效
     const afterLoginHtml = await page.content()
     if (LOGIN_BUTTON_CLASS.test(afterLoginHtml)) {
+      const err = new TaskAbortError('登录失败，请检查账号密码')
+      ;(err as any).debugPage = page
       write_log('登录失败，请检查账号密码')
-      throw new TaskAbortError('登录失败，请检查账号密码')
+      throw err
     }
 
     // 切换成人模式（调用站点全局对象 Base.setDisplay）
@@ -202,6 +211,8 @@ export class ToomicsBrowserSession {
     write_log(message)
     onProgress?.message(message)
     await toomicsBrowser.save_cookie(false).catch(() => { })
-    throw new TaskPauseError(message)
+    const err = new TaskPauseError(message)
+    ;(err as any).debugPage = page
+    throw err
   }
 }

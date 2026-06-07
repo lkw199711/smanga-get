@@ -15,6 +15,8 @@ const logFile = dataRoot + 'data/log.txt'
 
 export class TaskPauseError extends Error {
   pauseTask = true
+  /** 调试用：由任务队列读取并在此页面上截图保存错误现场 */
+  debugPage?: import('rebrowser-puppeteer').Page
 
   constructor(message: string) {
     super(message)
@@ -33,6 +35,8 @@ export function isTaskPauseError(error: unknown): error is TaskPauseError {
  */
 export class TaskAbortError extends Error {
   abortTask = true
+  /** 调试用：由任务队列读取并在此页面上截图保存错误现场 */
+  debugPage?: import('rebrowser-puppeteer').Page
 
   constructor(message: string) {
     super(message)
@@ -43,6 +47,33 @@ export class TaskAbortError extends Error {
 export function isTaskAbortError(error: unknown): error is TaskAbortError {
   return error instanceof TaskAbortError
     || (typeof error === 'object' && error !== null && (error as { abortTask?: unknown }).abortTask === true)
+}
+
+/**
+ * 在错误发生时截取浏览器当前页面状态（截图 + HTML），保存到 data/logs/errors/。
+ * 返回保存的目录路径，供日志引用。
+ */
+export async function captureErrorSnapshot(
+  page: import('rebrowser-puppeteer').Page,
+  label: string
+): Promise<string> {
+  const now = new Date()
+  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const safeLabel = label.replace(/[\\/:*?"<>|]/g, '_').substring(0, 30)
+  const dir = path.join(dataRoot, 'data', 'logs', 'errors', `${ts}_${safeLabel}`)
+
+  fs.mkdirSync(dir, { recursive: true })
+
+  await page.screenshot({ path: path.join(dir, 'page.png'), fullPage: true }).catch(() => {})
+  const html = await page.content().catch(() => '<html><body>failed to get content</body></html>')
+  fs.writeFileSync(path.join(dir, 'page.html'), html)
+
+  write_log(`[debug] 错误现场已保存: ${dir}`)
+  return dir
+}
+
+function pad(n: number) {
+  return n.toString().padStart(2, '0')
 }
 
 export function get_os() {

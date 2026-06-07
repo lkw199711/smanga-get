@@ -6,6 +6,7 @@ import { betweenChapterDelay } from '#utils/human'
 import puppeteer from 'rebrowser-puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
+import { tryIndexMangaMetaFile } from '#api/manga'
 
 type chapterType = {
     targetId: number
@@ -151,6 +152,12 @@ export default class Bilibili {
         }
 
         // 下载章节
+        await tryIndexMangaMetaFile(metaFile, {
+            website: this.website,
+            source: 'download',
+            sourcePath: `${this.downloadPath}/${mangaName}`,
+        })
+
         const chaptersToDownload = this.chapters.filter((c: chapterType) => !c.isLocked)
         this.onProgress?.setTotal(chaptersToDownload.length)
         for (let i = 0; i < this.chapters.length; i++) {

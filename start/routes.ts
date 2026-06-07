@@ -13,6 +13,7 @@ const SubscribeController = () => import('#controllers/subscribes_controller')
 const LogController = () => import('#controllers/logs_controller')
 const ConfigController = () => import('#controllers/configs_controller')
 const ManualAuthController = () => import('#controllers/manual_auth_controller')
+const MangaController = () => import('#controllers/mangas_controller')
 
 router.get('/', async () => {
   return {
@@ -35,6 +36,10 @@ router.delete('/subscribe/clear', [SubscribeController, 'clear'])
 
 router.get('/log', [LogController, 'get'])
 router.delete('/log', [LogController, 'clear'])
+
+router.get('/manga', [MangaController, 'get'])
+router.get('/manga/:id/chapters', [MangaController, 'chapters'])
+router.get('/manga/cover', [MangaController, 'cover'])
 
 router.get('/config', [ConfigController, 'get'])
 router.put('/config', [ConfigController, 'update'])

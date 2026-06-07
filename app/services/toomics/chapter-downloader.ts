@@ -209,10 +209,11 @@ export class ToomicsChapterDownloader {
       }
     } finally {
       toomicsBrowser.clear_buffs()
-      await chapterPage.close().catch(() => {})
     }
 
     // ── 结果检查与重试判定 ────────────────────────────────────────
+    let resultError: any = null
+    try {
 
     // 仅最后一张为干扰图/请求失败 → 通常是站点水印/白图，不影响正文
     const lastIdx = totalImages - 1
@@ -242,9 +243,11 @@ export class ToomicsChapterDownloader {
 
       if (this.consecutiveEmptyChapters >= 1) {
         const abortMsg = `[CRITICAL] ${chapterName} 下载结果为空！可能原因：cookie 失效、网络异常、或触发风控验证。已停止当前任务，请检查状态后手动重试。`
+        const err = new TaskAbortError(abortMsg)
+        ;(err as any).debugPage = chapterPage
         write_log(abortMsg)
         console.error(abortMsg)
-        throw new TaskAbortError(abortMsg)
+        throw err
       }
 
       return { needsRetry: false, retryIndexes: [] }
@@ -280,5 +283,13 @@ export class ToomicsChapterDownloader {
     end_app()
 
     return { needsRetry: false, retryIndexes: [] }
+    } catch (e) {
+      resultError = e
+      throw e
+    } finally {
+      if (!resultError?.debugPage) {
+        await chapterPage.close().catch(() => {})
+      }
+    }
   }
 }

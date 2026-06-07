@@ -1,0 +1,52 @@
+﻿c[ info ] booting application to run tests...
+
+unit / manga metadata api (tests\unit\api\manga.spec.ts)
+  脳 indexes .smanga metadata ordered by crawl time (52.24ms)
+  脳 supports legacy -smanga-info metadata and cover tokens (2.23ms)
+
+unit / subscribe file api (tests\unit\api\subsribe.spec.ts)
+[subscribe] 璁㈤槄鏂囦欢瑙ｆ瀽澶辫触锛屽凡澶囦唤鍒?C:\Users\lkw\AppData\Local\Temp\smanga-get-tests\data\subscribe.json.invalid-1780851213746
+[subscribe] 璇诲彇璁㈤槄鏂囦欢澶辫触: Expected property name or '}' in JSON at position 2 (line 1 column 3)
+  鈭?璁㈤槄鏂囦欢涓嶅瓨鍦ㄦ椂杩斿洖绌烘暟缁?(7.12ms)
+[subscribe] 璁㈤槄鏂囦欢瑙ｆ瀽澶辫触锛屽凡澶囦唤鍒?C:\Users\lkw\AppData\Local\Temp\smanga-get-tests\data\subscribe.json.invalid-1780851213753
+[subscribe] 璇诲彇璁㈤槄鏂囦欢澶辫触: Expected property name or '}' in JSON at position 2 (line 1 column 3)
+  鈭?鏂板璁㈤槄鏃朵細鎸?website/id 鍘婚噸 (2.94ms)
+  鈭?gentleman 璁㈤槄鍙寜 url 绮剧‘鍒犻櫎 (1.55ms)
+  鈭?閲嶆帓璁㈤槄鏃朵繚鐣欐湭鍑虹幇鍦ㄦ帓搴忓弬鏁颁腑鐨勯」鐩?(1.64ms)
+[subscribe] 璁㈤槄鏂囦欢瑙ｆ瀽澶辫触锛屽凡澶囦唤鍒?C:\Users\lkw\AppData\Local\Temp\smanga-get-tests\data\subscribe.json.invalid-1780851213759
+[subscribe] 璇诲彇璁㈤槄鏂囦欢澶辫触: Expected property name or '}' in JSON at position 2 (line 1 column 3)
+  脳 璁㈤槄鏂囦欢 JSON 鎹熷潖鏃惰繑鍥炵┖鏁扮粍骞跺浠藉師鏂囦欢 (2.32ms)
+
+unit / task queue (tests\unit\api\task.spec.ts)
+  脳 鍘嗗彶浠诲姟鏂囦欢涓嶅瓨鍦ㄦ椂杩斿洖绌烘暟缁?(1.02ms)
+  鈭?璇诲彇鍘嗗彶浠诲姟鏂囦欢鏃朵細琛?taskId 涓斾笉瑕嗙洊鍘熷 id (1.47ms)
+  鈭?鏃т换鍔℃枃浠?API 鍙寜 taskId 鍒犻櫎 (1.71ms)
+  鈭?鍐呭瓨闃熷垪鍒犻櫎浠诲姟鏃朵笉渚濊禆琚敼鍐欏悗鐨?id (0.86ms)
+[MangaTask] 璋冨害鍣ㄨ姹傛殏鍋滐紝鍋滄浠诲姟寰幆
+  鈭?浠诲姟鎴愬姛鍚庝繚鐣欐垚鍔熻繍琛屾€?(1.52ms)
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟宸叉殏鍋? 闇€瑕佷汉宸ラ獙璇?  鈭?TaskPauseError 浼氭殏鍋滃綋鍓嶄换鍔′笖涓嶄細缁х画璋冨害 (0.96ms)
+[Task] 妫€娴嬪埌寮傚父鐘舵€侊紝鍋滄褰撳墠浠诲姟: 杩炵画绌虹珷鑺?  鈭?TaskAbortError 浼氭爣璁板綋鍓嶄换鍔″け璐ュ苟鍋滄锛屼絾涓嶆竻绌洪槦鍒?(0.94ms)
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟鎵ц澶辫触: 涓嬭浇澶辫触
+[Task] 1 娴嬭瘯浠诲姟 浠诲姟閲嶈瘯瓒呰繃10娆★紝璺宠繃
+[MangaTask] 鎵€鏈変换鍔℃墽琛屽畬姣?  鈭?鏅€氬け璐ヤ細鎸夊崟涓换鍔￠噸璇曪紝瓒呰繃涓婇檺鍚庤烦杩?(4.91ms)
+
+tests\e2e\gentleman_download.spec.ts
+[gentleman e2e] GENTLEMAN_E2E_ENABLED 鏈紑鍚紝璺宠繃鐪熷疄缃戠珯娴嬭瘯
+  鈭?Gentleman 鍙墦寮€缃戠珯骞朵笅杞戒袱涓珷鑺?(0.42ms)
+[omegascans e2e] OMEGASCANS_E2E_ENABLED 鏈紑鍚紝璺宠繃鐪熷疄缃戠珯娴嬭瘯
+  鈭?OmegaScans 鍙姄鍙栧厓鏁版嵁骞朵笅杞戒袱涓珷鑺?(0.15ms)
+閯板眳鐨勯€嗚ゲ 姝ｅ湪鍒嗘瀽
+[browser init] headless = false | options.headless = undefined | config.headless = false
+[browser init] config 璺緞: C:\Users\lkw\AppData\Local\Temp\smanga-get-tests/data/config.json
+[browser init] 瀹屾暣 config: {"headless":false,"executablePath":"C:\\Users\\lkw\\.cache\\puppeteer\\chrome\\win64-149.0.7827.22\\chrome-win64\\chrome.exe","proxy":{"enable":false,"server":"http://192.168.5.2:7893","username":"Clash","password":"ykt3thsw"},"cron":{"enable":false,"interval":"0 0 1,13 * * *","clearCookies":false},"immediately":{"subscribeTask":false,"toomicsUpdateSc":false,"toomicsUpdateTc":false,"omegascansUpdate":false,"bilibili":false,"toomicsCompressSc":false,"toomicsCompressTc":false,"omegascansCompress":
+cookie updated 2026/6/8 00:53:39

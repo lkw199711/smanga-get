@@ -15,6 +15,7 @@ import { delay, make_can_be_floder, read_json, write_log, dataRoot } from '#util
 import { humanScroll } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { subscribe_remove } from '#api/subsribe'
+import { tryIndexMangaMetaFile } from '#api/manga'
 import { ToomicsBrowserSession } from './browser-session.js'
 
 /** 漫画元数据（标题、作者、封面等，写入 .smanga/meta.json） */
@@ -312,6 +313,12 @@ export class ToomicsMetaFetcher {
         fs.writeFileSync(chapterCover, toomicsBrowser.buffs[chapter.cover])
       }
     }
+
+    await tryIndexMangaMetaFile(metaFile, {
+      website: this.website,
+      source: 'download',
+      sourcePath: this.mangaFolder,
+    })
   }
 
   /**
@@ -357,6 +364,8 @@ export class ToomicsMetaFetcher {
   private async getMetaHtml(): Promise<void> {
     const metaPage = await toomicsBrowser.new_page()
     if (!metaPage) return
+
+    let pendingError: any = null
 
     try {
       // 使用移动端 UA（移动端页面 DOM 结构更简洁，利于正则解析）
@@ -407,9 +416,14 @@ export class ToomicsMetaFetcher {
       await metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
       await delay(1000)
       this.metaPageHtml = await metaPage.content()
+    } catch (e) {
+      pendingError = e
+      throw e
     } finally {
-      // 确保页面始终关闭，防止 Chromium 内存泄漏
-      await metaPage.close().catch(() => {})
+      // 若错误携带 debugPage 则保留页面供任务队列截图，否则正常关闭
+      if (!pendingError?.debugPage) {
+        await metaPage.close().catch(() => {})
+      }
     }
   }
 }

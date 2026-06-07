@@ -12,6 +12,7 @@ import { get_config, make_can_be_floder } from '#utils/index'
 import { dataRoot } from '#utils/index'
 import fs from 'node:fs'
 import { subscribe_remove } from '#api/subsribe'
+import { tryIndexMangaMetaFile } from '#api/manga'
 import { omegascansBrowser } from '#api/browser'
 import path from 'node:path'
 
@@ -387,6 +388,12 @@ export default class OmegaScans {
     } else {
       fs.writeFileSync(`${this.metaFolder}/meta.json`, JSON.stringify(meta, null, 2), 'utf-8')
     }
+
+    await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
+      website: 'omegascans',
+      source: 'download',
+      sourcePath: this.mangaFolder,
+    })
 
     // 下载封面和章节封面
     if (!fs.existsSync(`${this.metaFolder}/cover.jpg`)) {

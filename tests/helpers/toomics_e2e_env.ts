@@ -1,5 +1,4 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import type { subsribeType } from '#type/index.js'
 import { dataRoot, get_config, set_config } from '#utils/index'
@@ -30,7 +29,7 @@ function getRequiredEnv(name: string) {
 }
 
 function getTestRoot() {
-  return dataRoot || path.join(os.tmpdir(), 'smanga-get-tests')
+  return dataRoot.replace(/\/$/, '')
 }
 
 function getLang(): ToomicsLang {
@@ -40,10 +39,6 @@ function getLang(): ToomicsLang {
   }
 
   return lang
-}
-
-function getConfigKey(lang: ToomicsLang) {
-  return `toomics-${lang}`
 }
 
 export function createToomicsE2EContext(): ToomicsE2EContext {
@@ -66,11 +61,18 @@ export function createToomicsE2EContext(): ToomicsE2EContext {
   // 读取现有配置（共享生产配置，保持 cookie 一致性）
   const existingConfig = get_config() || {}
 
-  // 测试下载根目录：优先环境变量，其次 config 中的 testDownloadPath，否则临时目录
-  const testDownloadRoot =
-    process.env.TEST_DOWNLOAD_PATH ||
-    existingConfig.testDownloadPath ||
-    path.join(os.tmpdir(), 'smanga-get-tests')
+  // 确定语言对应的 config key（与 Toomics 构造函数逻辑一致）
+  const websiteKey = lang === 'en' ? 'toomics-en' : 'toomics-tc'
+  const originalSiteConfig = existingConfig[websiteKey]
+    ? { ...existingConfig[websiteKey] }
+    : {}
+  const originalToomicsConfig = existingConfig.toomics
+    ? { ...existingConfig.toomics }
+    : {}
+  const originalHeadless = existingConfig.headless
+
+  // 测试下载根目录：始终使用隔离的测试数据目录（DATA_DIR 已隔离，无需额外配置）
+  const testDownloadRoot = getTestRoot()
   const e2eRoot = path.join(testDownloadRoot, 'e2e', 'toomics')
   const downloadPath = path.join(e2eRoot, 'download')
   const compressPath = path.join(e2eRoot, 'compress')
@@ -82,49 +84,21 @@ export function createToomicsE2EContext(): ToomicsE2EContext {
   fs.mkdirSync(compressPath, { recursive: true })
   fs.mkdirSync(coverCachePath, { recursive: true })
 
-  // 保存原始配置值，以便 cleanup 时恢复
-  const configKey = getConfigKey(lang)
-  const originalToomicsConfig = existingConfig.toomics ? { ...existingConfig.toomics } : {}
-  const originalSiteConfig = existingConfig[configKey] ? { ...existingConfig[configKey] } : {}
-  const originalHeadless = existingConfig.headless
-
-  // 合并测试覆盖到生产配置（不影响 cookie、账号等生产字段）
+  // 注入测试配置到 config.json（与 gentleman/omegascans e2e 保持一致）
   set_config({
     endAfterSetCookie: false,
     shutdownAfterSetCookie: false,
-    toomics: {
-      ...originalToomicsConfig,
-      e2eFastMode: true,
-      noiseEnabled: false,
-      pretendNumStrategy: 'fixed',
-      pretendNumWeights: [1, 0, 0],
-      homePageScrollMin: 0,
-      homePageScrollMax: 0,
-      readerPersona: {
-        type: 'moderate',
-        pageReadMin: 0,
-        pageReadMax: 0,
-        keyPageRatio: 0,
-        keyPageMin: 0,
-        keyPageMax: 0,
-        backFlipProb: 0,
-        chapterEndExtraMin: 0,
-        chapterEndExtraMax: 0,
-      },
-    },
-    [configKey]: {
-      userName: getRequiredEnv('TOOMICS_E2E_USER'),
-      passWord: getRequiredEnv('TOOMICS_E2E_PASSWORD'),
+    [websiteKey]: {
+      ...originalSiteConfig,
       downloadPath,
       compressPath,
       coverCache: coverCachePath,
-      downloadLockedMeta: false,
-      autoCompress: false,
-      jumpExist: false,
-      scrollStep: 800,
-      scrollDelay: 300,
-      maxRetry: 2,
+      chapterCache: path.join(e2eRoot, 'chapter-cache'),
       downloadChapterLimit: 2,
+      e2eFastMode: true,
+    },
+    toomics: {
+      ...originalToomicsConfig,
       e2eFastMode: true,
     },
   })
@@ -152,8 +126,10 @@ export function createToomicsE2EContext(): ToomicsE2EContext {
       // 恢复生产配置中的原始值
       const restoreConfig: Record<string, unknown> = {}
       if (originalHeadless !== undefined) restoreConfig.headless = originalHeadless
-      if (Object.keys(originalToomicsConfig).length) restoreConfig.toomics = originalToomicsConfig
-      if (Object.keys(originalSiteConfig).length) restoreConfig[configKey] = originalSiteConfig
+      if (Object.keys(originalSiteConfig).length)
+        restoreConfig[websiteKey] = originalSiteConfig
+      if (Object.keys(originalToomicsConfig).length)
+        restoreConfig.toomics = originalToomicsConfig
       if (Object.keys(restoreConfig).length) {
         set_config(restoreConfig)
       }

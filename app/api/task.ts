@@ -19,6 +19,7 @@ import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import ToZip from '#services/tozip'
 import {
+  captureErrorSnapshot,
   dataRoot,
   end_app,
   isTaskAbortError,
@@ -638,6 +639,14 @@ export class MangaTask extends Task {
 
       return result
     } catch (error) {
+      // ── 错误现场截图（由队列层统一管理）──
+      const debugPage = (error as any)?.debugPage
+      if (debugPage) {
+        const label = (error as any).name === 'TaskPauseError' ? 'mobile-verify' : 'abort'
+        await captureErrorSnapshot(debugPage, label).catch(() => {})
+        await debugPage.close().catch(() => {})
+      }
+
       if (isTaskPauseError(error)) {
         result = 'paused'
         shouldRunCleanup = false

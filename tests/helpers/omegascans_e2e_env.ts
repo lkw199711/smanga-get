@@ -1,5 +1,4 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import type { subsribeType } from '#type/index.js'
 import { dataRoot, get_config, set_config } from '#utils/index'
@@ -39,7 +38,7 @@ function getOptionalNumberEnv(name: string, defaultValue: number) {
 }
 
 function getTestRoot() {
-  return dataRoot || path.join(os.tmpdir(), 'smanga-get-tests')
+  return dataRoot.replace(/\/$/, '')
 }
 
 export function createOmegaScansE2EContext(): OmegaScansE2EContext {
@@ -59,10 +58,8 @@ export function createOmegaScansE2EContext(): OmegaScansE2EContext {
 
   const existingConfig = get_config() || {}
 
-  const testDownloadRoot =
-    process.env.TEST_DOWNLOAD_PATH ||
-    existingConfig.testDownloadPath ||
-    path.join(os.tmpdir(), 'smanga-get-tests')
+  // 测试下载根目录：始终使用隔离的测试数据目录
+  const testDownloadRoot = getTestRoot()
   const e2eRoot = path.join(testDownloadRoot, 'e2e', 'omegascans')
   const downloadPath = path.join(e2eRoot, 'download')
   const compressPath = path.join(e2eRoot, 'compress')
