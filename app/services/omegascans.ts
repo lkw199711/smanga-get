@@ -1,15 +1,19 @@
 import {
-  end_app, read_json, write_log, delay,
+  end_app,
+  read_json,
+  write_log,
+  delay,
   copy_folder,
   get_failed_chapters,
 } from '#utils/index'
 import { betweenChapterDelay } from '#utils/human'
 import { zip_directory } from '#utils/zip'
 import { get_config, make_can_be_floder } from '#utils/index'
-import fs from 'fs'
+import { dataRoot } from '#utils/index'
+import fs from 'node:fs'
 import { subscribe_remove } from '#api/subsribe'
 import { omegascansBrowser } from '#api/browser'
-import path from 'path'
+import path from 'node:path'
 
 export default class OmegaScans {
   id: number = 0
@@ -30,7 +34,14 @@ export default class OmegaScans {
   mangaCompressPath: string
   mangaPath: string
   config: any
-  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void; subProgress: (current: number, total: number) => void }
+  private downloadChapterLimit: number = 0
+  private e2eFastMode = false
+  private onProgress?: {
+    setTotal: (n: number) => void
+    report: (msg: string) => void
+    message: (msg: string) => void
+    subProgress: (current: number, total: number) => void
+  }
   constructor(params: any, onProgress?: any) {
     const config = get_config()?.omegascans || {}
     this.id = params.id || 0
@@ -42,6 +53,8 @@ export default class OmegaScans {
     this.compressPath = config.compressPath
     this.chapterCount = params.chapterCount || 0
     this.config = config
+    this.downloadChapterLimit = Number(config?.downloadChapterLimit || 0)
+    this.e2eFastMode = Boolean(config?.e2eFastMode)
 
     this.mangaFolder = `${this.downloadPath}/${this.name}`
     this.metaFolder = `${this.downloadPath}/${this.name}/.smanga`
@@ -72,11 +85,11 @@ export default class OmegaScans {
 
     await this.get_meta()
 
-    const validChapters = this.meta.chapters.filter((c: any) => c.price <= 0)
+    const chaptersToDownload = this.limitChaptersToDownload(this.meta.chapters)
+    const validChapters = chaptersToDownload.filter((c: any) => c.price <= 0)
     this.onProgress?.setTotal(validChapters.length)
 
-    for (let i = 0; i < this.meta.chapters.length; i++) {
-      const chapter = this.meta.chapters[i]
+    for (const chapter of chaptersToDownload) {
       if (chapter.price > 0) {
         write_log(
           `[subscribe]${this.name} 章节 ${chapter.name} 需要付费 ${chapter.price}，跳过下载`
@@ -88,7 +101,7 @@ export default class OmegaScans {
       await this.download_chapter(chapter)
       this.onProgress?.report(`${chapter.name} 下载完成`)
       omegascansBrowser.clear_buffs() // 清除浏览器缓存
-      await betweenChapterDelay()
+      await this.afterChapterDownload()
     }
 
     if (this.config?.autoCompress) {
@@ -99,6 +112,18 @@ export default class OmegaScans {
     write_log(`[subscribe]${this.name} 下载完毕, 已移除订阅链接`)
 
     end_app()
+  }
+
+  private limitChaptersToDownload(chapters: any[]) {
+    if (this.downloadChapterLimit <= 0) return chapters
+
+    return chapters.slice(0, this.downloadChapterLimit)
+  }
+
+  private async afterChapterDownload() {
+    if (this.e2eFastMode) return
+
+    await betweenChapterDelay()
   }
 
   /**
@@ -150,7 +175,7 @@ export default class OmegaScans {
     if (fs.existsSync(chapterFolder)) {
       const files = fs.readdirSync(chapterFolder)
       if (files.length > 0) {
-        return;
+        return
       }
     } else if (fs.existsSync(`${this.compressPath}/${this.mangaName}/${chapterName}.zip`)) {
       return
@@ -168,23 +193,23 @@ export default class OmegaScans {
         });
 */
     await this.page_open()
-    const [res, error] = await this.page
+    const [, pageError] = await this.page
       .goto(chapterUrl, {
         waitUntil: 'domcontentloaded',
         timeout: 60 * 1000,
       })
-      .then((res: any) => [res, null])
-      .catch((error: any) => [null, error])
+      .then(() => [null, null])
+      .catch((openError: any) => [null, openError])
     const chapterHtml = await this.page.content().catch(() => false)
     await omegascansBrowser.save_cookie()
     await this.page.close() // 关闭页面
 
-    if (error) {
+    if (pageError) {
       write_log(`[chapter download]章节页打开失败 ${chapter.name} from ${chapterUrl}`)
       this.retry++
       if (this.retry > 3) {
         this.retry = 0 // 重置重试次数
-        throw error // 重新抛出错误以便上层处理
+        throw pageError // 重新抛出错误以便上层处理
       }
       write_log(`[chapter download]重试第 ${this.retry} 次`)
       await this.download_chapter(chapter) // 重试下载
@@ -192,22 +217,24 @@ export default class OmegaScans {
     }
 
     // page.goto 成功，不重置 retry（下面还有 HTML 匹配可能失败）
-    
+
     // 提取章节图片：<img> 标签，src 指向 uploads 目录的 omegascans CDN 图片
-    const imageUrls = [
-      ...chapterHtml.matchAll(/<img[^>]+src="([^"]+\/uploads\/[^"]+)"/g)
-    ].map((m) => m[1])
-    
+    const imageUrls = [...chapterHtml.matchAll(/<img[^>]+src="([^"]+\/uploads\/[^"]+)"/g)].map(
+      (m) => m[1]
+    )
+
     // 兼容旧格式：<link rel="preload" as="image">
     if (imageUrls.length === 0) {
       const preloadUrls = [
-        ...chapterHtml.matchAll(/<link[^>]*rel="preload"[^>]*as="image"[^>]*href="([^"]+)"[^>]*>/g)
+        ...chapterHtml.matchAll(/<link[^>]*rel="preload"[^>]*as="image"[^>]*href="([^"]+)"[^>]*>/g),
       ].map((m) => m[1])
       imageUrls.push(...preloadUrls)
     }
 
     if (imageUrls.length === 0) {
-      write_log(`[chapter download]HTML结构不匹配 ${chapter.name}，前2000字符: ${String(chapterHtml).substring(0, 2000)}`)
+      write_log(
+        `[chapter download]HTML结构不匹配 ${chapter.name}，前2000字符: ${String(chapterHtml).substring(0, 2000)}`
+      )
       write_log(`[chapter download]章节页打开失败 ${chapter.name} from ${chapterUrl}`)
       this.retry++
       if (this.retry > 3) {
@@ -227,12 +254,12 @@ export default class OmegaScans {
       this.onProgress?.subProgress(i + 1, imageUrls.length)
 
       if (!fs.existsSync(imagePath)) {
-        let [res, err] = await this.download_image(imageUrl, imagePath)
-          .then((res) => [res, null])
-          .catch((error: any) => [null, error])
+        const [, imageError] = await this.download_image(imageUrl, imagePath)
+          .then(() => [null, null])
+          .catch((downloadError: any) => [null, downloadError])
 
         // 尝试重新下载一次
-        if (err) {
+        if (imageError) {
           await this.download_image(imageUrl, imagePath).catch(async () => {
             this.retry++
             if (this.retry > 3) {
@@ -240,7 +267,7 @@ export default class OmegaScans {
               write_log(`[chapter download]下载图片失败 次数过多 重置浏览器.`)
               await omegascansBrowser.browser?.close() // 关闭浏览器
               omegascansBrowser.browser = null // 清除浏览器实例
-              throw err // 重新抛出错误以便上层处理
+              throw imageError // 重新抛出错误以便上层处理
             }
 
             write_log(
@@ -257,10 +284,12 @@ export default class OmegaScans {
 
   async get_meta() {
     let meta: any = {}
-    const allManga = read_json('data/omegascans.json')
+    const allManga = read_json(path.join(dataRoot || '', 'data', 'omegascans.json'))
     const manga = allManga.find((item: any) => item.id === this.id)
     if (!manga) {
-      throw new Error(`未在 omegascans.json 中找到 id=${this.id} 的漫画，请先运行 omegascans-update 任务更新数据`)
+      throw new Error(
+        `未在 omegascans.json 中找到 id=${this.id} 的漫画，请先运行 omegascans-update 任务更新数据`
+      )
     }
 
     meta.id = manga.id
@@ -327,7 +356,7 @@ export default class OmegaScans {
     // console.log(chaptersData);
     // process.exit(0);
 
-    const chapters = chaptersData.data.map((chapter: any) => {
+    let chapters = chaptersData.data.map((chapter: any) => {
       return {
         id: chapter.id,
         title: chapter.chapter_title,
@@ -343,8 +372,9 @@ export default class OmegaScans {
     chapters.sort((a: any, b: any) => {
       const indexA = a.name?.match(/\d+(?:\.\d+)?/)?.[0]
       const indexB = b.name?.match(/\d+(?:\.\d+)?/)?.[0]
-      return parseFloat(indexA) - parseFloat(indexB)
+      return Number.parseFloat(indexA) - Number.parseFloat(indexB)
     })
+    chapters = this.limitChaptersToDownload(chapters)
 
     meta.chapters = chapters
     this.meta = meta
@@ -370,8 +400,7 @@ export default class OmegaScans {
       }
     }
 
-    for (let i = 0; i < chapters.length; i++) {
-      const chapter = chapters[i]
+    for (const chapter of chapters) {
       const chapterCover = `${this.mangaFolder}/${chapter.name}.jpg`
       const compressChapterCover = `${this.compressPath}/${this.mangaName}/${chapter.name}.jpg`
       const metaCacheChapterCover = `C:\\12manga-meta-cache/${this.mangaName}/${chapter.name}.jpg`
@@ -401,7 +430,7 @@ export default class OmegaScans {
     }
   }
 
-  async download_image(url: string, path: string) {
+  async download_image(url: string, filePath: string) {
     // url = encodeURI(url); // 确保URL是正确的格式
     url = url.replace(/ /g, '%20') // 替换空格为%20
     if (!omegascansBrowser.browser) return
@@ -409,28 +438,30 @@ export default class OmegaScans {
       this.page = await omegascansBrowser.new_page()
     }
     // const imagePage = await omegascansBrowser.new_page();
-    const [res, error] = await this.page
+    const [, pageError] = await this.page
       .goto(url, {
         waitUntil: 'networkidle2',
         timeout: 60 * 1000, // 设置超时时间为30秒
       })
-      .then((res: any) => [res, null])
-      .catch((error: any) => [null, error])
+      .then(() => [null, null])
+      .catch((openError: any) => [null, openError])
 
-    if (error) {
+    if (pageError) {
       console.log(`[download_image]下载图片失败 111`)
       await this.page?.close() // 关闭页面
-      throw error // 重新抛出错误以便上层处理
+      throw pageError // 重新抛出错误以便上层处理
     }
 
-    await delay(1000) // 等待1秒以确保图片加载完成
+    if (!this.e2eFastMode) {
+      await delay(1000) // 等待1秒以确保图片加载完成
+    }
     const buffer = await omegascansBrowser.buffs[url]
     if (!buffer) {
       console.log(`[download_image]下载图片失败 222`)
       await this.page?.close() // 关闭页面
       throw new Error(`Image buffer is empty for ${url}`)
     }
-    fs.writeFileSync(path, buffer)
+    fs.writeFileSync(filePath, buffer)
 
     return await this.page.close() // 关闭页面;
   }
@@ -438,8 +469,8 @@ export default class OmegaScans {
   async compress_manga() {
     // 复制元数据
     copy_folder(this.metaFolder, path.join(this.mangaCompressPath, '.smanga'))
-    const chapters = fs.readdirSync(this.mangaPath);
-    const failedChapters = get_failed_chapters() || [];
+    const chapters = fs.readdirSync(this.mangaPath)
+    const failedChapters = get_failed_chapters() || []
     for (const chapter of chapters) {
       const fullPath = path.join(this.mangaPath, chapter)
       if (chapter.startsWith('.')) continue

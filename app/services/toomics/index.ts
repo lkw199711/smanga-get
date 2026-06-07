@@ -18,12 +18,26 @@
  *   - ToomicsChapterDownloader：单章节图片下载（含重试/熔断）
  */
 
-import * as fs from 'fs'
-import path from 'path'
+import * as fs from 'node:fs'
+import path from 'node:path'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
-import { copy_folder, end_app, get_config, make_can_be_floder, write_log, get_failed_chapters } from '#utils/index'
-import { betweenChapterDelay, betweenMangaDelay, fastScroll, randomDelay, randomInt, DEFAULT_PERSONA } from '#utils/human'
+import {
+  copy_folder,
+  end_app,
+  get_config,
+  make_can_be_floder,
+  write_log,
+  get_failed_chapters,
+} from '#utils/index'
+import {
+  betweenChapterDelay,
+  betweenMangaDelay,
+  fastScroll,
+  randomDelay,
+  randomInt,
+  DEFAULT_PERSONA,
+} from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { zip_directory } from '#utils/zip'
 import { ToomicsBrowserSession } from './browser-session.js'
@@ -38,17 +52,17 @@ interface ChapterListItem extends ChapterInfo {
 export default class Toomics {
   // ── 站点与身份 ──────────────────────────────────────────────
   private domain = 'https://toomics.com'
-  private website: string = 'toomics'     // 配置 key，按语言区分：toomics-sc / toomics-tc / toomics-en
+  private website: string = 'toomics' // 配置 key，按语言区分：toomics-sc / toomics-tc / toomics-en
   private mangaId: number
   private mangaName: string
   private mangaUrl: string = ''
 
   // ── 路径配置 ──────────────────────────────────────────────
-  private downloadPath: string            // 原始下载根目录
-  private compressPath: string            // 压缩归档根目录
-  private mangaPath: string = ''          // 本漫画下载目录
-  private mangaCompressPath: string = ''  // 本漫画压缩目录
-  private metaFolder: string = ''         // 元数据目录：mangaPath/.smanga
+  private downloadPath: string // 原始下载根目录
+  private compressPath: string // 压缩归档根目录
+  private mangaPath: string = '' // 本漫画下载目录
+  private mangaCompressPath: string = '' // 本漫画压缩目录
+  private metaFolder: string = '' // 元数据目录：mangaPath/.smanga
 
   // ── 配置选项 ──────────────────────────────────────────────
   private config: any
@@ -61,20 +75,26 @@ export default class Toomics {
   private langTag: string = 'sc'
   private jumpExist = true
   private maxRetry: number = 3
+  private downloadChapterLimit: number = 0
+  private e2eFastMode = false
 
   // ── 运行时状态 ──────────────────────────────────────────────
   private meta: any = null
   private chapters: any = null
   private chapterCount: number = 0
-  private pretendNum: number = 0          // 「假装下载」的章节数（每次投骰决定）
-  private antiBotConfig: any              // 反爬共享配置（来自 toomics 主配置节）
-  private mangaDownloadedCount = 0        // 噪声浏览间隔计数器
+  private pretendNum: number = 0 // 「假装下载」的章节数（每次投骰决定）
+  private antiBotConfig: any // 反爬共享配置（来自 toomics 主配置节）
+  private mangaDownloadedCount = 0 // 噪声浏览间隔计数器
   private params: subsribeType
 
   // ── 子模块 ──────────────────────────────────────────────
   private browserSession: ToomicsBrowserSession
   private chapterDownloader: ToomicsChapterDownloader
-  private onProgress?: { setTotal: (n: number) => void; report: (msg: string) => void; message: (msg: string) => void }
+  private onProgress?: {
+    setTotal: (n: number) => void
+    report: (msg: string) => void
+    message: (msg: string) => void
+  }
 
   constructor(params: subsribeType, onProgress?: any) {
     // 根据 URL 中的语言标识确定站点变体
@@ -104,6 +124,7 @@ export default class Toomics {
     this.scrollStep = config?.scrollStep || this.scrollStep
     this.scrollDelay = config?.scrollDelay || this.scrollDelay
     this.maxRetry = config?.maxRetry || this.maxRetry
+    this.downloadChapterLimit = Number(config?.downloadChapterLimit || 0)
     this.adult = params.adult || false
     this.jumpExist = config?.jumpExist
 
@@ -114,6 +135,7 @@ export default class Toomics {
 
     // 读取反爬共享配置
     this.antiBotConfig = get_config('toomics') || {}
+    this.e2eFastMode = Boolean(config?.e2eFastMode || this.antiBotConfig?.e2eFastMode)
 
     // 初始化子模块
     this.browserSession = new ToomicsBrowserSession({
@@ -131,7 +153,7 @@ export default class Toomics {
       scrollStep: this.scrollStep,
       scrollDelay: this.scrollDelay,
       maxRetry: this.maxRetry,
-      persona: this.antiBotConfig?.readerPersona || DEFAULT_PERSONA,
+      persona: this.getReaderPersona(),
       fastScrollDurationMs: this.antiBotConfig?.homePageScrollMin
         ? randomInt(this.antiBotConfig.homePageScrollMin, this.antiBotConfig.homePageScrollMax)
         : 20000,
@@ -199,7 +221,7 @@ export default class Toomics {
         scrollStep: this.scrollStep,
         scrollDelay: this.scrollDelay,
         maxRetry: this.maxRetry,
-        persona: this.antiBotConfig?.readerPersona || DEFAULT_PERSONA,
+        persona: this.getReaderPersona(),
         fastScrollDurationMs: this.antiBotConfig?.homePageScrollMin
           ? randomInt(this.antiBotConfig.homePageScrollMin, this.antiBotConfig.homePageScrollMax)
           : 20000,
@@ -216,7 +238,9 @@ export default class Toomics {
     const chapterList: ChapterListItem[] = this.buildChapterList()
 
     // Step 5: 筛选需要下载和假装下载的章节
-    const chaptersToDownload = chapterList.filter((c) => !c.alreadyHas)
+    const chaptersToDownload = this.limitChaptersToDownload(
+      chapterList.filter((c) => !c.alreadyHas)
+    )
     const chaptersToNotDownload = chapterList.filter((c) => c.doNotDownload)
 
     // 计算「假装下载」数量
@@ -229,18 +253,18 @@ export default class Toomics {
       // 先「假装下载」已存在的章节（足迹模式）
       for (const chapter of pretendDownload) {
         await this.chapterDownloader.downloadChapter(chapter)
-        await betweenChapterDelay()
+        await this.afterChapterDownload()
       }
 
       // 下载真正需要的新章节
       for (const chapter of chaptersToDownload) {
         await this.chapterDownloader.downloadChapter(chapter)
-        await betweenChapterDelay()
+        await this.afterChapterDownload()
       }
 
       // 漫画间延迟（切换到下一部漫画的间隔）
       this.mangaDownloadedCount++
-      await betweenMangaDelay()
+      await this.afterMangaDownload()
 
       // 任务间隙噪声浏览（每 N 部漫画后模拟逛首页）
       await this.noiseBrowseBetweenManga()
@@ -282,9 +306,6 @@ export default class Toomics {
         if (files.length > 0) alreadyHas = true
       } else if (fs.existsSync(`${this.compressPath}/${this.mangaName}/${chapterName}.zip`)) {
         alreadyHas = true
-      } else {
-        // 目录不存在且未压缩，预创建目录
-        fs.mkdirSync(chapterFolder, { recursive: true })
       }
 
       chapterList.push({
@@ -313,17 +334,24 @@ export default class Toomics {
     // 统计本地已下载的章节目录数（排除 .smanga 元数据目录）
     let localChapters: string[] = []
     if (fs.existsSync(mangaFolder)) {
-      localChapters = fs.readdirSync(mangaFolder).filter(
-        (item) => fs.statSync(path.join(mangaFolder, item)).isDirectory() && item !== '.smanga'
-      )
+      localChapters = fs
+        .readdirSync(mangaFolder)
+        .filter(
+          (item) => fs.statSync(path.join(mangaFolder, item)).isDirectory() && item !== '.smanga'
+        )
     }
 
     // 统计压缩目录中存在但本地目录中不存在的 zip 文件
     let compressedOnly: string[] = []
     if (fs.existsSync(compressFolder)) {
-      compressedOnly = fs.readdirSync(compressFolder).filter(
-        (item) => !localChapters.includes(item.replace('.zip', '')) && item.endsWith('.zip') && /\d/.test(item)
-      )
+      compressedOnly = fs
+        .readdirSync(compressFolder)
+        .filter(
+          (item) =>
+            !localChapters.includes(item.replace('.zip', '')) &&
+            item.endsWith('.zip') &&
+            /\d/.test(item)
+        )
     }
 
     // 本地总章节数 + 0.9 容差 < 订阅章节数 → 有更新
@@ -388,12 +416,12 @@ export default class Toomics {
     }
 
     // 概率策略：按权重掷骰
-    const weights = this.antiBotConfig?.pretendNumWeights || [0.50, 0.25, 0.25]
+    const weights = this.antiBotConfig?.pretendNumWeights || [0.5, 0.25, 0.25]
     const roll = Math.random()
     let cumulative = 0
 
-    for (let i = 0; i < weights.length; i++) {
-      cumulative += weights[i]
+    for (const [i, weight] of weights.entries()) {
+      cumulative += weight
       if (roll < cumulative) {
         this.pretendNum = i
         break
@@ -401,6 +429,52 @@ export default class Toomics {
     }
 
     write_log(`[toomics] ${this.mangaName} pretendNum 掷骰结果: ${this.pretendNum}`)
+  }
+
+  /**
+   * E2E 测试只验证下载链路，可通过 downloadChapterLimit 限制真实下载章节数。
+   * 生产配置不设置该字段时保持原行为。
+   */
+  private limitChaptersToDownload(chapters: ChapterListItem[]): ChapterListItem[] {
+    const limitedChapters =
+      this.downloadChapterLimit > 0 ? chapters.slice(0, this.downloadChapterLimit) : chapters
+
+    for (const chapter of limitedChapters) {
+      fs.mkdirSync(chapter.downloadPath, { recursive: true })
+    }
+
+    return limitedChapters
+  }
+
+  /**
+   * 快速模式使用零延迟阅读人格，避免 E2E 测试被真人化阅读等待拖慢。
+   */
+  private getReaderPersona() {
+    if (!this.e2eFastMode) return this.antiBotConfig?.readerPersona || DEFAULT_PERSONA
+
+    return {
+      ...DEFAULT_PERSONA,
+      pageReadMin: 0,
+      pageReadMax: 0,
+      keyPageRatio: 0,
+      keyPageMin: 0,
+      keyPageMax: 0,
+      backFlipProb: 0,
+      chapterEndExtraMin: 0,
+      chapterEndExtraMax: 0,
+    }
+  }
+
+  private async afterChapterDownload() {
+    if (this.e2eFastMode) return
+
+    await betweenChapterDelay()
+  }
+
+  private async afterMangaDownload() {
+    if (this.e2eFastMode) return
+
+    await betweenMangaDelay()
   }
 
   /**

@@ -30,7 +30,7 @@ export default defineConfig({
     },
     () => import('@adonisjs/core/providers/vinejs_provider'),
     () => import('@adonisjs/cors/cors_provider'),
-    () => import('@adonisjs/lucid/database_provider')
+    () => import('@adonisjs/lucid/database_provider'),
   ],
 
   /*
@@ -63,6 +63,11 @@ export default defineConfig({
         files: ['tests/functional/**/*.spec(.ts|.js)'],
         name: 'functional',
         timeout: 30000,
+      },
+      {
+        files: ['tests/e2e/**/*.spec(.ts|.js)'],
+        name: 'e2e',
+        timeout: 10 * 60 * 1000,
       },
     ],
     forceExit: false,

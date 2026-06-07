@@ -38,6 +38,7 @@ export default class Gentleman {
   private downloadPath: string              // 原始下载根目录，如 D:/manga-download
   private organizePath: string              // 整理后归档目录，如 D:/manga-organized
   private config: any                       // 当前站点的完整配置对象
+  private downloadChapterLimit = 0          // E2E/调试用：限制本次最多下载的章节数，0 表示不限制
 
   // ── 运行时状态 ──────────────────────────────────────────────
   private chapters: ChapterInfo[] = []      // 解析得到的全部章节列表
@@ -66,6 +67,7 @@ export default class Gentleman {
     this.downloadPath = config?.downloadPath || ''
     this.organizePath = config?.organizePath || ''
     this.config = config
+    this.downloadChapterLimit = Number(config?.downloadChapterLimit || 0)
     this.mangaId = params.id
     // 将漫画名清理为合法目录名（去除 HTML 标签、非法字符等）
     this.mangaName = make_can_be_floder(params.name)
@@ -101,10 +103,12 @@ export default class Gentleman {
     await this.get_chapters()
 
     // Step 3: 过滤出尚未下载的章节（目录不存在或为空则视为需要下载）
-    const newChapters = this.chapters.filter((item) => {
-      const chapterPath = path.join(this.mangaPath, item.name)
-      return !(fs.existsSync(chapterPath) && fs.readdirSync(chapterPath).length > 0)
-    })
+    const newChapters = this.limitChaptersToDownload(
+      this.chapters.filter((item) => {
+        const chapterPath = path.join(this.mangaPath, item.name)
+        return !(fs.existsSync(chapterPath) && fs.readdirSync(chapterPath).length > 0)
+      })
+    )
     this.onProgress?.setTotal(newChapters.length)
 
     // Step 4: 逐章节解析图片 URL 并下载
@@ -146,6 +150,15 @@ export default class Gentleman {
     if (!gentlemanBrowser.browser) {
       await gentlemanBrowser.init()
     }
+  }
+
+  /** 按配置限制本次下载的章节数量，主要用于真实站点 E2E 测试控制成本 */
+  private limitChaptersToDownload(chapters: ChapterInfo[]) {
+    if (!Number.isFinite(this.downloadChapterLimit) || this.downloadChapterLimit <= 0) {
+      return chapters
+    }
+
+    return chapters.slice(0, this.downloadChapterLimit)
   }
 
   /**

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { runningTaskType, subsribeType, taskProgressType, taskType } from '#type/index.js'
 import {
   bilibiliBrowser,
+  gentlemanBrowser,
   omegascansBrowser,
   toomicsBrowser,
   toomicsBrowserNoUser,
@@ -282,6 +283,7 @@ export async function close_all_browsers() {
     closeBrowser('bilibili', bilibiliBrowser.browser),
     closeBrowser('toomics-no-user', toomicsBrowserNoUser.browser),
     closeBrowser('omegascans', omegascansBrowser.browser),
+    closeBrowser('gentleman', gentlemanBrowser.browser),
   ])
 }
 
