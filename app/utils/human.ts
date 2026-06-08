@@ -82,17 +82,22 @@ export async function readingDelay(
 }
 
 /**
- * 章节间浏览延迟：模拟翻目录、思考下一步的时间（8~20 秒）
+ * 章节间浏览延迟：模拟翻目录、思考下一步的时间
+ *
+ * 滚动到底部不再有长时间等待，章节间补回 1~5 秒拟真停顿。
  */
 export async function betweenChapterDelay(): Promise<void> {
-  await randomDelay(8000, 20000)
+  await randomDelay(1000, 4000)
 }
 
 /**
- * 漫画间延迟：切换到下一部漫画的间隔（15~45 秒）
+ * 漫画间延迟：已移至压缩之后执行（toomics/index.ts），此处不再生效。
+ *
+ * 原设计：15~45 秒漫画间休息。现在每个漫画任务本身是一个独立会话，
+ * 会话级别的反爬在调度器层面控制，此处不需要堆叠额外延迟。
  */
 export async function betweenMangaDelay(): Promise<void> {
-  await randomDelay(15000, 45000)
+  await randomDelay(0, 0)
 }
 
 /**

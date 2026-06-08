@@ -113,7 +113,27 @@ export default class ToomicsAll {
         scrollDelay: this.scrollDelay,
       })
 
-      await page.waitForNetworkIdle().catch(() => {})
+      await page
+        .waitForFunction(
+          () => {
+            const doc = (globalThis as any).document
+            const imgs = doc.querySelectorAll('.list_wrap img.lazy')
+            // 无 .lazy 图片说明已全部加载完成
+            if (imgs.length === 0) return true
+            const winHeight = (globalThis as any).window.innerHeight
+            for (const img of imgs) {
+              const rect = img.getBoundingClientRect()
+              if (rect.bottom > 0 && rect.top < winHeight) {
+                if (img.getAttribute('data-ll-status') === 'loaded') continue
+                const src = img.getAttribute('src')
+                if (!src || src.startsWith('data:image')) return false
+              }
+            }
+            return true
+          },
+          { timeout: 30000 }
+        )
+        .catch(() => {})
       await delay(2000)
 
       // Step 4: 从页面 DOM 中提取所有漫画信息

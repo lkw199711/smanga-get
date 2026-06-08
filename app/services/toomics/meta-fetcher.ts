@@ -30,6 +30,8 @@ export interface ToomicsMeta {
   publishDate?: string     // 最新章节发布日期
   chapters?: any[]         // 章节列表快照
   covers?: string[]        // 历史封面 URL 集合（来自 toomics-all.json）
+  banners?: string[]       // 历史横幅图片 URL 合集（meta.json 自维护）
+  bannerBackgrounds?: string[] // 历史横幅背景图 URL 合集（meta.json 自维护）
 }
 
 /** 单个章节信息 */
@@ -245,8 +247,9 @@ export class ToomicsMetaFetcher {
    *
    * 写入逻辑：
    *   - 从 toomics-all.json 获取历史封面集合（covers），补充到 .smanga 目录
+   *   - 从旧 meta.json 读取历史 banner/bannerBackground，与新值合并
    *   - 检测章节数变化，标记 metaUpdate=true 触发 meta.json 重写
-   *   - 写入 banner.jpg、bannerBackground.jpg、章节封面
+   *   - 写入 cover*.jpg、banner*.jpg、bannerBackground*.jpg、章节封面
    */
   private async downloadMeta(): Promise<void> {
     // 从全站扫描 JSON 中获取历史封面数据
@@ -263,46 +266,40 @@ export class ToomicsMetaFetcher {
     if (!fs.existsSync(this.mangaFolder))
       await fs.promises.mkdir(this.mangaFolder, { recursive: true })
 
-    // 检测是否有章节数变化（触发 meta.json 重写）
+    // 读取旧 meta.json（用于获取历史 banner/bannerBackground 和检测章节变化）
     const metaFile = `${this.metaFolder}/meta.json`
+    let oldMeta: ToomicsMeta | null = null
     if (fs.existsSync(metaFile)) {
-      const rawData = fs.readFileSync(metaFile, 'utf-8')
-      const oldMetaData = JSON.parse(rawData)
-      if (oldMetaData.chapters?.length !== this.chapters.length) {
+      try {
+        const rawData = fs.readFileSync(metaFile, 'utf-8')
+        oldMeta = JSON.parse(rawData)
+      } catch { /* 忽略损坏的 meta.json */ }
+      if (oldMeta && oldMeta.chapters?.length !== this.chapters.length) {
         this.metaUpdate = true
       }
     }
 
-    // 写入来自 toomics-all.json 的历史封面
+    // ---- 封面历史保留 ----
+    // 来源：toomics-all.json 的全站扫描累积的 covers 数组
     if (homeMeta) {
+      // 写入最新封面（overwrite=true，确保 cover.jpg 始终是最新的）
       this.downloadCover(homeMeta.cover, `${this.metaFolder}/cover.jpg`, true)
+
+      // 写入历史封面（overwrite=false，已有则跳过，避免重复IO）
       homeMeta.covers.forEach((cover: string, index: number) => {
         this.downloadCover(cover, `${this.metaFolder}/cover${index}.jpg`)
       })
 
+      // 若 toomics-all.json 中的 covers 比旧 meta 多，更新 meta.covers 并标记重写
       if (homeMeta.covers.length > (this.meta?.covers?.length ?? 0)) {
         if (this.meta) this.meta.covers = homeMeta.covers
         this.metaUpdate = true
       }
     }
 
-    // 写入 meta.json 和 banner 图片（仅在有更新或首次写入时）
-    if (!fs.existsSync(metaFile) || this.metaUpdate || this.downloadMetaError) {
-      fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
-
-      // banner/bannerBackground 从浏览器 buffer 写入
-      if (toomicsBrowser.buffs[this.meta!.banner]) {
-        fs.writeFileSync(`${this.metaFolder}/banner.jpg`, toomicsBrowser.buffs[this.meta!.banner])
-      }
-      if (toomicsBrowser.buffs[this.meta!.bannerBackground]) {
-        fs.writeFileSync(
-          `${this.metaFolder}/bannerBackground.jpg`,
-          toomicsBrowser.buffs[this.meta!.bannerBackground]
-        )
-      }
-    } else {
-      console.log(this.mangaName + ' 没有更新')
-    }
+    // ---- Banner 历史保留 ----
+    // 来源：meta.json 自维护（每次详情页抓取时合并新旧 banner URL）
+    this.mergeAndWriteBannerHistory(oldMeta, metaFile)
 
     // 写入章节封面（仅当本地不存在时写入）
     for (const chapter of this.chapters) {
@@ -315,6 +312,91 @@ export class ToomicsMetaFetcher {
 
     // 注意：tryIndexMangaMetaFile 已移至 download 完成后调用（toomics/index.ts），
     // 此处不再索引，以确保只记录实际下载的章节
+  }
+
+  /**
+   * 合并并写入历史 banner / bannerBackground
+   *
+   * 策略：
+   *   1. 从旧 meta.json 读取已有的 banners / bannerBackgrounds 历史数组
+   *   2. 将当前抓取到的 banner / bannerBackground URL 追加到数组（去重保序）
+   *   3. 更新 this.meta，写入 meta.json
+   *   4. 将浏览器 buffer 中的图片写入磁盘：
+   *      - banner.jpg / bannerBackground.jpg = 当前最新（always overwrite）
+   *      - banner0.jpg..bannerN.jpg / bannerBackground0.jpg..bannerBackgroundN.jpg = 历史版本（skip if exists）
+   *
+   * @param oldMeta  旧 meta.json 解析结果（可能为 null）
+   * @param metaFile meta.json 文件路径
+   */
+  private mergeAndWriteBannerHistory(oldMeta: ToomicsMeta | null, metaFile: string): void {
+    if (!this.meta) return
+
+    // ---- 处理 banner ----
+    const oldBanners: string[] = oldMeta?.banners || []
+    const newBanners = [...oldBanners]
+    if (this.meta.banner && /^https?:\/\//i.test(this.meta.banner)) {
+      if (!newBanners.includes(this.meta.banner)) {
+        newBanners.push(this.meta.banner)
+      }
+    }
+
+    // 检测 banner 是否有变化，触发 meta.json 重写
+    if (newBanners.length > (oldMeta?.banners?.length ?? 0)) {
+      this.metaUpdate = true
+    }
+    this.meta.banners = newBanners
+
+    // ---- 处理 bannerBackground ----
+    const oldBgBanners: string[] = oldMeta?.bannerBackgrounds || []
+    const newBgBanners = [...oldBgBanners]
+    if (this.meta.bannerBackground && /^https?:\/\//i.test(this.meta.bannerBackground)) {
+      if (!newBgBanners.includes(this.meta.bannerBackground)) {
+        newBgBanners.push(this.meta.bannerBackground)
+      }
+    }
+
+    if (newBgBanners.length > (oldMeta?.bannerBackgrounds?.length ?? 0)) {
+      this.metaUpdate = true
+    }
+    this.meta.bannerBackgrounds = newBgBanners
+
+    // ---- 写入 meta.json ----
+    // 条件：首次写入、有章节更新、或 banner/cover 有变化
+    if (!fs.existsSync(metaFile) || this.metaUpdate || this.downloadMetaError) {
+      fs.writeFileSync(metaFile, JSON.stringify(this.meta, null, 2))
+
+      // 写入最新 banner / bannerBackground（始终覆盖为当前最新）
+      if (toomicsBrowser.buffs[this.meta.banner]) {
+        fs.writeFileSync(`${this.metaFolder}/banner.jpg`, toomicsBrowser.buffs[this.meta.banner])
+      }
+      if (toomicsBrowser.buffs[this.meta.bannerBackground]) {
+        fs.writeFileSync(
+          `${this.metaFolder}/bannerBackground.jpg`,
+          toomicsBrowser.buffs[this.meta.bannerBackground]
+        )
+      }
+
+      // 写入历史 banner 图片（仅写磁盘中不存在的，与封面 coverN.jpg 策略一致）
+      // 注意：历史 banner 的 buffer 无法回溯，仅当对应 URL 恰好在当前浏览器 buffs 中时写入
+      for (let i = 0; i < newBanners.length; i++) {
+        const bannerFile = `${this.metaFolder}/banner${i}.jpg`
+        if (!fs.existsSync(bannerFile)) {
+          if (toomicsBrowser.buffs[newBanners[i]]) {
+            fs.writeFileSync(bannerFile, toomicsBrowser.buffs[newBanners[i]])
+          }
+        }
+      }
+      for (let i = 0; i < newBgBanners.length; i++) {
+        const bgFile = `${this.metaFolder}/bannerBackground${i}.jpg`
+        if (!fs.existsSync(bgFile)) {
+          if (toomicsBrowser.buffs[newBgBanners[i]]) {
+            fs.writeFileSync(bgFile, toomicsBrowser.buffs[newBgBanners[i]])
+          }
+        }
+      }
+    } else {
+      console.log(this.mangaName + ' 没有更新')
+    }
   }
 
   /**
@@ -409,7 +491,23 @@ export class ToomicsMetaFetcher {
         scrollDelay: this.scrollDelay,
       })
 
-      await metaPage.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
+      // 等待章节封面缩略图全部加载完成（替代 waitForNavigation，避免被 GA/GTM 持久连接阻塞）
+      // 列表页懒加载机制：<img class="list_lazy" data-original="真实URL" src="placeholder" />
+      // 加载完成后 src 会被替换为真实 URL，未加载的仍是 data:image 占位符
+      await metaPage
+        .waitForFunction(
+          () => {
+            const doc = (globalThis as any).document
+            const imgs = doc.querySelectorAll('img.list_lazy')
+            for (const img of imgs) {
+              const src = img.getAttribute('src')
+              if (!src || src.startsWith('data:image')) return false
+            }
+            return true
+          },
+          { timeout: 30000 }
+        )
+        .catch(() => {})
       await delay(1000)
       this.metaPageHtml = await metaPage.content()
     } catch (e) {

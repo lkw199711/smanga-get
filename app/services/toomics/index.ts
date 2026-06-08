@@ -266,13 +266,6 @@ export default class Toomics {
         await this.afterChapterDownload()
       }
 
-      // 漫画间延迟（切换到下一部漫画的间隔）
-      this.mangaDownloadedCount++
-      await this.afterMangaDownload()
-
-      // 任务间隙噪声浏览（每 N 部漫画后模拟逛首页）
-      await this.noiseBrowseBetweenManga()
-
       // 仅记录已下载章节到 manga_results / manga_chapters
       if (downloadedCount > 0) {
         const downloadedChapterNames = new Set(
@@ -297,10 +290,17 @@ export default class Toomics {
       }
     }
 
-    // Step 5: 可选压缩归档
+    // Step 5: 可选压缩归档（下载完成后立即执行，不等待任何延时）
     if (this.config?.autoCompress) {
       write_log(`[toomics] ${this.mangaName} 正在压缩`)
       await this.compress_manga()
+    }
+
+    // 下载后延时（仅当有实际下载时执行，放在压缩之后避免阻塞归档）
+    if (chaptersToDownload.length > 0) {
+      this.mangaDownloadedCount++
+      await this.afterMangaDownload()
+      await this.noiseBrowseBetweenManga()
     }
 
     console.log(`${this.mangaName} 订阅完毕`)

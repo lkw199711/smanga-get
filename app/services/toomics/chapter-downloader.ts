@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import path from 'path'
 import { delay, end_app, make_can_be_floder, write_log, set_failed_chapters, TaskAbortError } from '#utils/index'
-import { humanScroll, randomMouseMove, readingDelay, fastScroll, DEFAULT_PERSONA, type ReaderPersona } from '#utils/human'
+import { humanScroll, randomMouseMove, fastScroll, DEFAULT_PERSONA, type ReaderPersona } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 
 /** 章节下载所需的参数 */
@@ -169,8 +169,29 @@ export class ToomicsChapterDownloader {
       })
       await randomMouseMove(chapterPage)
 
-      // 等待图片网络请求完成
-      await chapterPage.waitForNetworkIdle().catch(() => {})
+      // 等待视口内懒加载图片全部完成（替代 waitForNetworkIdle，避免被 GA/Facebook 等持久连接阻塞）
+      await chapterPage
+        .waitForFunction(
+          () => {
+            const doc = (globalThis as any).document
+            const win = (globalThis as any).window
+            const imgs = doc.querySelectorAll('#viewer-img img.lazy')
+            for (const img of imgs) {
+              const rect = img.getBoundingClientRect()
+              // 只检查视口内及上方已滚过的图片
+              if (rect.bottom > 0 && rect.top < win.innerHeight) {
+                const status = img.getAttribute('data-ll-status')
+                // loaded 或 error 都视为已结束，不再等待
+                if (status === 'loaded' || status === 'error') continue
+                const src = img.getAttribute('src')
+                if (src && src.startsWith('data:image')) return false
+              }
+            }
+            return true
+          },
+          { timeout: 30000 }
+        )
+        .catch(() => {})
 
       // 从 DOM 提取所有图片 URL（id 以 "set_image_" 开头的 img 元素）
       const imageUrls: string[] = await chapterPage.evaluate(() => {
@@ -179,9 +200,6 @@ export class ToomicsChapterDownloader {
         return Array.from(els).map((el: any) => el.src)
       })
       totalImages = imageUrls.length
-
-      // 模拟阅读延迟（基于实际图片数量，融入重点页/回翻机制）
-      await readingDelay(imageUrls.length, this.persona)
 
       // 从浏览器内存 buffer 读取图片并写入磁盘
       this.onProgress?.message(`正在保存 ${chapterName} 图片 (共 ${imageUrls.length} 张)`)
