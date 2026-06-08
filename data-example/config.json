@@ -105,9 +105,7 @@
     "noiseIntervalTaskCount": 4,
     "priority": {
       "highPriorityIds": [],
-      "lowPriorityIds": [],
-      "autoDowngradeDays": 3,
-      "autoUpgradeDays": 5
+      "autoUpgradeThreshold": 3
     }
   },
   "toomics-sc": {
@@ -161,6 +159,7 @@
     "downloadPath": "C:\\11manga\\omegascans",
     "compressPath": "C:\\12manga-compress\\omegascans",
     "autoCompress": 0,
+    "skipDays": 7,
     "cloudPath": "C:\\99mnt\\0\\20manga-compress\\omegascans",
     "scrollStep": 400,
     "scrollDelay": 500,
@@ -171,6 +170,7 @@
     "downloadPath": "A:\\05temp\\01软件\\manga-reptile\\download\\绅士漫画",
     "organizePath": "D:\\11manga\\gentleman",
     "organize": 0,
+    "skipDays": 7,
     "compressPath": "D:\\12manga-compress\\gentleman",
     "scrollStep": 400,
     "scrollDelay": 500,

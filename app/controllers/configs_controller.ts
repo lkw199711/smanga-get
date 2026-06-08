@@ -1,6 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { dataRoot, get_config, replace_config, patch_config, get_config_path } from '#utils/index'
 import { create_scan_cron } from '../../start/init.js'
+import db from '@adonisjs/lucid/services/db'
+import { encodeMangaFileToken } from '#services/manga_index'
 import fs from 'fs'
 import path from 'path'
 
@@ -152,6 +154,110 @@ export default class ConfigsController {
       return response.status(500).json({
         code: 500,
         message: `清除玩漫 cookie 失败: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * GET /config/priority - 获取优先级配置 + 按优先级分组的漫画列表
+   */
+  async getPriority({ response }: HttpContext) {
+    try {
+      const config = get_config()
+      const toomicsConfig = config?.toomics || {}
+      const priority = toomicsConfig.priority || {}
+      const highPriorityIds: number[] = Array.isArray(priority.highPriorityIds) ? priority.highPriorityIds : []
+      const autoUpgradeThreshold: number = typeof priority.autoUpgradeThreshold === 'number' ? priority.autoUpgradeThreshold : 3
+
+      // 查询所有 toomics 漫画
+      const rows = await db.rawQuery(
+        `SELECT mr.\`id\`, mr.\`identity_key\`, mr.\`name\`, mr.\`website\`, mr.\`chapter_count\`,
+           mr.\`finished\`, mr.\`cover_path\`, mr.\`remote_cover\`,
+           COALESCE((SELECT COUNT(*) FROM manga_chapters mc WHERE mc.manga_result_id = mr.\`id\`), 0) AS indexed_count
+         FROM manga_results mr
+         WHERE mr.website LIKE 'toomics%'
+         ORDER BY mr.\`name\` ASC`
+      ) as any[]
+
+      const parsed = Array.isArray(rows) ? rows : (rows[0] || [])
+      const highSet = new Set(highPriorityIds)
+
+      const allManga = parsed.map((row: any) => {
+        const mangaId = Number(row.id)
+        const chapterCount = Number(row.chapter_count) || 0
+        const indexedCount = Number(row.indexed_count) || 0
+        const isHigh = highSet.has(mangaId)
+        const isMedium = !isHigh && (chapterCount - indexedCount >= autoUpgradeThreshold)
+
+        return {
+          id: mangaId,
+          key: row.identity_key || '',
+          name: row.name || '',
+          website: row.website || '',
+          chapterCount,
+          indexedCount,
+          finished: !!row.finished,
+          coverToken: row.cover_path ? encodeMangaFileToken(row.cover_path) : undefined,
+          remoteCover: row.remote_cover || undefined,
+          priority: isHigh ? 'high' : isMedium ? 'medium' : 'low',
+        }
+      })
+
+      const highList = allManga.filter((m) => m.priority === 'high')
+      const mediumList = allManga.filter((m) => m.priority === 'medium')
+      const lowList = allManga.filter((m) => m.priority === 'low')
+
+      return {
+        code: 200,
+        data: {
+          highPriorityIds,
+          autoUpgradeThreshold,
+          highList,
+          mediumList,
+          lowList,
+        },
+      }
+    } catch (e: any) {
+      return response.status(500).json({
+        code: 500,
+        message: `获取优先级配置失败: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * PUT /config/priority - 更新高优先级 ID 列表，自动去重
+   */
+  async updatePriority({ request, response }: HttpContext) {
+    try {
+      const body = request.body()
+      const highPriorityIds: number[] = Array.isArray(body?.highPriorityIds) ? body.highPriorityIds : []
+
+      // 去重：过滤非数字和重复值
+      const cleaned = Array.from(new Set(
+        highPriorityIds.filter((id) => typeof id === 'number' && Number.isFinite(id) && id > 0)
+      ))
+
+      // 写入配置
+      patch_config({
+        toomics: {
+          priority: {
+            highPriorityIds: cleaned,
+          },
+        },
+      })
+
+      return {
+        code: 200,
+        message: '优先级配置已保存',
+        data: {
+          highPriorityIds: cleaned,
+        },
+      }
+    } catch (e: any) {
+      return response.status(500).json({
+        code: 500,
+        message: `保存优先级配置失败: ${e.message}`,
       })
     }
   }

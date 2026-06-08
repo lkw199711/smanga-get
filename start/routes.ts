@@ -45,6 +45,8 @@ router.get('/config', [ConfigController, 'get'])
 router.put('/config', [ConfigController, 'update'])
 router.patch('/config', [ConfigController, 'patch'])
 router.delete('/config/toomics-cookie', [ConfigController, 'clearToomicsCookie'])
+router.get('/config/priority', [ConfigController, 'getPriority'])
+router.put('/config/priority', [ConfigController, 'updatePriority'])
 
 router.post('/auth/manual/start', [ManualAuthController, 'start'])
 router.post('/auth/manual/finish', [ManualAuthController, 'finish'])

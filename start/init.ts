@@ -4,9 +4,10 @@ const require = createRequire(import.meta.url)
 const cron = require('node-cron');
 
 import { subscribe_read } from '#api/subsribe';
-import { mangaTask } from '#api/task';
+import { mangaTask, refreshHighPriorityCache, refreshMediumPriorityCache } from '#api/task';
 import { subsribeType } from '#type/index.js'
-import { get_config, set_config, dataRoot, write_json } from '#utils/index';
+import { get_config, set_config, dataRoot, write_json, write_log } from '#utils/index';
+import MangaResult from '#models/manga_result'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
@@ -69,6 +70,10 @@ export function create_scan_cron() {
   // 定时扫描任务
 
   subsribeCron = cron.schedule(scanInterval, async () => {
+    // 刷新优先级缓存
+    refreshHighPriorityCache()
+    await refreshMediumPriorityCache()
+
     // 清空cookie记录
     if (config.clearCookies) {
       write_json('data/toomics-cookie.json', [])
@@ -98,6 +103,8 @@ export function create_scan_cron() {
     const subsribe = subscribe_read()
     for (let i = 0; i < subsribe.length; i++) {
       const item: subsribeType = subsribe[i]
+      const shouldSkip = await shouldSkipSubscription(item)
+      if (shouldSkip) continue
       mangaTask.add(item)
     }
 
@@ -112,10 +119,37 @@ export function create_scan_cron() {
   });
 }
 
-export function task_allocation() {
+export async function task_allocation() {
+  // 刷新优先级缓存（HIGH 同步 + MEDIUM 异步）
+  refreshHighPriorityCache()
+  await refreshMediumPriorityCache()
+
   const subsribe = subscribe_read()
   for (let i = 0; i < subsribe.length; i++) {
     const item: subsribeType = subsribe[i]
+    const shouldSkip = await shouldSkipSubscription(item)
+    if (shouldSkip) continue
     mangaTask.add(item)
   }
+}
+
+/** 检查订阅是否应跳过：查 manga_results.crawledAt，若在 skipDays 内则返回 true */
+async function shouldSkipSubscription(item: subsribeType): Promise<boolean> {
+  if (!item.id || !item.website) return false
+
+  const config = get_config()
+  const siteConfig = config?.[item.website]
+  const skipDays = Number(siteConfig?.skipDays || 0)
+  if (skipDays <= 0) return false
+
+  const identityKey = `${item.website}:${item.id}`
+  const lastResult = await MangaResult.findBy('identityKey', identityKey)
+  if (!lastResult?.crawledAt) return false
+
+  const daysSince = (Date.now() - new Date(lastResult.crawledAt).getTime()) / (1000 * 60 * 60 * 24)
+  if (daysSince < skipDays) {
+    write_log(`[订阅分配] ${item.name || item.id} 跳过，上次扫描 ${daysSince.toFixed(1)} 天前（阈值 ${skipDays} 天）`)
+    return true
+  }
+  return false
 }

@@ -41,6 +41,7 @@ import {
 import { toomicsBrowser } from '#api/browser'
 import { zip_directory } from '#utils/zip'
 import { tryIndexMangaMetaFile } from '#api/manga'
+import { getAntiBotScheduler } from '#services/scheduler'
 import { ToomicsBrowserSession } from './browser-session.js'
 import { ToomicsMetaFetcher } from './meta-fetcher.js'
 import { ToomicsChapterDownloader, ChapterInfo } from './chapter-downloader.js'
@@ -290,6 +291,9 @@ export default class Toomics {
           source: 'download',
           sourcePath: `${this.downloadPath}/${this.mangaName}`,
         })
+
+        // 上报调度器：本漫画实际下载了章节，消耗 1 个配额
+        getAntiBotScheduler()?.reportMangaDownloaded()
       }
     }
 

@@ -13,6 +13,7 @@
 
 import { toomicsBrowser, toomicsBrowserNoUser, UseBrowser } from '#api/browser'
 import fs from 'fs'
+import path from 'node:path'
 import { delay, get_config, dataRoot, read_json, write_log } from '#utils/index'
 import { humanScroll } from '#utils/human'
 import { mangaTask } from '#api/task'
@@ -68,6 +69,26 @@ export default class ToomicsAll {
   async start() {
     write_log('[toomics all] 开始扫描所有漫画')
 
+    // 检查当日快照
+    const snapshotDir = path.join(dataRoot, 'data', 'snapshots', 'toomics')
+    const today = new Date().toISOString().split('T')[0]
+    const snapshotFile = path.join(snapshotDir, `${today}-${this.langTag}-all.json`)
+
+    if (fs.existsSync(snapshotFile)) {
+      try {
+        const snapshot = JSON.parse(fs.readFileSync(snapshotFile, 'utf-8'))
+        const mangas = snapshot.mangas || []
+        mangas.sort(() => Math.random() - 0.5)
+        for (const manga of mangas) {
+          mangaTask.add(manga)
+        }
+        write_log(`[toomics all] 使用当日快照，${mangas.length} 部漫画（跳过浏览器扫描）`)
+        return
+      } catch (error) {
+        write_log(`[toomics all] 快照读取失败，重新扫描: ${error instanceof Error ? error.message : error}`)
+      }
+    }
+
     // Step 1: 浏览器初始化
     if (!this.browser.browser?.connected) {
       await this.browser.init()
@@ -98,13 +119,25 @@ export default class ToomicsAll {
       // Step 4: 从页面 DOM 中提取所有漫画信息
       const mangas = await this.extractMangaList(page)
 
-      // Step 5: 增量合并到本地 JSON，并将漫画加入下载队列
+      // Step 5: 写入快照（原子操作：先写临时文件，再 rename）
+      fs.mkdirSync(snapshotDir, { recursive: true })
+      const snapshotData = {
+        scan_date: today,
+        lang_tag: this.langTag,
+        manga_count: mangas.length,
+        mangas,
+      }
+      const tempFile = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`
+      fs.writeFileSync(tempFile, JSON.stringify(snapshotData, null, 2), 'utf-8')
+      fs.renameSync(tempFile, snapshotFile)
+
+      // Step 6: 增量合并到本地 JSON，并将漫画加入下载队列
       this.mergeToJson(mangas)
 
-      // Step 6: 将浏览器内存中的封面图片写入磁盘缓存
+      // Step 7: 将浏览器内存中的封面图片写入磁盘缓存
       this.saveCovers(mangas)
 
-      write_log('[toomics all] 扫描完成')
+      write_log('[toomics all] 扫描完成，快照已保存')
       this.browser.clear_buffs()
     } finally {
       // 确保 page 在任何异常情况下都能被关闭，防止 Chromium 内存泄漏

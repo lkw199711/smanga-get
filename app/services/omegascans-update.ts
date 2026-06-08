@@ -36,9 +36,34 @@ export default class OmegaScansUpdate {
       await omegascansBrowser.get_cookie();
     }
     if (!omegascansBrowser.browser) return;
-    this.page = await omegascansBrowser.new_page();
 
-    const res = await this.request_interface(`https://api.omegascans.org/query?series_type=Comic&perPage=9999&adult=true&order=desc&orderBy=latest&page=1`);
+    // 检查当日快照
+    const snapshotDir = path.join(dataRoot, 'data', 'snapshots', 'omegascans')
+    const today = new Date().toISOString().split('T')[0]
+    const snapshotFile = path.join(snapshotDir, `${today}.json`)
+
+    let res: any
+    if (fs.existsSync(snapshotFile)) {
+      try {
+        res = JSON.parse(fs.readFileSync(snapshotFile, 'utf-8'))
+        write_log(`[omegascans update] 使用当日快照，${res.data?.length || 0} 部漫画（跳过 API 请求）`)
+      } catch (error) {
+        write_log(`[omegascans update] 快照读取失败，重新请求: ${error instanceof Error ? error.message : error}`)
+      }
+    }
+
+    if (!res) {
+      this.page = await omegascansBrowser.new_page();
+      res = await this.request_interface(`https://api.omegascans.org/query?series_type=Comic&perPage=9999&adult=true&order=desc&orderBy=latest&page=1`)
+
+      // 写入快照（原子操作）
+      fs.mkdirSync(snapshotDir, { recursive: true })
+      const tempFile = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`
+      fs.writeFileSync(tempFile, JSON.stringify(res, null, 2), 'utf-8')
+      fs.renameSync(tempFile, snapshotFile)
+      write_log(`[omegascans update] API 请求完成，快照已保存`)
+    }
+
     const mangaList = res.data || [];
 
     if (mangaList && mangaList.length > 0) {

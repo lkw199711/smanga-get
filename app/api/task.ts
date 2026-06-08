@@ -22,6 +22,7 @@ import {
   captureErrorSnapshot,
   dataRoot,
   end_app,
+  get_config,
   isTaskAbortError,
   isTaskPauseError,
   shut_down,
@@ -30,6 +31,89 @@ import {
 
 const taskFile = path.join(dataRoot || '', 'data', 'task.json')
 const maxRetryCount = 10
+
+// ── 优先级缓存 ────────────────────────────────────────────
+
+type PriorityLevel = 'high' | 'medium' | 'low'
+
+interface PriorityCache {
+  highIds: Set<number>
+  mediumIds: Set<number>
+  threshold: number
+}
+
+let priorityCache: PriorityCache = {
+  highIds: new Set(),
+  mediumIds: new Set(),
+  threshold: 3,
+}
+
+/** 判断是否为 toomics 相关网站的任务 */
+function isToomicsWebsite(website: string): boolean {
+  return website === 'toomics' || website.startsWith('toomics-')
+}
+
+/** 读取 toomics.priority 配置（同步，纯文件读取） */
+function readPriorityConfig(): { highPriorityIds: number[]; autoUpgradeThreshold: number } {
+  const toomicsConfig = get_config('toomics') || {}
+  const priority = toomicsConfig.priority || {}
+  return {
+    highPriorityIds: (Array.isArray(priority.highPriorityIds) ? priority.highPriorityIds : []) as number[],
+    autoUpgradeThreshold: (typeof priority.autoUpgradeThreshold === 'number' ? priority.autoUpgradeThreshold : 3),
+  }
+}
+
+/** 根据任务 ID 判断优先级（使用缓存） */
+function resolveTaskPriority(task: taskType): PriorityLevel {
+  const mangaId = typeof task.id === 'number' ? task.id : Number(task.id)
+  if (!Number.isFinite(mangaId) || mangaId <= 0) return 'low'
+
+  if (priorityCache.highIds.has(mangaId)) return 'high'
+  if (priorityCache.mediumIds.has(mangaId)) return 'medium'
+  return 'low'
+}
+
+/** 从缓存重新加载 HIGH 优先级配置（同步，无需 DB 查询） */
+export function refreshHighPriorityCache(): void {
+  const { highPriorityIds, autoUpgradeThreshold } = readPriorityConfig()
+  priorityCache = {
+    highIds: new Set(highPriorityIds),
+    mediumIds: priorityCache.mediumIds,
+    threshold: autoUpgradeThreshold,
+  }
+}
+
+/** 异步刷新 MEDIUM 优先级缓存（查询 manga_results 表） */
+export async function refreshMediumPriorityCache(): Promise<void> {
+  const { autoUpgradeThreshold } = readPriorityConfig()
+  priorityCache.threshold = autoUpgradeThreshold
+
+  try {
+    const db = await import('@adonisjs/lucid/services/db')
+    const rows = await db.default.rawQuery(
+      `SELECT mr.\`id\`, mr.\`chapter_count\`,
+        COALESCE((SELECT COUNT(*) FROM manga_chapters mc WHERE mc.manga_result_id = mr.\`id\`), 0) AS indexed_count
+       FROM manga_results mr
+       WHERE mr.website LIKE 'toomics%'`
+    ) as any[]
+
+    const mediumIds = new Set<number>()
+    const parsed = Array.isArray(rows) ? rows : (rows[0] || [])
+    for (const row of parsed) {
+      const mangaId = Number(row.id)
+      const chapterCount = Number(row.chapter_count) || 0
+      const indexedCount = Number(row.indexed_count) || 0
+      if (Number.isFinite(mangaId) && chapterCount - indexedCount >= autoUpgradeThreshold) {
+        mediumIds.add(mangaId)
+      }
+    }
+
+    priorityCache = { ...priorityCache, mediumIds }
+    write_log(`[Task] MEDIUM 优先级缓存已刷新，${mediumIds.size} 部漫画自动提级（阈值 >= ${autoUpgradeThreshold} 话）`)
+  } catch (error) {
+    write_log(`[Task] MEDIUM 优先级缓存刷新失败: ${error instanceof Error ? error.message : error}`)
+  }
+}
 
 type TaskIdentifier = number | string
 type TaskRunResult = 'success' | 'failed' | 'paused' | 'aborted'
@@ -478,8 +562,42 @@ class Task {
   }
 
   add(task: taskType) {
-    this.tasks.push(ensureTaskIdentity(task))
+    const identityTask = ensureTaskIdentity(task)
+
+    // 仅对 toomics 相关且带真实漫画 ID 的任务按优先级插入
+    if (isToomicsWebsite(task.website ?? '') && taskHasRealMangaId(task)) {
+      this.insertByPriority(identityTask)
+    } else {
+      this.tasks.push(identityTask)
+    }
+
     void this.run()
+  }
+
+  /** 按优先级插入任务：HIGH → 头部，MEDIUM → HIGH 之后，LOW → 尾部 */
+  protected insertByPriority(task: taskType): void {
+    const priority = resolveTaskPriority(task)
+
+    if (priority === 'high') {
+      this.tasks.unshift(task)
+      return
+    }
+
+    if (priority === 'medium') {
+      // 插入到最后一个 HIGH 任务之后
+      let insertIdx = 0
+      for (let i = this.tasks.length - 1; i >= 0; i--) {
+        if (resolveTaskPriority(this.tasks[i]) === 'high') {
+          insertIdx = i + 1
+          break
+        }
+      }
+      this.tasks.splice(insertIdx, 0, task)
+      return
+    }
+
+    // LOW：直接 push 到尾部
+    this.tasks.push(task)
   }
 
   remove(target: Partial<taskType> | TaskIdentifier) {
@@ -686,7 +804,12 @@ export class MangaTask extends Task {
     }
 
     this.retryCounts.set(retryKey, retryCount)
-    this.tasks.push(task)
+    // 重试任务也按优先级插入
+    if (isToomicsWebsite(task.website ?? '') && taskHasRealMangaId(task)) {
+      this.insertByPriority(task)
+    } else {
+      this.tasks.push(task)
+    }
   }
 
   private clearRetryCount(task: taskType) {

@@ -9,9 +9,11 @@
  *   - toomics-update：仅扫描连载更新列表，直接加入任务队列（不写 JSON）
  */
 
+import fs from 'node:fs'
+import path from 'node:path'
 import { toomicsBrowser } from '#api/browser'
 import { mangaTask } from '#api/task'
-import { write_log, get_config, delay } from '#utils/index'
+import { write_log, get_config, delay, dataRoot } from '#utils/index'
 import type { Page } from 'rebrowser-puppeteer'
 
 /** 从列表页解析出的单部漫画信息（与 toomics-all.ts 保持一致） */
@@ -55,14 +57,36 @@ export default class ToomicsDayUpdate {
    * 主入口：扫描连载更新列表并将漫画加入下载队列
    *
    * 流程：
-   *   1. 初始化浏览器并加载 cookie
-   *   2. 打开连载列表页
-   *   3. 若 waiting=true，轮询等待直到外部解除（用于人工验证码处理等场景）
-   *   4. 根据 updateOnlyDay 配置选择扫描范围（今日+昨日 / 全部连载）
-   *   5. 随机打乱顺序后加入 mangaTask 队列（避免每次都从同一漫画开始）
+   *   1. 检查当日快照是否存在 → 存在则直接使用快照，跳过浏览器扫描
+   *   2. 初始化浏览器并加载 cookie
+   *   3. 打开连载列表页
+   *   4. 若 waiting=true，轮询等待直到外部解除（用于人工验证码处理等场景）
+   *   5. 根据 updateOnlyDay 配置选择扫描范围（今日+昨日 / 全部连载）
+   *   6. 扫描结果写入快照文件（原子写入）
+   *   7. 随机打乱顺序后加入 mangaTask 队列
    */
   async start() {
     write_log('[toomics update] 开始扫描漫画更新')
+
+    // 检查当日快照
+    const snapshotDir = path.join(dataRoot, 'data', 'snapshots', 'toomics')
+    const today = new Date().toISOString().split('T')[0]
+    const snapshotFile = path.join(snapshotDir, `${today}-${this.langTag}.json`)
+
+    if (fs.existsSync(snapshotFile)) {
+      try {
+        const snapshot = JSON.parse(fs.readFileSync(snapshotFile, 'utf-8'))
+        const mangas = snapshot.mangas || []
+        mangas.sort(() => Math.random() - 0.5)
+        for (const manga of mangas) {
+          mangaTask.add(manga)
+        }
+        write_log(`[toomics update] 使用当日快照，${mangas.length} 部漫画（跳过浏览器扫描）`)
+        return
+      } catch (error) {
+        write_log(`[toomics update] 快照读取失败，重新扫描: ${error instanceof Error ? error.message : error}`)
+      }
+    }
 
     // Step 1: 浏览器初始化
     if (!toomicsBrowser.browser?.connected) {
@@ -88,8 +112,6 @@ export default class ToomicsDayUpdate {
       await toomicsBrowser.save_cookie()
 
       // Step 3: 人工等待轮询
-      // 用途：当需要人工完成验证码/手机号验证时，外部将 waiting 置 true，
-      //       扫描器在此暂停，每隔 3 秒检查一次，直到 waiting 被置 false 后继续。
       while (this.waiting) {
         await delay(3000)
         await toomicsBrowser.save_cookie()
@@ -98,14 +120,26 @@ export default class ToomicsDayUpdate {
       // Step 4: 从 DOM 中提取漫画列表
       const mangas = await this.extractMangaList(page, this.updateOnlyDay)
 
-      // Step 5: 随机打乱顺序（避免每次扫描都从同一部漫画开始下载，分散请求压力）
-      mangas.sort(() => Math.random() - 0.5)
+      // Step 5: 写入快照（原子操作：先写临时文件，再 rename）
+      fs.mkdirSync(snapshotDir, { recursive: true })
+      const snapshotData = {
+        scan_date: today,
+        lang_tag: this.langTag,
+        update_only_day: this.updateOnlyDay,
+        manga_count: mangas.length,
+        mangas,
+      }
+      const tempFile = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`
+      fs.writeFileSync(tempFile, JSON.stringify(snapshotData, null, 2), 'utf-8')
+      fs.renameSync(tempFile, snapshotFile)
 
+      // Step 6: 随机打乱顺序后加入下载队列
+      mangas.sort(() => Math.random() - 0.5)
       for (const manga of mangas) {
         mangaTask.add(manga)
       }
 
-      write_log(`[toomics update] ${mangas.length} 部漫画更新`)
+      write_log(`[toomics update] 扫描完成，${mangas.length} 部漫画，快照已保存`)
     } finally {
       await page.close().catch(() => {})
     }

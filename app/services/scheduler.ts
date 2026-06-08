@@ -1,9 +1,8 @@
 import * as fs from 'fs'
 import path from 'path'
 import type { taskType } from '#type/index.js'
-import { delay, get_config, write_log, dataRoot } from '#utils/index'
+import { get_config, write_log, dataRoot } from '#utils/index'
 import { randomInt } from '#utils/human'
-import { now } from '#utils/time'
 
 /**
  * 任务调度器接口
@@ -60,6 +59,7 @@ interface SchedulerState {
   skipToday: boolean          // 今日是否随机跳过
   sessionStartTime: number    // 当前会话开始时间戳（0 = 无活动会话）
   lastSessionEndTime: number  // 上次会话结束时间戳（用于冷却计算）
+  windowJitterMs: number      // 当日窗口偏移量（毫秒），仅影响窗口起始时间
 }
 
 const STATE_FILE = path.join(dataRoot, 'data', 'scheduler-state.json')
@@ -79,6 +79,7 @@ function readState(): SchedulerState {
     skipToday: false,
     sessionStartTime: 0,
     lastSessionEndTime: 0,
+    windowJitterMs: 0,
   }
 }
 
@@ -117,6 +118,9 @@ function parseTime(timeStr: string): number {
   return h * 60 + m
 }
 
+/** 当前 AntiBotScheduler 实例（模块级单例，供下载器上报使用） */
+let thisSingleton: AntiBotScheduler | null = null
+
 /**
  * 核心调度器：AntiBotScheduler
  *
@@ -129,6 +133,9 @@ function parseTime(timeStr: string): number {
  *   - 会话间冷却时间
  *
  * 状态持久化到 scheduler-state.json，跨进程重启保持连续性。
+ *
+ * 注意：todayDownloaded 由下载器通过 reportMangaDownloaded() 主动上报，
+ * 仅在实际下载了章节后才 +1，避免元数据获取等操作消耗配额。
  */
 export class AntiBotScheduler implements TaskScheduler {
   private state: SchedulerState
@@ -140,6 +147,7 @@ export class AntiBotScheduler implements TaskScheduler {
   constructor() {
     this.state = readState()
     this.config = get_config('toomics') || {}
+    thisSingleton = this
   }
 
   // ── TaskScheduler 接口实现 ──────────────────────────────
@@ -181,14 +189,19 @@ export class AntiBotScheduler implements TaskScheduler {
     if (!this.isToomicsTask(task) || !this.isAntiBotEnabled()) return
     if (!this.ensureInitialized()) return
 
-    if (success) {
-      this.state.todayDownloaded++
-      write_log(
-        `[AntiBotScheduler] 今日进度: ${this.state.todayDownloaded}/${this.getTodayQuota()}`
-      )
-    }
-
+    // 不再自动 +1：由下载器通过 reportMangaDownloaded() 主动上报
     this.persist()
+  }
+
+  /**
+   * 下载器上报：一部漫画实际下载了章节
+   * 由 toomics 下载器在下载完成后调用
+   */
+  reportMangaDownloaded(): void {
+    this.state.todayDownloaded++
+    write_log(
+      `[AntiBotScheduler] 今日进度: ${this.state.todayDownloaded}/${this.getTodayQuota()}`
+    )
   }
 
   shouldContinue(): boolean {
@@ -226,7 +239,7 @@ export class AntiBotScheduler implements TaskScheduler {
 
     // 检查冷却时间
     if (this.state.lastSessionEndTime > 0) {
-      const cooldownMs = (this.config.cooldownMinutes || 120) * 60 * 1000
+      const cooldownMs = (this.config.cooldownMinutes ?? 120) * 60 * 1000
       const sinceLastSession = Date.now() - this.state.lastSessionEndTime
 
       if (sinceLastSession < cooldownMs) {
@@ -269,6 +282,10 @@ export class AntiBotScheduler implements TaskScheduler {
       this.state.sessionStartTime = 0
       this.state.lastSessionEndTime = 0
 
+      // 每日窗口偏移：随机偏移窗口起始时间，避免每天同一时刻开始
+      const jitterMin = this.config.windowJitterMinutes ?? 30
+      this.state.windowJitterMs = randomInt(0, jitterMin * 60 * 1000)
+
       // 随机跳过判定
       const skipProb = this.config.skipDayProbability ?? 0.12
       this.state.skipToday = Math.random() < skipProb
@@ -278,6 +295,16 @@ export class AntiBotScheduler implements TaskScheduler {
       }
 
       this.persist()
+    }
+
+    // 同日重启：若 sessionStartTime 已过期（超过 sessionMaxMinutes），重置为 0
+    if (this.state.sessionStartTime > 0) {
+      const maxMs = (this.config.sessionMaxMinutes || 45) * 60 * 1000
+      if (Date.now() - this.state.sessionStartTime >= maxMs) {
+        write_log('[AntiBotScheduler] 检测到过期会话（服务重启），重置会话计时器')
+        this.state.sessionStartTime = 0
+        this.persist()
+      }
     }
 
     if (!this.initialized) {
@@ -290,18 +317,10 @@ export class AntiBotScheduler implements TaskScheduler {
     return !this.state.skipToday
   }
 
-  /** 开始新会话：加入随机延迟，模拟"歇一会儿再看" */
+  /** 开始新会话 */
   private async startSession(): Promise<void> {
-    const jitterMin = this.config.windowJitterMinutes || 30
-    const jitterMs = randomInt(0, jitterMin * 60 * 1000)
-
-    if (jitterMs > 0) {
-      write_log(`[AntiBotScheduler] 窗口内随机延迟 ${(jitterMs / 1000).toFixed(0)} 秒`)
-      await delay(jitterMs)
-    }
-
     this.state.sessionStartTime = Date.now()
-    write_log(`[AntiBotScheduler] 新会话开始 ${new Date().toLocaleTimeString()}`)
+    write_log(`[AntiBotScheduler] 新会话开始 ${new Date().toLocaleTimeString()}（窗口偏移 ${(this.state.windowJitterMs / 60000).toFixed(0)} 分钟）`)
     this.persist()
   }
 
@@ -325,14 +344,21 @@ export class AntiBotScheduler implements TaskScheduler {
     const currentMin = minutesOfDay(Date.now())
 
     for (const w of windows) {
-      const startMin = parseTime(w.start)
-      const endMin = parseTime(w.end)
+      const jitterMin = Math.floor(this.state.windowJitterMs / 60000)
+      const startMin = parseTime(w.start) + jitterMin
+      const endMin = parseTime(w.end) + jitterMin
 
       if (currentMin >= startMin && currentMin <= endMin) {
         return true
       }
     }
 
+    // 不在窗口内，输出诊断信息
+    const h = Math.floor(currentMin / 60)
+    const m = currentMin % 60
+    write_log(
+      `[AntiBotScheduler] 不在时间窗口内 | 当前: ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} | 窗口偏移: ${Math.floor(this.state.windowJitterMs / 60000)} 分钟 | 配置: ${JSON.stringify(windows)}`
+    )
     return false
   }
 
@@ -347,4 +373,9 @@ export class AntiBotScheduler implements TaskScheduler {
   private persist(): void {
     writeState(this.state)
   }
+}
+
+/** 获取当前 AntiBotScheduler 实例，供下载器上报下载进度 */
+export function getAntiBotScheduler(): AntiBotScheduler | null {
+  return thisSingleton
 }
