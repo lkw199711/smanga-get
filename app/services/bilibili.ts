@@ -151,13 +151,7 @@ export default class Bilibili {
             await downloadImage(this.meta.verticalCover, `${metaFolder}/cover.jpg`)
         }
 
-        // 下载章节
-        await tryIndexMangaMetaFile(metaFile, {
-            website: this.website,
-            source: 'download',
-            sourcePath: `${this.downloadPath}/${mangaName}`,
-        })
-
+        // 下载章节（下载循环移到索引之前，只记录已下载章节）
         const chaptersToDownload = this.chapters.filter((c: chapterType) => !c.isLocked)
         this.onProgress?.setTotal(chaptersToDownload.length)
         for (let i = 0; i < this.chapters.length; i++) {
@@ -204,6 +198,23 @@ export default class Bilibili {
 
         this.chapterPage?.close()
         this.page.close()
+
+        // 仅记录已下载章节到 manga_results / manga_chapters
+        const downloadedChapters = chaptersToDownload.filter((c: chapterType) => {
+            const chapterName = make_can_be_floder(c.title)
+            const chapterFolder = `${this.downloadPath}/${mangaName}/${this.get_order(c.ord)} ${chapterName}`
+            return fs.existsSync(chapterFolder)
+        })
+        if (downloadedChapters.length > 0) {
+            // 重写 meta.json：只包含实际下载的章节
+            const filteredMeta = { ...this.meta, chapters: downloadedChapters }
+            fs.writeFileSync(metaFile, JSON.stringify(filteredMeta, null, 2), 'utf-8')
+            await tryIndexMangaMetaFile(metaFile, {
+                website: this.website,
+                source: 'download',
+                sourcePath: `${this.downloadPath}/${mangaName}`,
+            })
+        }
 
         console.log(mangaName + ' 订阅完毕')
     }

@@ -15,6 +15,7 @@ import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
 import path from 'path'
 import { copy_folder, end_app, get_config, write_log, make_can_be_floder } from '#utils/index'
+import { tryIndexMangaMetaFile } from '#api/manga'
 import { gentlemanBrowser } from '#api/browser'
 
 /** 章节信息，贯穿解析→下载→整理全流程 */
@@ -87,6 +88,19 @@ export default class Gentleman {
     if (onProgress) this.onProgress = onProgress
   }
 
+  /** 检查章节目录是否存在，兼容带/不带空格的两种命名 */
+  private chapterExists(chapterName: string): boolean {
+    const chapterPath = path.join(this.mangaPath, chapterName)
+    if (fs.existsSync(chapterPath) && fs.readdirSync(chapterPath).length > 0) return true
+    // 兼容旧数据：已存储的目录可能不带空格，去掉空格再找一遍
+    const noSpaceName = chapterName.replace(/\s+/g, '')
+    if (noSpaceName !== chapterName) {
+      const noSpacePath = path.join(this.mangaPath, noSpaceName)
+      if (fs.existsSync(noSpacePath) && fs.readdirSync(noSpacePath).length > 0) return true
+    }
+    return false
+  }
+
   /**
    * 主入口：执行完整的订阅下载流程
    *
@@ -104,19 +118,20 @@ export default class Gentleman {
 
     // Step 3: 过滤出尚未下载的章节（目录不存在或为空则视为需要下载）
     const newChapters = this.limitChaptersToDownload(
-      this.chapters.filter((item) => {
-        const chapterPath = path.join(this.mangaPath, item.name)
-        return !(fs.existsSync(chapterPath) && fs.readdirSync(chapterPath).length > 0)
-      })
+      this.chapters.filter((item) => !this.chapterExists(item.name))
     )
     this.onProgress?.setTotal(newChapters.length)
 
     // Step 4: 逐章节解析图片 URL 并下载
+    let downloadedCount = 0
+    const downloadedChapters: ChapterInfo[] = []
     for (const item of newChapters) {
       write_log(`[chapter]${item.name} 正在下载`)
       this.onProgress?.message(`正在下载章节: ${item.name}`)
       await this.get_chapter_images(item)     // 解析图片 URL 列表（含分页）
       await this.download_chapter_images(item) // 批量下载图片到本地
+      downloadedCount++
+      downloadedChapters.push(item)
       this.onProgress?.report(`${item.name} 下载完成`)
 
       // 检测完结标记，用于后续自动移除订阅
@@ -127,6 +142,11 @@ export default class Gentleman {
 
     // Step 5: 提取封面并同步到归档目录
     await this.organize_meta_1()
+
+    // Step 5.5: 仅当有实际章节下载时才写入记录表（只记录已下载章节）
+    if (downloadedCount > 0) {
+      await this.index_meta(downloadedChapters)
+    }
 
     // Step 6: 按配置决定是否将下载文件整理归档（重命名为规范目录结构）
     if (this.config.organize) {
@@ -150,6 +170,31 @@ export default class Gentleman {
     if (!gentlemanBrowser.browser) {
       await gentlemanBrowser.init()
     }
+  }
+
+  /** 写入 meta.json 并索引到 manga_results / manga_chapters 记录表（仅已下载章节） */
+  private async index_meta(downloadedChapters: ChapterInfo[]) {
+    const meta = {
+      title: this.mangaName,
+      website: this.website,
+      chapters: downloadedChapters.map((c) => ({
+        name: c.name,
+        url: c.url,
+        imageNum: c.imageNum,
+      })),
+    }
+
+    const metaFile = path.join(this.metaPath, 'meta.json')
+    if (!fs.existsSync(this.metaPath)) {
+      fs.mkdirSync(this.metaPath, { recursive: true })
+    }
+    fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2), 'utf-8')
+
+    await tryIndexMangaMetaFile(metaFile, {
+      website: this.website,
+      source: 'download',
+      sourcePath: this.mangaPath,
+    })
   }
 
   /** 按配置限制本次下载的章节数量，主要用于真实站点 E2E 测试控制成本 */
@@ -186,7 +231,7 @@ export default class Gentleman {
     for (const item of pagesMatch) {
       // 提前终止：当前页最后一个章节已下载，说明后续页都是旧数据，无需继续加载
       const lastChapter = this.chapters[this.chapters.length - 1]
-      if (lastChapter && fs.existsSync(path.join(this.mangaPath, lastChapter.name))) {
+      if (lastChapter && this.chapterExists(lastChapter.name)) {
         break
       }
       // 过滤掉过短的无效链接（如 "#" 等干扰项）

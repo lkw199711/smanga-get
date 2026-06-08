@@ -90,6 +90,8 @@ export default class OmegaScans {
     const validChapters = chaptersToDownload.filter((c: any) => c.price <= 0)
     this.onProgress?.setTotal(validChapters.length)
 
+    let downloadedCount = 0
+    const downloadedChapters: any[] = []
     for (const chapter of chaptersToDownload) {
       if (chapter.price > 0) {
         write_log(
@@ -100,9 +102,23 @@ export default class OmegaScans {
       end_app() // 结束应用
       this.onProgress?.message(`正在下载章节: ${chapter.name}`)
       await this.download_chapter(chapter)
+      downloadedCount++
+      downloadedChapters.push(chapter)
       this.onProgress?.report(`${chapter.name} 下载完成`)
       omegascansBrowser.clear_buffs() // 清除浏览器缓存
       await this.afterChapterDownload()
+    }
+
+    // 仅当有实际章节下载时才写入记录表（只记录已下载章节）
+    if (downloadedCount > 0) {
+      // 重写 meta.json：只包含实际下载的章节，付费章节不入库
+      const filteredMeta = { ...this.meta, chapters: downloadedChapters }
+      fs.writeFileSync(`${this.metaFolder}/meta.json`, JSON.stringify(filteredMeta, null, 2), 'utf-8')
+      await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
+        website: 'omegascans',
+        source: 'download',
+        sourcePath: this.mangaFolder,
+      })
     }
 
     if (this.config?.autoCompress) {
@@ -152,8 +168,8 @@ export default class OmegaScans {
       })
     }
 
-    // 检查是否有更新(.5不计算)
-    if (mangaChapterFloders.length + mangacompressChapterFloders.length <= this.chapterCount) {
+    // 检查是否有更新（本地已下载 >= 可下载章节数 → 无更新）
+    if (mangaChapterFloders.length + mangacompressChapterFloders.length < this.chapterCount) {
       return true
     }
     console.log(
@@ -388,12 +404,6 @@ export default class OmegaScans {
     } else {
       fs.writeFileSync(`${this.metaFolder}/meta.json`, JSON.stringify(meta, null, 2), 'utf-8')
     }
-
-    await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
-      website: 'omegascans',
-      source: 'download',
-      sourcePath: this.mangaFolder,
-    })
 
     // 下载封面和章节封面
     if (!fs.existsSync(`${this.metaFolder}/cover.jpg`)) {

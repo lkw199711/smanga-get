@@ -134,6 +134,8 @@ export class AntiBotScheduler implements TaskScheduler {
   private state: SchedulerState
   private config: any
   private initialized = false
+  /** 当前任务是否为 toomics 任务（由 beforeTask 设置，供 shouldContinue 判断） */
+  private currentTaskIsToomics = false
 
   constructor() {
     this.state = readState()
@@ -143,8 +145,9 @@ export class AntiBotScheduler implements TaskScheduler {
   // ── TaskScheduler 接口实现 ──────────────────────────────
 
   async beforeTask(task: taskType): Promise<void> {
-    // 仅对 toomics 任务生效，其他网站直通
-    if (!this.isToomicsTask(task)) return
+    // 仅对 toomics 任务生效，其他网站直通；antiBotEnabled=false 时也直通
+    this.currentTaskIsToomics = this.isToomicsTask(task)
+    if (!this.currentTaskIsToomics || !this.isAntiBotEnabled()) return
 
     this.ensureInitialized()
 
@@ -175,7 +178,7 @@ export class AntiBotScheduler implements TaskScheduler {
   }
 
   async afterTask(task: taskType, success: boolean): Promise<void> {
-    if (!this.isToomicsTask(task)) return
+    if (!this.isToomicsTask(task) || !this.isAntiBotEnabled()) return
     if (!this.ensureInitialized()) return
 
     if (success) {
@@ -189,10 +192,9 @@ export class AntiBotScheduler implements TaskScheduler {
   }
 
   shouldContinue(): boolean {
-    // 非 toomics 任务不受此调度器影响，由外部 PassThroughScheduler 处理。
-    // 但实际上 AntiBotScheduler 目前用于混合队列，这里仅对 toomics 做判断。
-    // 由于 MangaTask 只有一个 scheduler 实例，我们在这里做最宽松的判断：
-    // 只要有任何一个理由说不继续，就返回 false。
+    // 非 toomics 任务或反爬开关关闭时，不受调度器限制，始终继续
+    if (!this.currentTaskIsToomics || !this.isAntiBotEnabled()) return true
+
     if (!this.ensureInitialized()) return false
 
     if (this.state.skipToday) {
@@ -249,6 +251,11 @@ export class AntiBotScheduler implements TaskScheduler {
   private isToomicsTask(task: taskType): boolean {
     const w = task.website || ''
     return w === 'toomics' || w.startsWith('toomics-')
+  }
+
+  /** 检查反爬调度是否启用（配置项 antiBotEnabled，默认 true） */
+  private isAntiBotEnabled(): boolean {
+    return this.config.antiBotEnabled !== false
   }
 
   /** 确保每日状态已初始化（跨日重置） */

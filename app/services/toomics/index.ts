@@ -40,6 +40,7 @@ import {
 } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { zip_directory } from '#utils/zip'
+import { tryIndexMangaMetaFile } from '#api/manga'
 import { ToomicsBrowserSession } from './browser-session.js'
 import { ToomicsMetaFetcher } from './meta-fetcher.js'
 import { ToomicsChapterDownloader, ChapterInfo } from './chapter-downloader.js'
@@ -257,8 +258,10 @@ export default class Toomics {
       }
 
       // 下载真正需要的新章节
+      let downloadedCount = 0
       for (const chapter of chaptersToDownload) {
         await this.chapterDownloader.downloadChapter(chapter)
+        downloadedCount++
         await this.afterChapterDownload()
       }
 
@@ -268,6 +271,26 @@ export default class Toomics {
 
       // 任务间隙噪声浏览（每 N 部漫画后模拟逛首页）
       await this.noiseBrowseBetweenManga()
+
+      // 仅记录已下载章节到 manga_results / manga_chapters
+      if (downloadedCount > 0) {
+        const downloadedChapterNames = new Set(
+          chaptersToDownload.map((c) => make_can_be_floder(c.chapterName))
+        )
+        const filteredMeta = {
+          ...this.meta,
+          chapters: this.chapters.filter((c: any) =>
+            downloadedChapterNames.has(make_can_be_floder(c.name))
+          ),
+        }
+        const metaFile = `${this.metaFolder}/meta.json`
+        fs.writeFileSync(metaFile, JSON.stringify(filteredMeta, null, 2), 'utf-8')
+        await tryIndexMangaMetaFile(metaFile, {
+          website: this.website,
+          source: 'download',
+          sourcePath: `${this.downloadPath}/${this.mangaName}`,
+        })
+      }
     }
 
     // Step 5: 可选压缩归档

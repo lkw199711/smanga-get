@@ -2,6 +2,23 @@ import { end_app, read_json, write_log, delay, make_can_be_floder, get_config, d
 import { omegascansBrowser } from "#api/browser";
 import { mangaTask } from "#api/task";
 import fs, { writeFileSync } from "fs";
+import path from "node:path";
+
+/** 统计本地已下载的章节目录数（包括压缩包） */
+function countLocalChapters(mangaFolder: string): number {
+  if (!fs.existsSync(mangaFolder)) return 0
+  const entries = fs.readdirSync(mangaFolder)
+  let count = 0
+  for (const entry of entries) {
+    const fullPath = path.join(mangaFolder, entry)
+    if (fs.statSync(fullPath).isDirectory()) {
+      // 跳过 .smanga 元数据目录
+      if (entry === '.smanga') continue
+      count++
+    }
+  }
+  return count
+}
 
 export default class OmegaScansUpdate {
   page: any; // Puppeteer 页面对象
@@ -44,6 +61,10 @@ export default class OmegaScansUpdate {
 
       // 计算可下载的章节数
       manga.chapterCount = chapters_count - paid_chapters.length;
+
+      // 入队前比对：本地已下载 >= 可下载章节数 → 无更新，跳过不入队
+      const localCount = countLocalChapters(mangaFolder);
+      if (localCount >= manga.chapterCount) return;
 
       if (fs.existsSync(metaFile)) {
         const oldMeta = read_json(metaFile) || {};

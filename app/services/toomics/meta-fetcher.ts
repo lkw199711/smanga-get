@@ -15,7 +15,6 @@ import { delay, make_can_be_floder, read_json, write_log, dataRoot } from '#util
 import { humanScroll } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { subscribe_remove } from '#api/subsribe'
-import { tryIndexMangaMetaFile } from '#api/manga'
 import { ToomicsBrowserSession } from './browser-session.js'
 
 /** 漫画元数据（标题、作者、封面等，写入 .smanga/meta.json） */
@@ -314,11 +313,8 @@ export class ToomicsMetaFetcher {
       }
     }
 
-    await tryIndexMangaMetaFile(metaFile, {
-      website: this.website,
-      source: 'download',
-      sourcePath: this.mangaFolder,
-    })
+    // 注意：tryIndexMangaMetaFile 已移至 download 完成后调用（toomics/index.ts），
+    // 此处不再索引，以确保只记录实际下载的章节
   }
 
   /**

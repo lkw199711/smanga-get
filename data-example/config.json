@@ -80,7 +80,8 @@
     "skipDayProbability": 0.12,
     "sessionMaxMinutes": 45,
     "sessionMinMinutes": 15,
-    "cooldownMinutes": 120,
+    "antiBotEnabled": true,
+    "cooldownMinutes": 10,
     "timeCheckIntervalMinutes": 30,
     "timeDriftThresholdMinutes": 2,
     "dailyQuota": {
