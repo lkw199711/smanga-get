@@ -126,6 +126,7 @@ export class ToomicsChapterDownloader {
     const errImgs: number[] = []
     const interfereImages: number[] = []
     let totalImages = 0
+    let image403Count = 0
 
     const chapterPage = await toomicsBrowser.new_page()
     if (!chapterPage) return { needsRetry: false, retryIndexes: [] }
@@ -225,6 +226,9 @@ export class ToomicsChapterDownloader {
 
         fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])
       }
+
+      // 在 clear_buffs() 之前捕获 403 计数，用于 cookie 过期检测
+      image403Count = toomicsBrowser.image403Count
     } finally {
       toomicsBrowser.clear_buffs()
     }
@@ -232,6 +236,37 @@ export class ToomicsChapterDownloader {
     // ── 结果检查与重试判定 ────────────────────────────────────────
     let resultError: any = null
     try {
+
+    // 403 检测：cookie 过期时图片请求大量返回 403
+    if (totalImages > 10 && image403Count > totalImages * 0.5) {
+      const abortMsg = `[cookie] ${chapterName} 图片 403 占比过高 (${image403Count}/${totalImages})，判定 cookie 已过期`
+      write_log(abortMsg)
+
+      // 删除已下载的章节目录（403 返回的可能是错误页，非真实图片，目录内容不可信）
+      try {
+        if (fs.existsSync(downloadPath)) {
+          fs.rmSync(downloadPath, { recursive: true, force: true })
+          write_log(`[cookie] 已删除损坏的章节目录: ${downloadPath}`)
+        }
+      } catch (e) {
+        write_log(`[cookie] 删除章节目录失败: ${e instanceof Error ? e.message : e}`)
+      }
+
+      // 清除 cookie 文件，下次运行将触发重新登录
+      try {
+        const cookieFile = (toomicsBrowser as any).cookieFile || 'data/cookies.json'
+        if (fs.existsSync(cookieFile)) {
+          fs.unlinkSync(cookieFile)
+          write_log(`[cookie] 已清除过期 cookie 文件: ${cookieFile}`)
+        }
+      } catch (e) {
+        write_log(`[cookie] 清除 cookie 文件失败: ${e instanceof Error ? e.message : e}`)
+      }
+      const err = new TaskAbortError(abortMsg)
+      ;(err as any).debugPage = chapterPage
+      console.error(abortMsg)
+      throw err
+    }
 
     // 仅最后一张为干扰图/请求失败 → 通常是站点水印/白图，不影响正文
     const lastIdx = totalImages - 1

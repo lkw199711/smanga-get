@@ -311,10 +311,14 @@ class UseBrowser {
     return page
   }
 
+  // 追踪图片 403 响应，用于判断 cookie 是否过期
+  public image403Count = 0
+
   clear_buffs() {
     this.buffs = {}
     this.bufferBytes = 0
     this.bufferOrder = []
+    this.image403Count = 0
   }
 
   // 通用页面准备：设置语言请求头，并补少量浏览器指纹字段。
@@ -491,7 +495,14 @@ class UseToomicsBrowser extends UseBrowser {
   }
 
   // Toomics 图片同时保存到磁盘缓存和服务会读取的内存 buffer。
+  // 同时追踪 403 响应：cookie 过期后图片请求会大量返回 403。
   protected async handleImageResponse(page: puppeteer.Page, response: puppeteer.HTTPResponse) {
+    // 403 检测：cookie 过期时 Toomics 图片接口返回 403，不进入 buffer
+    if (response.request().resourceType() === 'image' && response.status() === 403) {
+      this.image403Count++
+      return
+    }
+
     const contentType = response.headers()['content-type'] ?? ''
     if (!/image/i.test(contentType) || response.request().resourceType() !== 'image') return
 

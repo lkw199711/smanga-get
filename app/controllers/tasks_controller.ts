@@ -35,9 +35,18 @@ export default class TasksController {
     }
 
     get() {
+        const running = mangaTask.getRunning()
         return {
             manga: mangaTask.get(),
-            running: mangaTask.getRunning(),
+            bilibili: [],
+            toomics: [],
+            omegascans: [],
+            running: {
+                manga: running,
+                bilibili: null,
+                toomics: null,
+                omegascans: null,
+            },
         }
     }
 
