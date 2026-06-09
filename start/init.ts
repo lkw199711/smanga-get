@@ -6,11 +6,12 @@ const cron = require('node-cron');
 import { subscribe_read } from '#api/subsribe';
 import { mangaTask, refreshHighPriorityCache, refreshMediumPriorityCache } from '#api/task';
 import { subsribeType } from '#type/index.js'
-import { get_config, set_config, dataRoot, write_json, write_log } from '#utils/index';
+import { get_config, make_can_be_floder, set_config, dataRoot, write_json, write_log } from '#utils/index';
 import MangaResult from '#models/manga_result'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
 import fs from 'fs'
+import path from 'node:path'
 import OmegaScansUpdate from '#services/omegascans-update'
 import ToZip from '#services/tozip';
 let subsribeCron: any = { stop: () => { } }
@@ -105,6 +106,16 @@ export function create_scan_cron() {
       const item: subsribeType = subsribe[i]
       const shouldSkip = await shouldSkipSubscription(item)
       if (shouldSkip) continue
+
+      // 对 toomics 订阅，入队前比对本地章节数与线上章节数，无更新则不入队
+      if (item.website === 'toomics' && typeof item.chapterCount === 'number' && item.chapterCount > 0) {
+        const folderName = make_can_be_floder(item.name)
+        if (!hasChapterUpdate(folderName, item.chapterCount, item.website, item.url)) {
+          write_log(`[订阅分配] ${item.name} 无新章节 (本地已齐)，跳过入队`)
+          continue
+        }
+      }
+
       mangaTask.add(item)
     }
 
@@ -119,6 +130,50 @@ export function create_scan_cron() {
   });
 }
 
+/**
+ * 检查指定漫画是否有新章节需要下载（纯文件系统判定，无需浏览器）
+ *
+ * 复用 Toomics.check_update() 的计数逻辑：
+ *   本地章节目录数 + 仅存在于压缩目录的 zip 数 + 0.9 容差 < 线上章节数 → 有更新
+ * 0.9 容差用于应对请假条、临时公告等非整数章节（如 60.5）
+ */
+function hasChapterUpdate(mangaName: string, chapterCount: number, website: string, url?: string): boolean {
+  // 从 URL 推断语言标签，匹配实际下载目录（与 Toomics 构造器一致）
+  let configKey = website
+  if (url) {
+    if (/\/tc\//.test(url)) configKey = 'toomics-tc'
+    else if (/\/en\//.test(url)) configKey = 'toomics-en'
+    else if (/\/sc\//.test(url)) configKey = 'toomics-sc'
+    else configKey = 'toomics-tc'
+  }
+
+  const config = get_config(configKey) || {}
+  const downloadPath = config?.downloadPath || ''
+  const compressPath = config?.compressPath || ''
+  if (!downloadPath || !mangaName) return true // 路径无效时保守处理，允许入队
+
+  const mangaFolder = path.join(downloadPath, mangaName)
+  const compressFolder = path.join(compressPath, mangaName)
+
+  let localCount = 0
+  if (fs.existsSync(mangaFolder)) {
+    localCount = fs.readdirSync(mangaFolder).filter(
+      (item) => fs.statSync(path.join(mangaFolder, item)).isDirectory() && item !== '.smanga'
+    ).length
+  }
+
+  let compressedOnly = 0
+  if (fs.existsSync(compressFolder)) {
+    const localNames = new Set(fs.existsSync(mangaFolder) ? fs.readdirSync(mangaFolder) : [])
+    compressedOnly = fs.readdirSync(compressFolder).filter(
+      (item) => item.endsWith('.zip') && /\d/.test(item) && !localNames.has(item.replace('.zip', ''))
+    ).length
+  }
+
+  // write_log(`[toomics all] ${mangaName}, ${chapterCount}, ${configKey}, localCount: ${localCount}, compressedOnly: ${compressedOnly}`)
+  return localCount + compressedOnly + 0.9 < chapterCount
+}
+
 export async function task_allocation() {
   // 刷新优先级缓存（HIGH 同步 + MEDIUM 异步）
   refreshHighPriorityCache()
@@ -129,9 +184,21 @@ export async function task_allocation() {
     const item: subsribeType = subsribe[i]
     const shouldSkip = await shouldSkipSubscription(item)
     if (shouldSkip) continue
+
+    // 对 toomics 订阅，入队前比对本地章节数与线上章节数，无更新则不入队
+    if (item.website === 'toomics' && typeof item.chapterCount === 'number' && item.chapterCount > 0) {
+      const folderName = make_can_be_floder(item.name)
+      if (!hasChapterUpdate(folderName, item.chapterCount, item.website, item.url)) {
+        write_log(`[订阅分配] ${item.name} 无新章节 (本地已齐)，跳过入队`)
+        continue
+      }
+    }
+
     mangaTask.add(item)
   }
 }
+
+export { hasChapterUpdate }
 
 /** 检查订阅是否应跳过：查 manga_results.crawledAt，若在 skipDays 内则返回 true */
 async function shouldSkipSubscription(item: subsribeType): Promise<boolean> {

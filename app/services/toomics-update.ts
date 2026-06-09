@@ -13,7 +13,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { toomicsBrowser } from '#api/browser'
 import { mangaTask } from '#api/task'
-import { write_log, get_config, delay, dataRoot } from '#utils/index'
+import { write_log, get_config, make_can_be_floder, delay, dataRoot } from '#utils/index'
+import { hasChapterUpdate } from '../../start/init.js'
 import type { Page } from 'rebrowser-puppeteer'
 
 /** 从列表页解析出的单部漫画信息（与 toomics-all.ts 保持一致） */
@@ -79,6 +80,13 @@ export default class ToomicsDayUpdate {
         const mangas = snapshot.mangas || []
         mangas.sort(() => Math.random() - 0.5)
         for (const manga of mangas) {
+          // 入队前比对本地章节数，无更新则跳过不入队
+          if (manga.chapterCount != null && manga.chapterCount > 0) {
+            const folderName = make_can_be_floder(manga.name)
+            if (!hasChapterUpdate(folderName, manga.chapterCount, manga.website, manga.url)) {
+              continue
+            }
+          }
           mangaTask.add(manga)
         }
         write_log(`[toomics update] 使用当日快照，${mangas.length} 部漫画（跳过浏览器扫描）`)
@@ -133,9 +141,15 @@ export default class ToomicsDayUpdate {
       fs.writeFileSync(tempFile, JSON.stringify(snapshotData, null, 2), 'utf-8')
       fs.renameSync(tempFile, snapshotFile)
 
-      // Step 6: 随机打乱顺序后加入下载队列
+      // Step 6: 随机打乱顺序后加入下载队列（入队前比对本地章节数）
       mangas.sort(() => Math.random() - 0.5)
       for (const manga of mangas) {
+        if (manga.chapterCount != null && manga.chapterCount > 0) {
+          const folderName = make_can_be_floder(manga.name)
+          if (!hasChapterUpdate(folderName, manga.chapterCount, manga.website, manga.url)) {
+            continue
+          }
+        }
         mangaTask.add(manga)
       }
 
@@ -213,7 +227,7 @@ export default class ToomicsDayUpdate {
           cover,
           covers: [cover],
           describe,
-          chapterCount: Number(chapterCount),
+          chapterCount: parseFloat(chapterCount) || 0,
           audlt,
           finsihed,
         }

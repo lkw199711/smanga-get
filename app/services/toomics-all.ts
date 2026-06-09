@@ -14,7 +14,8 @@
 import { toomicsBrowser, toomicsBrowserNoUser, UseBrowser } from '#api/browser'
 import fs from 'fs'
 import path from 'node:path'
-import { delay, get_config, dataRoot, read_json, write_log } from '#utils/index'
+import { delay, get_config, make_can_be_floder, dataRoot, read_json, write_log } from '#utils/index'
+import { hasChapterUpdate } from '../../start/init.js'
 import { humanScroll } from '#utils/human'
 import { mangaTask } from '#api/task'
 import type { Page } from 'rebrowser-puppeteer'
@@ -80,6 +81,13 @@ export default class ToomicsAll {
         const mangas = snapshot.mangas || []
         mangas.sort(() => Math.random() - 0.5)
         for (const manga of mangas) {
+          // 入队前比对本地章节数，无更新则跳过不入队
+          if (manga.chapterCount != null && manga.chapterCount > 0) {
+            const folderName = make_can_be_floder(manga.name)
+            if (!hasChapterUpdate(folderName, manga.chapterCount, manga.website, manga.url)) {
+              continue
+            }
+          }
           mangaTask.add(manga)
         }
         write_log(`[toomics all] 使用当日快照，${mangas.length} 部漫画（跳过浏览器扫描）`)
@@ -247,7 +255,7 @@ export default class ToomicsAll {
           cover,
           covers: [cover],
           describe,
-          chapterCount: Number(chapterCount),
+          chapterCount: parseFloat(chapterCount) || 0,
           audlt,
           finsihed,
         }
@@ -287,6 +295,14 @@ export default class ToomicsAll {
         const validCovers = existingCovers.filter((cover: string) => /^https?:\/\//i.test(cover))
         manga.covers = validCovers
         json[existingIndex] = manga
+      }
+
+      // 入队前比对本地章节数，无更新则跳过不入队
+      if (manga.chapterCount != null && manga.chapterCount > 0) {
+        const folderName = make_can_be_floder(manga.name)
+        if (!hasChapterUpdate(folderName, manga.chapterCount, manga.website, manga.url)) {
+          continue
+        }
       }
 
       // 将漫画加入下载任务队列，由 MangaTask 调度后续章节下载
