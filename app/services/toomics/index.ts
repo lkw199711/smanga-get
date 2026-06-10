@@ -353,6 +353,9 @@ export default class Toomics {
    * （0.9 的容差用于处理章节序号从 0 或 1 开始的偏移）
    */
   private check_update(): boolean {
+    // 修复模式：强制跳过章节更新检查，重新下载
+    if (process.env.FORCE_CHAPTER_UPDATE === '1') return true
+
     const mangaFolder = `${this.downloadPath}/${this.mangaName}`
     const compressFolder = `${this.compressPath}/${this.mangaName}`
 

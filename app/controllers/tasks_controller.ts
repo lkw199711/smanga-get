@@ -3,6 +3,7 @@ import { mangaTask } from '#api/task'
 import { subscribe_read } from '#api/subsribe'
 import type { subsribeType } from '#type/index.js'
 import { write_log } from '#utils/index'
+import { repair_meta_queue, scan_broken_meta, clean_legacy_meta_dirs } from '../../start/init.js'
 
 type TaskTriggerType = 'toomics' | 'toptoon' | 'omegascans' | 'gentleman'
 
@@ -139,6 +140,47 @@ export default class TasksController {
         return {
             code: 200,
             message: '任务队列已清空',
+        }
+    }
+
+    /**
+     * POST /api/tasks/repair
+     * 读取 data/repair-manga-list.json，按 updatedAtSite 排序后入队
+     */
+    async repair() {
+        await repair_meta_queue()
+
+        return {
+            code: 200,
+            message: '修复任务已入队',
+        }
+    }
+
+    /**
+     * POST /api/tasks/scan
+     * 扫描 manga_results + meta.json，自动生成 repair-manga-list.json
+     */
+    async scan() {
+        const count = await scan_broken_meta()
+
+        return {
+            code: 200,
+            message: `扫描完成，发现 ${count} 部 meta.json 异常，已写入 data/repair-manga-list.json`,
+            count,
+        }
+    }
+
+    /**
+     * POST /api/tasks/clean
+     * 清理遗留的 -smanga-info 旧格式元数据目录，删除后将对应漫画加入修复列表
+     */
+    async clean() {
+        const result = await clean_legacy_meta_dirs()
+
+        return {
+            code: 200,
+            message: `清理完成：删除 ${result.deleted} 个旧目录，新增 ${result.added} 条修复记录`,
+            ...result,
         }
     }
 }

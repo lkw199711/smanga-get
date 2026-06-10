@@ -3,6 +3,10 @@ const require = createRequire(import.meta.url)
 // @ts-ignore
 const cron = require('node-cron');
 
+import fs from 'fs'
+import path from 'node:path'
+import OmegaScansUpdate from '#services/omegascans-update'
+import ToZip from '#services/tozip';
 import { subscribe_read } from '#api/subsribe';
 import { mangaTask, refreshHighPriorityCache, refreshMediumPriorityCache } from '#api/task';
 import { subsribeType } from '#type/index.js'
@@ -10,10 +14,6 @@ import { get_config, make_can_be_floder, set_config, dataRoot, write_json, write
 import MangaResult from '#models/manga_result'
 import ToomicsAll from '#services/toomics-all'
 import ToomicsDayUpdate from '#services/toomics-update'
-import fs from 'fs'
-import path from 'node:path'
-import OmegaScansUpdate from '#services/omegascans-update'
-import ToZip from '#services/tozip';
 let subsribeCron: any = { stop: () => { } }
 let toomicsScAllCoversCron: any = { stop: () => { } }
 let toomicsTcAllCoversCron: any = { stop: () => { } }
@@ -138,6 +138,8 @@ export function create_scan_cron() {
  * 0.9 容差用于应对请假条、临时公告等非整数章节（如 60.5）
  */
 function hasChapterUpdate(mangaName: string, chapterCount: number, website: string, url?: string): boolean {
+  // 修复模式：强制所有任务入队，用于补全损坏的 meta.json
+  if (process.env.FORCE_CHAPTER_UPDATE === '1') return true
   // 从 URL 推断语言标签，匹配实际下载目录（与 Toomics 构造器一致）
   let configKey = website
   if (url) {
@@ -200,6 +202,137 @@ export async function task_allocation() {
 
 export { hasChapterUpdate }
 
+/**
+ * 修复模式：读取 data/repair-manga-list.json，直接将条目加入下载队列（绕过订阅匹配）。
+ *
+ * 文件格式：
+ *   [
+ *     { "website": "toomics", "id": "8271", "name": "突然成為公寓管理員" }
+ *   ]
+ *
+ * 设置 FORCE_CHAPTER_UPDATE=1 使下载器无条件重新获取 meta.json 全量章节。
+ */
+export async function repair_meta_queue() {
+  const listFile = path.join(dataRoot || '', 'data', 'repair-manga-list.json')
+  if (!fs.existsSync(listFile)) {
+    write_log('[修复] repair-manga-list.json 不存在，跳过')
+    return
+  }
+
+  let repairList: { website: string; id: string; name?: string }[]
+  try {
+    repairList = JSON.parse(fs.readFileSync(listFile, 'utf-8'))
+  } catch {
+    write_log('[修复] repair-manga-list.json 解析失败')
+    return
+  }
+
+  if (!Array.isArray(repairList) || repairList.length === 0) {
+    write_log('[修复] 修复列表为空')
+    return
+  }
+
+  // 强制跳过 hasChapterUpdate 检查，使下载器重新获取完整章节列表
+  process.env.FORCE_CHAPTER_UPDATE = '1'
+
+  // 刷新优先级缓存，使 toomics 任务能按优先级插入队列
+  refreshHighPriorityCache()
+  await refreshMediumPriorityCache()
+
+  for (const item of repairList) {
+    mangaTask.add({
+      website: item.website,
+      id: String(item.id),
+      name: item.name || '',
+    } as subsribeType)
+    write_log(`[修复] 入队: ${item.website} ${item.name || item.id}`)
+  }
+
+  write_log(`[修复] 共入队 ${repairList.length} 个任务`)
+}
+
+/**
+ * 扫描下载目录，取最近更新的 58 部漫画，写入 repair-manga-list.json。
+ *
+ * 排序依据：漫画目录下所有文件的最大 mtime（即最近一次章节下载时间）。
+ * mangaId 从 meta.json 中首个章节的 URL 提取（/toon/xxxx）。
+ * 不做任何章节完整性判断，由人工确认列表后再触发 repair。
+ *
+ * @returns 写入的漫画数量
+ */
+export async function scan_broken_meta(): Promise<number> {
+  const listFile = path.join(dataRoot || '', 'data', 'repair-manga-list.json')
+  const LIMIT = 58
+
+  // 收集所有 toomics 下载路径
+  const configKeys = ['toomics', 'toomics-tc', 'toomics-sc', 'toomics-en']
+  const config = get_config()
+
+  type MangaEntry = { website: string; id: string; name: string; mtime: number }
+  const entries: MangaEntry[] = []
+
+  for (const key of configKeys) {
+    const downloadPath = config?.[key]?.downloadPath as string | undefined
+    if (!downloadPath || !fs.existsSync(downloadPath)) continue
+
+    const dirs = fs.readdirSync(downloadPath, { withFileTypes: true })
+    for (const dir of dirs) {
+      if (!dir.isDirectory() || dir.name.startsWith('.')) continue
+
+      const mangaPath = path.join(downloadPath, dir.name)
+      const metaFile = path.join(mangaPath, '.smanga', 'meta.json')
+      if (!fs.existsSync(metaFile)) continue
+
+      // 从 meta.json 的首个章节 URL 中提取 mangaId（/toon/数字）
+      let mangaId = ''
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8'))
+        const chapters = Array.isArray(meta.chapters) ? meta.chapters : []
+        for (const ch of chapters) {
+          const match = ch.url?.match(/\/toon\/(\d+)/)
+          if (match) { mangaId = match[1]; break }
+        }
+      } catch { /* meta.json 损坏 */ }
+      if (!mangaId) continue
+
+      // 取漫画目录下所有子目录/文件的最大 mtime（反映最近一次章节下载）
+      let mtime = 0
+      try {
+        const items = fs.readdirSync(mangaPath, { withFileTypes: true })
+        for (const item of items) {
+          if (item.name.startsWith('.')) continue
+          try {
+            const st = fs.statSync(path.join(mangaPath, item.name))
+            if (st.mtimeMs > mtime) mtime = st.mtimeMs
+          } catch { /* 跳过无法访问的 */ }
+        }
+      } catch { /* 跳过无法读取的目录 */ }
+      if (mtime === 0) {
+        try { mtime = fs.statSync(mangaPath).mtimeMs } catch {}
+      }
+
+      entries.push({ website: 'toomics', id: mangaId, name: dir.name, mtime })
+    }
+  }
+
+  // 按 mtime 降序，取前 58
+  entries.sort((a, b) => b.mtime - a.mtime)
+  const top = entries.slice(0, LIMIT)
+
+  // 写入供人工确认的列表
+  const list = top.map((e) => ({ website: e.website, id: e.id, name: e.name }))
+  fs.writeFileSync(listFile, JSON.stringify(list, null, 2), 'utf-8')
+
+  // 输出报告
+  write_log(`[扫描] 共扫描 ${entries.length} 部漫画，取最近更新的 ${top.length} 部:`)
+  for (const e of top) {
+    const date = new Date(e.mtime).toISOString().slice(0, 10)
+    write_log(`  toomics:${e.id} ${e.name} ${date}`)
+  }
+
+  return top.length
+}
+
 /** 检查订阅是否应跳过：查 manga_results.crawledAt，若在 skipDays 内则返回 true */
 async function shouldSkipSubscription(item: subsribeType): Promise<boolean> {
   if (!item.id || !item.website) return false
@@ -219,4 +352,96 @@ async function shouldSkipSubscription(item: subsribeType): Promise<boolean> {
     return true
   }
   return false
+}
+
+/**
+ * 清理遗留的 -smanga-info 旧格式元数据目录，并将对应漫画加入修复列表。
+ *
+ * 操作流程：
+ *   1. 扫描 toomics 下载目录，发现同时存在 .smanga/ 和 {名称}-smanga-info/ 的漫画
+ *   2. 删除旧的 {名称}-smanga-info/ 目录
+ *   3. 从 .smanga/meta.json 的章节 URL 中提取 mangaId
+ *   4. 合并写入 repair-manga-list.json（不去重已存在的条目）
+ *
+ * @returns { deleted: 删除的目录数, added: 新增入修复列表的漫画数 }
+ */
+export async function clean_legacy_meta_dirs(): Promise<{ deleted: number; added: number }> {
+  const listFile = path.join(dataRoot || '', 'data', 'repair-manga-list.json')
+
+  const configKeys = ['toomics', 'toomics-tc', 'toomics-sc', 'toomics-en']
+  const config = get_config()
+
+  // 加载已有的修复列表，避免重复添加
+  let repairList: { website: string; id: string; name?: string }[] = []
+  if (fs.existsSync(listFile)) {
+    try { repairList = JSON.parse(fs.readFileSync(listFile, 'utf-8')) } catch {}
+  }
+  const existing = new Set(repairList.map((e) => `${e.website}:${e.id}`))
+
+  let deleted = 0
+  let added = 0
+  const processed = new Set<string>() // 按漫画名去重（downloadPath 和 compressPath 可能重叠）
+
+  for (const key of configKeys) {
+    const paths: string[] = []
+    const dp = config?.[key]?.downloadPath as string | undefined
+    const cp = config?.[key]?.compressPath as string | undefined
+    if (dp) paths.push(dp)
+    if (cp && cp !== dp) paths.push(cp)
+
+    for (const scanPath of paths) {
+      if (!fs.existsSync(scanPath)) continue
+
+      const dirs = fs.readdirSync(scanPath, { withFileTypes: true })
+      for (const dir of dirs) {
+        if (!dir.isDirectory() || dir.name.startsWith('.')) continue
+        if (processed.has(dir.name)) continue
+
+        const mangaPath = path.join(scanPath, dir.name)
+        const newMetaFile = path.join(mangaPath, '.smanga', 'meta.json')
+        const legacyMetaDir = `${mangaPath}-smanga-info`
+
+        // 必须同时存在 .smanga/meta.json 和旧格式目录才处理
+        if (!fs.existsSync(newMetaFile) || !fs.existsSync(legacyMetaDir)) continue
+
+        processed.add(dir.name)
+
+        // 从 .smanga/meta.json 提取 mangaId
+        let mangaId = ''
+        try {
+          const meta = JSON.parse(fs.readFileSync(newMetaFile, 'utf-8'))
+          const chapters = Array.isArray(meta.chapters) ? meta.chapters : []
+          for (const ch of chapters) {
+            const match = ch.url?.match(/\/toon\/(\d+)/)
+            if (match) { mangaId = match[1]; break }
+          }
+        } catch { /* meta.json 损坏 */ }
+        if (!mangaId) continue
+
+        // 删除旧目录
+        try {
+          fs.rmSync(legacyMetaDir, { recursive: true, force: true })
+          write_log(`[清理] 删除旧元数据目录: ${legacyMetaDir}`)
+          deleted++
+        } catch (e) {
+          write_log(`[清理] 删除失败: ${legacyMetaDir}`)
+          continue
+        }
+
+        // 加入修复列表（去重）
+        const entryKey = `toomics:${mangaId}`
+        if (!existing.has(entryKey)) {
+          repairList.push({ website: 'toomics', id: mangaId, name: dir.name })
+          existing.add(entryKey)
+          added++
+          write_log(`[清理] 加入修复列表: toomics:${mangaId} ${dir.name}`)
+        }
+      }
+    }
+  }
+
+  fs.writeFileSync(listFile, JSON.stringify(repairList, null, 2), 'utf-8')
+  write_log(`[清理] 共删除 ${deleted} 个旧目录，新增 ${added} 条修复记录`)
+
+  return { deleted, added }
 }
