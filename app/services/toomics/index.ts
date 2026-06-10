@@ -268,17 +268,8 @@ export default class Toomics {
 
       // 仅记录已下载章节到 manga_results / manga_chapters
       if (downloadedCount > 0) {
-        const downloadedChapterNames = new Set(
-          chaptersToDownload.map((c) => make_can_be_floder(c.chapterName))
-        )
-        const filteredMeta = {
-          ...this.meta,
-          chapters: this.chapters.filter((c: any) =>
-            downloadedChapterNames.has(make_can_be_floder(c.name))
-          ),
-        }
         const metaFile = `${this.metaFolder}/meta.json`
-        fs.writeFileSync(metaFile, JSON.stringify(filteredMeta, null, 2), 'utf-8')
+        fs.writeFileSync(metaFile, JSON.stringify({ ...this.meta, chapters: this.chapters }, null, 2), 'utf-8')
         await tryIndexMangaMetaFile(metaFile, {
           website: this.website,
           source: 'download',
