@@ -3,7 +3,7 @@ import path from 'node:path'
 import db from '@adonisjs/lucid/services/db'
 import MangaResult from '#models/manga_result'
 import MangaChapter from '#models/manga_chapter'
-import { get_config, make_can_be_floder } from '#utils/index'
+import { get_config } from '#utils/index'
 
 type JsonRecord = Record<string, any>
 
@@ -331,30 +331,6 @@ function countDownloadedChapters(sourcePath: string) {
   }).length
 }
 
-/**
- * 从章节列表中筛选出磁盘上实际存在的章节，仅写入已下载内容到库表
- */
-function filterDownloadedChapters(
-  chapters: MangaChapterSummary[],
-  sourcePath: string
-): MangaChapterSummary[] {
-  if (!sourcePath || !fs.existsSync(sourcePath)) return chapters
-
-  const entries = safeReadDir(sourcePath)
-  const onDisk = new Set(
-    entries
-      .filter((e) => {
-        if (e.name.startsWith('.')) return false
-        if (e.isDirectory()) return true
-        return e.isFile() && e.name.toLowerCase().endsWith('.zip')
-      })
-      .map((e) => e.name.replace(/\.zip$/i, ''))
-  )
-  if (onDisk.size === 0) return chapters
-
-  return chapters.filter((ch) => onDisk.has(make_can_be_floder(ch.name)))
-}
-
 function getChapterOrder(chapter: MangaChapterSummary, fallback: number) {
   const rawOrder = pickNumber(chapter.raw?.ord, chapter.raw?.order, chapter.raw?.chapter_order)
   if (rawOrder !== undefined) return rawOrder
@@ -572,9 +548,7 @@ export async function indexMangaMetaFile(metaFile: string, source: MangaIndexSou
   const website = source.website || pickString(meta.website) || 'local'
   const status = pickString(meta.status, meta.mangaStatus)
   const chapters = normalizeChapters(meta)
-  // 只保留磁盘上实际存在的章节（目录或 zip），避免元数据全量污染库表
-  const downloadedChapters = filterDownloadedChapters(chapters, sourcePath)
-  const latestChapter = findLatestChapter(downloadedChapters)
+  const latestChapter = findLatestChapter(chapters)
   const name = pickString(meta.title, meta.name, meta.comicTitle, meta.bookName, folderName) || folderName
   const mangaId = pickId(meta)
   const crawledAt = stat.mtime.toISOString()
@@ -583,7 +557,7 @@ export async function indexMangaMetaFile(metaFile: string, source: MangaIndexSou
   )
   const coverPath = findLocalCover(metaFolder)
   const chapterCount =
-    downloadedChapters.length || pickNumber(meta.chapterCount, meta.count, meta.total, meta.totalChapter) || countDownloadedChapters(sourcePath)
+    chapters.length || pickNumber(meta.chapterCount, meta.count, meta.total, meta.totalChapter) || countDownloadedChapters(sourcePath)
 
   const manga = await MangaResult.updateOrCreate(
     { identityKey: buildIdentityKey(website, meta, normalizedMetaFile, name) },
@@ -610,26 +584,41 @@ export async function indexMangaMetaFile(metaFile: string, source: MangaIndexSou
     }
   )
 
-  await MangaChapter.query().where('mangaResultId', manga.id).delete()
-  if (downloadedChapters.length > 0) {
-    await MangaChapter.createMany(
-      downloadedChapters.map((chapter, index) => ({
-        mangaResultId: manga.id,
-        name: chapter.name,
-        title: chapter.title ?? null,
-        chapterOrder: getChapterOrder(chapter, index),
-        date: chapter.date ?? null,
-        url: chapter.url ?? null,
-        cover: chapter.cover ?? null,
-        isFree: chapter.isFree ?? null,
-        price: chapter.price ?? null,
-        imageCount: chapter.imageCount ?? null,
-        rawJson: chapter.raw ? JSON.stringify(chapter.raw) : null,
-      }))
-    )
-  }
+  // 章节写入由下载器逐章调用 recordChapterDownload 完成，此处不再批量操作
 
   return rowToItem(manga)
+}
+
+/**
+ * 下载器逐章调用：记录单章下载到 manga_chapters 表。
+ * 同一 mangaResult + name 已存在则跳过（幂等）。
+ */
+export async function recordChapterDownload(
+  mangaResultId: number,
+  chapter: MangaChapterSummary,
+  order: number
+) {
+  await ensureMangaIndexSchema()
+
+  const existing = await MangaChapter.query()
+    .where('mangaResultId', mangaResultId)
+    .where('name', chapter.name)
+    .first()
+  if (existing) return existing
+
+  return MangaChapter.create({
+    mangaResultId,
+    name: chapter.name,
+    title: chapter.title ?? null,
+    chapterOrder: order,
+    date: chapter.date ?? null,
+    url: chapter.url ?? null,
+    cover: chapter.cover ?? null,
+    isFree: chapter.isFree ?? null,
+    price: chapter.price ?? null,
+    imageCount: chapter.imageCount ?? null,
+    rawJson: chapter.raw ? JSON.stringify(chapter.raw) : null,
+  })
 }
 
 export async function tryIndexMangaMetaFile(metaFile: string, source: MangaIndexSource = {}) {

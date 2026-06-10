@@ -3,6 +3,7 @@ export {
   getMangaChapters,
   getMangaResults,
   indexMangaMetaFile,
+  recordChapterDownload,
   resolveAllowedMangaAsset,
   tryIndexMangaMetaFile,
   type MangaChapterSummary,

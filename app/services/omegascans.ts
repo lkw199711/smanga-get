@@ -12,7 +12,7 @@ import { get_config, make_can_be_floder } from '#utils/index'
 import { dataRoot } from '#utils/index'
 import fs from 'node:fs'
 import { subscribe_remove } from '#api/subsribe'
-import { tryIndexMangaMetaFile } from '#api/manga'
+import { tryIndexMangaMetaFile, recordChapterDownload } from '#api/manga'
 import { omegascansBrowser } from '#api/browser'
 import path from 'node:path'
 
@@ -90,8 +90,15 @@ export default class OmegaScans {
     const validChapters = chaptersToDownload.filter((c: any) => c.price <= 0)
     this.onProgress?.setTotal(validChapters.length)
 
+    // 先建立 manga_result，获取 mangaResultId 供逐章入库使用
+    const indexResult = await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
+      website: 'omegascans',
+      source: 'download',
+      sourcePath: this.mangaFolder,
+    })
+    const mangaResultId = indexResult?.indexId ?? 0
+
     let downloadedCount = 0
-    const downloadedChapters: any[] = []
     for (const chapter of chaptersToDownload) {
       if (chapter.price > 0) {
         write_log(
@@ -103,20 +110,16 @@ export default class OmegaScans {
       this.onProgress?.message(`正在下载章节: ${chapter.name}`)
       await this.download_chapter(chapter)
       downloadedCount++
-      downloadedChapters.push(chapter)
+      // 逐章入库：记录本次实际下载的章节
+      if (mangaResultId > 0) {
+        recordChapterDownload(mangaResultId, { name: chapter.name, title: chapter.title, date: chapter.date, url: chapter.url, cover: chapter.cover, isFree: chapter.isFree, price: chapter.price }, downloadedCount).catch(() => {})
+      }
       this.onProgress?.report(`${chapter.name} 下载完成`)
       omegascansBrowser.clear_buffs() // 清除浏览器缓存
       await this.afterChapterDownload()
     }
 
-    // 仅当有实际章节下载时才写入记录表（只记录已下载章节）
-    if (downloadedCount > 0) {
-      await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
-        website: 'omegascans',
-        source: 'download',
-        sourcePath: this.mangaFolder,
-      })
-    }
+    // 逐章入库已完成，manga_result 已在下载前建立，无需再调 tryIndexMangaMetaFile
 
     if (this.config?.autoCompress) {
       await this.compress_manga()

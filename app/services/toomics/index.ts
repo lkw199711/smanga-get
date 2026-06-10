@@ -40,7 +40,7 @@ import {
 } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { zip_directory } from '#utils/zip'
-import { tryIndexMangaMetaFile } from '#api/manga'
+import { tryIndexMangaMetaFile, recordChapterDownload } from '#api/manga'
 import { getAntiBotScheduler } from '#services/scheduler'
 import { ToomicsBrowserSession } from './browser-session.js'
 import { ToomicsMetaFetcher } from './meta-fetcher.js'
@@ -245,6 +245,15 @@ export default class Toomics {
     )
     const chaptersToNotDownload = chapterList.filter((c) => c.doNotDownload)
 
+    // 先建立 manga_result，获取 mangaResultId 供逐章入库使用
+    const metaFile = `${this.metaFolder}/meta.json`
+    const indexResult = await tryIndexMangaMetaFile(metaFile, {
+      website: this.website,
+      source: 'download',
+      sourcePath: `${this.downloadPath}/${this.mangaName}`,
+    })
+    const mangaResultId = indexResult?.indexId ?? 0
+
     // 计算「假装下载」数量
     let pretendCount = this.pretendNum - chaptersToDownload.length
     const pretendDownload = pretendCount > 0 ? chaptersToNotDownload.slice(-pretendCount) : []
@@ -263,18 +272,17 @@ export default class Toomics {
       for (const chapter of chaptersToDownload) {
         await this.chapterDownloader.downloadChapter(chapter)
         downloadedCount++
+        // 逐章入库：记录本次实际下载的章节
+        if (mangaResultId > 0) {
+          const serverChapter = this.chapters.find((c: any) => c.url === chapter.url)
+          if (serverChapter) {
+            recordChapterDownload(mangaResultId, { name: serverChapter.name, date: serverChapter.date, url: serverChapter.url, cover: serverChapter.cover, isFree: serverChapter.isFree }, downloadedCount).catch(() => {})
+          }
+        }
         await this.afterChapterDownload()
       }
 
-      // 仅记录已下载章节到 manga_results / manga_chapters
       if (downloadedCount > 0) {
-        const metaFile = `${this.metaFolder}/meta.json`
-        await tryIndexMangaMetaFile(metaFile, {
-          website: this.website,
-          source: 'download',
-          sourcePath: `${this.downloadPath}/${this.mangaName}`,
-        })
-
         // 上报调度器：本漫画实际下载了章节，消耗 1 个配额
         getAntiBotScheduler()?.reportMangaDownloaded()
       }

@@ -6,7 +6,7 @@ import { betweenChapterDelay } from '#utils/human'
 import puppeteer from 'rebrowser-puppeteer'
 import path from 'path'
 import { subscribe_remove } from '#api/subsribe'
-import { tryIndexMangaMetaFile } from '#api/manga'
+import { tryIndexMangaMetaFile, recordChapterDownload } from '#api/manga'
 
 type chapterType = {
     targetId: number
@@ -154,6 +154,15 @@ export default class Bilibili {
         // 下载章节（下载循环移到索引之前，只记录已下载章节）
         const chaptersToDownload = this.chapters.filter((c: chapterType) => !c.isLocked)
         this.onProgress?.setTotal(chaptersToDownload.length)
+
+        // 先建立 manga_result，获取 mangaResultId 供逐章入库使用
+        const indexResult = await tryIndexMangaMetaFile(metaFile, {
+          website: this.website,
+          source: 'download',
+          sourcePath: `${this.downloadPath}/${mangaName}`,
+        })
+        const mangaResultId = indexResult?.indexId ?? 0
+
         for (let i = 0; i < this.chapters.length; i++) {
             const chapter = this.chapters[i]
             const chapterName = make_can_be_floder(chapter.title)
@@ -193,25 +202,17 @@ export default class Bilibili {
                 await this.download_chapter(chapter, chapterFolder)
                 this.onProgress?.report(`${chapter.title} 下载完成`)
             }
+            // 逐章入库：记录本次实际下载的章节
+            if (mangaResultId > 0) {
+              recordChapterDownload(mangaResultId, { name: chapter.title, date: chapter.publishDate, cover: chapter.cover, isFree: chapter.isFree }, chapter.ord).catch(() => {})
+            }
             await betweenChapterDelay()
         }
 
         this.chapterPage?.close()
         this.page.close()
 
-        // 仅记录已下载章节到 manga_results / manga_chapters
-        const downloadedChapters = chaptersToDownload.filter((c: chapterType) => {
-            const chapterName = make_can_be_floder(c.title)
-            const chapterFolder = `${this.downloadPath}/${mangaName}/${this.get_order(c.ord)} ${chapterName}`
-            return fs.existsSync(chapterFolder)
-        })
-        if (downloadedChapters.length > 0) {
-            await tryIndexMangaMetaFile(metaFile, {
-                website: this.website,
-                source: 'download',
-                sourcePath: `${this.downloadPath}/${mangaName}`,
-            })
-        }
+        // 逐章入库已在下载循环中完成，无需再调 tryIndexMangaMetaFile
 
         console.log(mangaName + ' 订阅完毕')
     }
