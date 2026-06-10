@@ -111,9 +111,6 @@ export default class OmegaScans {
 
     // 仅当有实际章节下载时才写入记录表（只记录已下载章节）
     if (downloadedCount > 0) {
-      // 重写 meta.json：只包含实际下载的章节，付费章节不入库
-      const filteredMeta = { ...this.meta, chapters: downloadedChapters }
-      fs.writeFileSync(`${this.metaFolder}/meta.json`, JSON.stringify(filteredMeta, null, 2), 'utf-8')
       await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
         website: 'omegascans',
         source: 'download',

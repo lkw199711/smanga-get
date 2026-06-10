@@ -206,9 +206,6 @@ export default class Bilibili {
             return fs.existsSync(chapterFolder)
         })
         if (downloadedChapters.length > 0) {
-            // 重写 meta.json：只包含实际下载的章节
-            const filteredMeta = { ...this.meta, chapters: downloadedChapters }
-            fs.writeFileSync(metaFile, JSON.stringify(filteredMeta, null, 2), 'utf-8')
             await tryIndexMangaMetaFile(metaFile, {
                 website: this.website,
                 source: 'download',

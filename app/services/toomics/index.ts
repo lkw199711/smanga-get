@@ -269,7 +269,6 @@ export default class Toomics {
       // 仅记录已下载章节到 manga_results / manga_chapters
       if (downloadedCount > 0) {
         const metaFile = `${this.metaFolder}/meta.json`
-        fs.writeFileSync(metaFile, JSON.stringify({ ...this.meta, chapters: this.chapters }, null, 2), 'utf-8')
         await tryIndexMangaMetaFile(metaFile, {
           website: this.website,
           source: 'download',
