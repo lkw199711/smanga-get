@@ -452,7 +452,7 @@ export default class OmegaScans {
   async page_open() {
     if (!omegascansBrowser.browser) return
     if (this.page.isClosed()) {
-      this.page = await omegascansBrowser.browser.newPage()
+      this.page = await omegascansBrowser.new_page()
     }
   }
 
