@@ -219,6 +219,8 @@ class UseBrowser {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
+        '--headless=new',
+        '--disable-gpu',
         '--lang=zh-CN,zh',
         ...this.proxyArgs,
       ],
