@@ -172,7 +172,9 @@ export default class Gentleman {
   /** 确保浏览器已初始化 */
   private async ensureBrowser() {
     if (!gentlemanBrowser.browser) {
+      write_log(`[gentleman] 正在启动浏览器...`)
       await gentlemanBrowser.init()
+      write_log(`[gentleman] 浏览器启动完成, browser=${!!gentlemanBrowser.browser}`)
     }
   }
 
@@ -312,23 +314,32 @@ export default class Gentleman {
    */
   async get_browser_html(url: string): Promise<string> {
     await this.ensureBrowser()
-    if (!gentlemanBrowser.browser) return ''
+    if (!gentlemanBrowser.browser) {
+      write_log(`[gentleman] get_browser_html: 浏览器未初始化`)
+      return ''
+    }
 
-    const page = await gentlemanBrowser.browser.newPage().catch(() => null)
+    const page = await gentlemanBrowser.browser.newPage().catch((e) => {
+      write_log(`[gentleman] get_browser_html: 创建页面失败 ${e?.message || e}`)
+      return null
+    })
     if (!page) return ''
 
     try {
-      // networkidle2：等待网络空闲（最多 2 个连接活跃），适合动态渲染页面
-      await page
+      const gotoResult = await page
         .goto(url, {
           waitUntil: 'networkidle2',
           timeout: 60 * 1000,
         })
-        .catch(() => {})  // 导航超时或网络错误时静默处理，仍尝试读取已加载的内容
+        .catch((e) => {
+          write_log(`[gentleman] get_browser_html: 导航失败 ${e?.message || e}, url=${url.slice(0, 80)}`)
+          return null
+        })
 
-      return await page.content()
+      const html = await page.content()
+      write_log(`[gentleman] get_browser_html: html长度=${html.length}, goto成功=${!!gotoResult}, url=${url.slice(0, 80)}`)
+      return html
     } finally {
-      // 确保 page 总是被关闭，防止浏览器进程内存泄漏
       await page.close().catch(() => {})
     }
   }
