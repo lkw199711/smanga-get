@@ -171,7 +171,7 @@ export default class Gentleman {
 
   /** 确保浏览器已初始化 */
   private async ensureBrowser() {
-    if (!gentlemanBrowser.browser) {
+    if (!gentlemanBrowser.browser || !(gentlemanBrowser.browser as any).isConnected?.()) {
       write_log(`[gentleman] 正在启动浏览器...`)
       await gentlemanBrowser.init()
       write_log(`[gentleman] 浏览器启动完成, browser=${!!gentlemanBrowser.browser}`)
@@ -319,7 +319,7 @@ export default class Gentleman {
       return ''
     }
 
-    const page = await gentlemanBrowser.browser.newPage().catch((e) => {
+    const page = await gentlemanBrowser.new_page().catch((e) => {
       write_log(`[gentleman] get_browser_html: 创建页面失败 ${e?.message || e}`)
       return null
     })
