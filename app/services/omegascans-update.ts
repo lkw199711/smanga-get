@@ -37,8 +37,12 @@ export default class OmegaScansUpdate {
     }
     if (!omegascansBrowser.browser) return;
 
-    // 检查当日快照
+    // 确保快照目录存在
     const snapshotDir = path.join(dataRoot, 'data', 'snapshots', 'omegascans')
+    if (!fs.existsSync(snapshotDir)) {
+      fs.mkdirSync(snapshotDir, { recursive: true })
+    }
+
     const today = new Date().toISOString().split('T')[0]
     const snapshotFile = path.join(snapshotDir, `${today}.json`)
 
@@ -56,12 +60,29 @@ export default class OmegaScansUpdate {
       this.page = await omegascansBrowser.new_page();
       res = await this.request_interface(`https://api.omegascans.org/query?series_type=Comic&perPage=9999&adult=true&order=desc&orderBy=latest&page=1`)
 
-      // 写入快照（原子操作）
-      fs.mkdirSync(snapshotDir, { recursive: true })
-      const tempFile = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`
-      fs.writeFileSync(tempFile, JSON.stringify(res, null, 2), 'utf-8')
-      fs.renameSync(tempFile, snapshotFile)
-      write_log(`[omegascans update] API 请求完成，快照已保存`)
+      // 写入快照（原子写入：先写临时文件，再 rename；Docker 跨文件系统 rename 可能失败，fallback 到 copy+unlink）
+      try {
+        const tempFile = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`
+        const snapshotJson = JSON.stringify(res, null, 2)
+        fs.writeFileSync(tempFile, snapshotJson, 'utf-8')
+        // rename 在同一文件系统上是原子的，优先使用
+        try {
+          fs.renameSync(tempFile, snapshotFile)
+        } catch (renameError: any) {
+          // Docker bind mount (9p/VirtioFS) 环境下 rename 可能返回 ENOENT，
+          // 回退到 copy + unlink 确保写入成功
+          if (renameError.code === 'ENOENT') {
+            fs.copyFileSync(tempFile, snapshotFile)
+            fs.unlinkSync(tempFile)
+          } else {
+            throw renameError
+          }
+        }
+        write_log(`[omegascans update] API 请求完成，快照已保存`)
+      } catch (error) {
+        write_log(`[omegascans update] 快照写入失败: ${error instanceof Error ? error.message : error}`)
+        throw error
+      }
     }
 
     const mangaList = res.data || [];

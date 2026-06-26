@@ -140,7 +140,7 @@ export default class ToomicsDayUpdate {
         throw new Error('[toomics update] 扫描结果为空，可能 cookie 过期或页面加载异常')
       }
 
-      // Step 5: 写入快照（原子操作：先写临时文件，再 rename）
+      // Step 5: 写入快照（原子写入：先写临时文件，再 rename；Docker 跨文件系统 rename 可能失败，fallback 到 copy+unlink）
       fs.mkdirSync(snapshotDir, { recursive: true })
       const snapshotData = {
         scan_date: today,
@@ -151,7 +151,16 @@ export default class ToomicsDayUpdate {
       }
       const tempFile = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`
       fs.writeFileSync(tempFile, JSON.stringify(snapshotData, null, 2), 'utf-8')
-      fs.renameSync(tempFile, snapshotFile)
+      try {
+        fs.renameSync(tempFile, snapshotFile)
+      } catch (renameError: any) {
+        if (renameError.code === 'ENOENT') {
+          fs.copyFileSync(tempFile, snapshotFile)
+          fs.unlinkSync(tempFile)
+        } else {
+          throw renameError
+        }
+      }
 
       // Step 6: 随机打乱顺序后加入下载队列（入队前比对本地章节数）
       mangas.sort(() => Math.random() - 0.5)
