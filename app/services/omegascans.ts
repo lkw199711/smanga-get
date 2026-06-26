@@ -271,31 +271,40 @@ export default class OmegaScans {
       this.onProgress?.subProgress(i + 1, imageUrls.length)
 
       if (!fs.existsSync(imagePath)) {
-        const [, imageError] = await this.download_image(imageUrl, imagePath)
-          .then(() => [null, null])
-          .catch((downloadError: any) => [null, downloadError])
+        // 每张图片独立重试，最多 3 次；全部失败则跳过该图继续下一张
+        let imageSuccess = false
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const error = await this.download_image(imageUrl, imagePath)
+            .then(() => null)
+            .catch((e: any) => e)
 
-        // 尝试重新下载一次
-        if (imageError) {
-          await this.download_image(imageUrl, imagePath).catch(async () => {
-            this.retry++
-            if (this.retry > 3) {
-              this.retry = 0 // 重置重试次数
-              write_log(`[chapter download]下载图片失败 次数过多 重置浏览器.`)
-              await omegascansBrowser.browser?.close() // 关闭浏览器
-              omegascansBrowser.browser = null // 清除浏览器实例
-              throw imageError // 重新抛出错误以便上层处理
-            }
+          if (!error) {
+            imageSuccess = true
+            break
+          }
+          write_log(
+            `[chapter download]图片下载失败 第${attempt}次 ${this.name} ${chapter.name} ${imageName}`
+          )
+          this.imageReTry++
+        }
 
-            write_log(
-              `[chapter download]下载图片失败 ${this.name} ${chapter.name} ${imageName} ${imageUrl}, 请手动检查. `
-            )
-          })
+        if (!imageSuccess) {
+          write_log(
+            `[chapter download]图片最终失败(3次重试后跳过) ${this.name} ${chapter.name} ${imageName} ${imageUrl}`
+          )
+
+          // 单张图片失败过多（全局累计 > 10）则重置浏览器，防止浏览器状态异常蔓延
+          if (this.imageReTry >= 10) {
+            this.imageReTry = 0
+            write_log(`[chapter download]图片累计失败次数过多，重置浏览器.`)
+            await omegascansBrowser.browser?.close().catch(() => {})
+            omegascansBrowser.browser = null
+          }
         }
       }
     }
 
-    this.retry = 0 // 成功，重置重试次数
+    this.retry = 0 // 成功，重置章节重试次数
     write_log(`[chapter download]漫画 ${this.name} ${chapter.name} 章节下载完成 `)
   }
 
@@ -454,28 +463,37 @@ export default class OmegaScans {
     if (this.page.isClosed()) {
       this.page = await omegascansBrowser.new_page()
     }
-    // const imagePage = await omegascansBrowser.new_page();
-    const [, pageError] = await this.page
+
+    // 直接捕获 page.goto() 的 HTTP 响应，从其 buffer 获取图片数据。
+    // 不再依赖 omegascansBrowser.buffs，因为 goto 到图片 URL 时
+    // 资源类型为 'document'（主帧导航），不会被 handleImageResponse 捕获。
+    const gotoResponse = await this.page
       .goto(url, {
         waitUntil: 'networkidle2',
-        timeout: 60 * 1000, // 设置超时时间为30秒
+        timeout: 60 * 1000,
       })
-      .then(() => [null, null])
-      .catch((openError: any) => [null, openError])
+      .catch(() => null)
 
-    if (pageError) {
+    if (!gotoResponse) {
       console.log(`[download_image]下载图片失败 111`)
-      await this.page?.close() // 关闭页面
-      throw pageError // 重新抛出错误以便上层处理
+      await this.page?.close()
+      throw new Error(`page.goto failed for ${url}`)
+    }
+
+    if (!gotoResponse.ok()) {
+      console.log(`[download_image]下载图片失败 HTTP ${gotoResponse.status()}`)
+      await this.page?.close()
+      throw new Error(`Image fetch HTTP ${gotoResponse.status()} for ${url}`)
     }
 
     if (!this.e2eFastMode) {
       await delay(1000) // 等待1秒以确保图片加载完成
     }
-    const buffer = await omegascansBrowser.buffs[url]
+
+    const buffer = await gotoResponse.buffer().catch(() => null)
     if (!buffer) {
       console.log(`[download_image]下载图片失败 222`)
-      await this.page?.close() // 关闭页面
+      await this.page?.close()
       throw new Error(`Image buffer is empty for ${url}`)
     }
     fs.writeFileSync(filePath, buffer)

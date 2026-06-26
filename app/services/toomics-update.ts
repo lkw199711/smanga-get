@@ -78,19 +78,25 @@ export default class ToomicsDayUpdate {
       try {
         const snapshot = JSON.parse(fs.readFileSync(snapshotFile, 'utf-8'))
         const mangas = snapshot.mangas || []
-        mangas.sort(() => Math.random() - 0.5)
-        for (const manga of mangas) {
-          // 入队前比对本地章节数，无更新则跳过不入队
-          if (manga.chapterCount != null && manga.chapterCount > 0) {
-            const folderName = make_can_be_floder(manga.name)
-            if (!hasChapterUpdate(folderName, manga.chapterCount, manga.website, manga.url)) {
-              continue
+        // 空快照（manga_count=0）必定是上次扫描失败产生的无效数据，丢弃并重新扫描
+        if (mangas.length === 0) {
+          fs.unlinkSync(snapshotFile)
+          write_log('[toomics update] 当日快照为空（上次扫描失败），删除并重新扫描')
+        } else {
+          mangas.sort(() => Math.random() - 0.5)
+          for (const manga of mangas) {
+            // 入队前比对本地章节数，无更新则跳过不入队
+            if (manga.chapterCount != null && manga.chapterCount > 0) {
+              const folderName = make_can_be_floder(manga.name)
+              if (!hasChapterUpdate(folderName, manga.chapterCount, manga.website, manga.url)) {
+                continue
+              }
             }
+            mangaTask.add(manga)
           }
-          mangaTask.add(manga)
+          write_log(`[toomics update] 使用当日快照，${mangas.length} 部漫画（跳过浏览器扫描）`)
+          return
         }
-        write_log(`[toomics update] 使用当日快照，${mangas.length} 部漫画（跳过浏览器扫描）`)
-        return
       } catch (error) {
         write_log(`[toomics update] 快照读取失败，重新扫描: ${error instanceof Error ? error.message : error}`)
       }
@@ -127,6 +133,12 @@ export default class ToomicsDayUpdate {
 
       // Step 4: 从 DOM 中提取漫画列表
       const mangas = await this.extractMangaList(page, this.updateOnlyDay)
+
+      // 扫描结果为空必定是页面加载失败（如 cookie 过期、网络异常等），
+      // 不应写入快照，应直接抛错让任务调度层处理重试
+      if (mangas.length === 0) {
+        throw new Error('[toomics update] 扫描结果为空，可能 cookie 过期或页面加载异常')
+      }
 
       // Step 5: 写入快照（原子操作：先写临时文件，再 rename）
       fs.mkdirSync(snapshotDir, { recursive: true })

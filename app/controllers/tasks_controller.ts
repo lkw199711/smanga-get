@@ -25,7 +25,8 @@ export default class TasksController {
 
         mangaTask.add({ website, id, name, 
             url: mangaUrl, 
-            moveEndSubscribe })
+            moveEndSubscribe,
+            manual: true })
 
         write_log(`[task]${website} ${id} ${name} 任务添加成功`)
 

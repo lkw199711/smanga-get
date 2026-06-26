@@ -13,6 +13,7 @@ type subsribeType = {
   chapterCount?: number
   nameMatch?: boolean
   moveEndSubscribe?: boolean
+  manual?: boolean
 }
 
 type commandType = {

@@ -206,9 +206,6 @@ class UseBrowser {
   // 启动底层 Chromium 实例。大多数调用方随后会调用 get_cookie() 和 new_page()。
   async init(options: { headless?: boolean } = {}) {
     const headless = options.headless ?? this.config.headless
-    console.log('[browser init] headless =', headless, '| options.headless =', options.headless, '| config.headless =', this.config.headless)
-    console.log('[browser init] config 路径:', get_config_path())
-    console.log('[browser init] 完整 config:', JSON.stringify(this.config).slice(0, 500))
     const executablePath =
       this.config.executablePath ||
       process.env.PUPPETEER_EXECUTABLE_PATH ||

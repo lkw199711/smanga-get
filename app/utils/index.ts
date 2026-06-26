@@ -16,7 +16,11 @@ export function testTmpDir() {
 
 const configFile = dataRoot + 'data/config.json'
 const failedChaptersFile = dataRoot + 'data/failed-chapters.json'
-const logFile = dataRoot + 'data/log.txt'
+function getLogFile(): string {
+  const dir = path.join(dataRoot, 'data', 'logs')
+  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+  return path.join(dir, `${today}.log`)
+}
 
 export class TaskPauseError extends Error {
   pauseTask = true
@@ -52,6 +56,24 @@ export class TaskAbortError extends Error {
 export function isTaskAbortError(error: unknown): error is TaskAbortError {
   return error instanceof TaskAbortError
     || (typeof error === 'object' && error !== null && (error as { abortTask?: unknown }).abortTask === true)
+}
+
+/**
+ * 任务跳过错误：当前漫画无法处理（如下架），跳过此任务并继续后续队列。
+ * 不会触发任务中止或重试。
+ */
+export class TaskSkipError extends Error {
+  skipTask = true
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'TaskSkipError'
+  }
+}
+
+export function isTaskSkipError(error: unknown): error is TaskSkipError {
+  return error instanceof TaskSkipError
+    || (typeof error === 'object' && error !== null && (error as { skipTask?: unknown }).skipTask === true)
 }
 
 /**
@@ -137,15 +159,43 @@ export function saveBase64Image(base64Data: any, filepath: string) {
  */
 export function write_log(logContent: string) {
   console.log(logContent)
-  fs.appendFileSync(logFile, `${new Date().toLocaleString()} ${logContent} \n`, 'utf-8')
+  const logPath = getLogFile()
+  const logDir = path.dirname(logPath)
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true })
+  }
+  fs.appendFileSync(logPath, `${new Date().toLocaleString()} ${logContent} \n`, 'utf-8')
 }
 
 export function get_log() {
-  return fs.readFileSync(logFile, 'utf-8')
+  return fs.readFileSync(getLogFile(), 'utf-8')
+}
+
+/**
+ * 获取指定日期的日志文件内容
+ * @param date 日期字符串，格式 YYYY-MM-DD
+ */
+export function get_log_by_date(date: string): string {
+  const logPath = path.join(dataRoot, 'data', 'logs', `${date}.log`)
+  if (!fs.existsSync(logPath)) return ''
+  return fs.readFileSync(logPath, 'utf-8')
+}
+
+/**
+ * 列出所有可用的日志日期，降序排列（最新在前）
+ */
+export function list_log_dates(): string[] {
+  const logDir = path.join(dataRoot, 'data', 'logs')
+  if (!fs.existsSync(logDir)) return []
+  return fs
+    .readdirSync(logDir)
+    .filter((f) => f.endsWith('.log'))
+    .map((f) => f.replace('.log', ''))
+    .sort((a, b) => (b > a ? 1 : -1))
 }
 
 export function clear_log() {
-  fs.writeFileSync(logFile, '', 'utf-8')
+  fs.writeFileSync(getLogFile(), '', 'utf-8')
 }
 
 /**

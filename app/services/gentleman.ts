@@ -107,7 +107,7 @@ export default class Gentleman {
    * 流程：初始化浏览器 → 解析章节列表 → 逐章下载图片 → 整理元数据 → 归档文件 → 处理完结订阅
    */
   async start() {
-    console.log(`${this.mangaName} 正在分析`)
+    write_log(`[gentleman] ${this.mangaName} 正在分析`)
 
     // Step 1: 确保 Puppeteer 浏览器实例就绪
     await this.ensureBrowser()
@@ -116,10 +116,14 @@ export default class Gentleman {
     // Step 2: 解析漫画所有章节链接（支持分页加载）
     await this.get_chapters()
 
+    // ── 章节对比 ──
+    write_log(`[gentleman] ${this.mangaName} 线上共解析到 ${this.chapters.length} 个章节`)
+    const existingChapters = this.chapters.filter((item) => this.chapterExists(item.name))
+    const newChaptersRaw = this.chapters.filter((item) => !this.chapterExists(item.name))
+    write_log(`[gentleman] ${this.mangaName} 本地已存在 ${existingChapters.length} 个，待下载 ${newChaptersRaw.length} 个`)
+
     // Step 3: 过滤出尚未下载的章节（目录不存在或为空则视为需要下载）
-    const newChapters = this.limitChaptersToDownload(
-      this.chapters.filter((item) => !this.chapterExists(item.name))
-    )
+    const newChapters = this.limitChaptersToDownload(newChaptersRaw)
     this.onProgress?.setTotal(newChapters.length)
 
     // Step 4: 逐章节解析图片 URL 并下载
@@ -153,7 +157,7 @@ export default class Gentleman {
       await this.organize_files()
     }
 
-    console.log(`${this.mangaName} 订阅完毕`)
+    write_log(`[gentleman] ${this.mangaName} 订阅完毕`)
 
     // Step 7: 若漫画已完结，从订阅列表中移除（避免重复拉取）
     if (this.mangaStatus === 'finished') {
@@ -223,27 +227,57 @@ export default class Gentleman {
     const pageBox = firstPageHtml.match(/(?<=thispage).+?(?=\/div)/s)?.[0] || ''
 
     this.chapters = this.get_page_chapters(firstPageHtml)
+    write_log(`[gentleman] ${this.mangaName} 第1页解析到 ${this.chapters.length} 个章节`)
 
     // 提取所有分页链接（href 属性值）
     const pagesMatch = pageBox.match(/(?<=href=").+?(?=")/gs)
-    if (!pagesMatch) return this.chapters
+    if (!pagesMatch) {
+      write_log(`[gentleman] ${this.mangaName} 目录翻页: pageBox中无href链接, pageBox="${pageBox.slice(0, 200)}"`)
+      return this.chapters
+    }
 
+    let pageNum = 1
     for (const item of pagesMatch) {
+      pageNum++
       // 提前终止：当前页最后一个章节已下载，说明后续页都是旧数据，无需继续加载
+      // 手动下载时不提前终止，确保加载全部页面（防止漏掉中间被删又重下的老章节）
       const lastChapter = this.chapters[this.chapters.length - 1]
-      if (lastChapter && this.chapterExists(lastChapter.name)) {
+      if (!this.params.manual && lastChapter && this.chapterExists(lastChapter.name)) {
         break
       }
       // 过滤掉过短的无效链接（如 "#" 等干扰项）
       if (item.length < 10) continue
+      write_log(`[gentleman] ${this.mangaName} 正在加载第${pageNum}页: ${item}`)
       const html = await this.get_browser_html(this.domain + item)
-      this.chapters = this.chapters.concat(this.get_page_chapters(html))
+      const pageChapters = this.get_page_chapters(html)
+      write_log(`[gentleman] ${this.mangaName} 第${pageNum}页解析到 ${pageChapters.length} 个章节`)
+      this.chapters = this.chapters.concat(pageChapters)
     }
 
     // 过滤：去除无 URL 的条目，再按配置规则筛选
-    this.chapters = this.chapters
-      .filter((item) => item.url)
-      .filter((item) => this.filter_chapter(item))
+    const withUrlChapters = this.chapters.filter((item) => item.url)
+    this.chapters = withUrlChapters.filter((item) => this.filter_chapter(item))
+    const afterFilter = this.chapters.length
+    // 诊断：全部被规则过滤掉时，打印前几个章节名和过滤正则，方便对比
+    if (afterFilter === 0 && withUrlChapters.length > 0) {
+      const samples = withUrlChapters.slice(0, 5).map((c) => c.name)
+      const { chapterIncludes = '', chapterExcludes = '' } = this.config
+      const nameMatchRegex = new RegExp(`${this.params.name}\\d+(-\\d+)?[話话]`)
+      write_log(`[gentleman] ${this.mangaName} 规则过滤诊断:`)
+      write_log(`  params.name = "${this.params.name}"`)
+      write_log(`  params.nameMatch = ${this.params?.nameMatch}`)
+      write_log(`  nameMatchRegex = /${nameMatchRegex.source}/`)
+      write_log(`  chapterIncludes = "${chapterIncludes}"`)
+      write_log(`  chapterExcludes = "${chapterExcludes}"`)
+      write_log(`  被过滤章节样本: ${samples.join(' | ')}`)
+      for (const s of samples) {
+        const reasons: string[] = []
+        if (this.params?.nameMatch !== false && !nameMatchRegex.test(s)) reasons.push('nameMatch不匹配')
+        if (chapterIncludes && !new RegExp(chapterIncludes).test(s)) reasons.push('chapterIncludes不匹配')
+        if (chapterExcludes && new RegExp(chapterExcludes).test(s)) reasons.push('chapterExcludes排除')
+        write_log(`  "${s}" → ${reasons.join(', ') || '通过(不应出现)'}`)
+      }
+    }
     return this.chapters
   }
 
@@ -256,7 +290,9 @@ export default class Gentleman {
   private filter_chapter(chapter: ChapterInfo): boolean {
     const { chapterIncludes = '', chapterExcludes = '' } = this.config
     // 构造漫画名+话数的标准正则，如：同事換愛\d+(-\d+)?話
-    const nameMatchRegex = new RegExp(`${this.params.name}\\d+(-\\d+)?話`)
+    // \s* 兼容漫画名与数字之间的空格（如 "熟女自助餐 89-90話"）
+    // [話话] 兼容简繁体（站点既有「話」也有「话」）
+    const nameMatchRegex = new RegExp(`${this.params.name}\\s*\\d+(-\\d+)?[話话]`)
 
     // params.nameMatch 为 false 时跳过名称格式校验
     if (this.params?.nameMatch !== false && !nameMatchRegex.test(chapter.name)) return false
@@ -418,21 +454,28 @@ export default class Gentleman {
 
     // 提取图片区域：从 gallary_wrap 到 comment_wrap 之间的内容
     const imageBoxMatch = html.match(/(?<=gallary_wrap).+?(?=comment_wrap)/s)
-    if (!imageBoxMatch) return list
+    if (!imageBoxMatch) {
+      write_log(`[gentleman] get_subpage_images: 未找到 gallary_wrap→comment_wrap 区域`)
+      return list
+    }
 
     // 分割出每个图片条目（以 gallary_item 为界）
     const srcMatches = imageBoxMatch[0].match(/(?<=gallary_item).+?(?=pic_ctl)/gs)
-    if (!srcMatches) return list
+    if (!srcMatches) {
+      write_log(`[gentleman] get_subpage_images: gallary_wrap内未找到 gallary_item 条目`)
+      return list
+    }
 
+    let skippedView = 0, skippedTag = 0, skippedName = 0
     for (const m of srcMatches) {
       // 提取缩略图的 src 属性值（含 CDN 路径和图片标识）
       const viewMatch = m.match(/(?<=src=").+?(?=")/s)
-      if (!viewMatch) continue
+      if (!viewMatch) { skippedView++; continue }
       const view = viewMatch[0]
 
       // 提取 data/t 之后的路径段（如 "123/456/"），用于拼接原图 URL
       const imgTagMatch = view.match(/(?<=data\/t)\/(\d+\/)(\d+\/)(?=\b)/)
-      if (!imgTagMatch) continue
+      if (!imgTagMatch) { skippedTag++; continue }
 
       // 提取文件后缀（如 .jpg）
       const suffixMatch = view.match(/\.[^.]+$/)
@@ -440,13 +483,16 @@ export default class Gentleman {
 
       // 提取图片名称（从 class="name tb" 的 span 内容中获取）
       const imgNameMatch = m.match(/(?<=name\stb">).+?(?=<)/)
-      if (!imgNameMatch) continue
+      if (!imgNameMatch) { skippedName++; continue }
 
       // 将 CDN 前缀中的 "t" 替换为 "img"（缩略图域名 → 原图域名）
       const img = `https://${this.textPrefix.replace(/^t/, 'img')}${imgTagMatch[0]}${imgNameMatch[0]}${suffix}`
       list.push(img)
     }
 
+    if (srcMatches.length > 0 && list.length < srcMatches.length) {
+      write_log(`[gentleman] get_subpage_images: ${srcMatches.length}条目 → 跳过(view:${skippedView} tag:${skippedTag} name:${skippedName}) → 成功${list.length}`)
+    }
     return list
   }
 
@@ -464,36 +510,38 @@ export default class Gentleman {
    */
   private async get_chapter_images(chapter: ChapterInfo, url: string = chapter.url): Promise<string[]> {
     const html = await this.get_browser_html(url)
-  
+
     // 首次进入章节时解析 CDN 前缀：打开章节内第一张图的查看页，从 imgarea 中提取 src 域名
     if (!chapter.prefix) {
       // 获取第一张图片的查看页链接（格式：/photos-view-id-xxx.html）
       const firstViewUrlMatch = html.match(/\/photos-view-id-[^\"]+/)
       const firstViewUrl = firstViewUrlMatch ? firstViewUrlMatch[0] : ''
       const viewHtml = await this.get_browser_html(this.domain + firstViewUrl)
-  
+
       // 从 id="imgarea" 的 span 中提取图片 src 的域名部分（如 t4.images.example.com/data）
       const imgAreaMatch = viewHtml.match(/<span[^>]*id=["']imgarea["'][^>]*>(.*?)<\/span>/s)
       const imgAreaContent = imgAreaMatch ? imgAreaMatch[1] : viewHtml
-  
+
       chapter.prefix = imgAreaContent.match(/(?<=src="\/\/).+?\/data/)?.[0] || ''
       // 缓存到类属性，供 get_subpage_images 中 CDN 域名替换使用
       this.textPrefix = chapter.prefix
     }
-  
+
     // 解析当前页的所有图片 URL 并追加到章节图片列表
-    chapter.images = chapter.images.concat(this.get_subpage_images(html))
-  
+    const pageImages = this.get_subpage_images(html)
+    chapter.images = chapter.images.concat(pageImages)
+
     // 查找分页导航中的「後頁」链接（位于 class="paginator" 区域内）
     const pageBox = html.match(/(?<=paginator).+?(?=f_right)/s)?.[0] || ''
     const nextPage = pageBox.match(/(?<=next"><a\shref=").+?(?=">後頁)/s)?.[0] || ''
-  
+
     if (nextPage) {
       // 拼接下一页完整 URL 并递归处理
       const page = `https://${this.domain.replace(/^https?:\/\//, '')}${nextPage}`
       return await this.get_chapter_images(chapter, page)
     }
-  
+
+    write_log(`[gentleman] ${chapter.name} 图片解析完毕，共 ${chapter.images.length} 张`)
     return chapter.images
   }
 
@@ -504,13 +552,17 @@ export default class Gentleman {
    * 文件名直接复用 URL 最后一段（如 t4_images..._185_001.jpg）
    */
   private async download_chapter_images(item: ChapterInfo): Promise<void> {
-    if (!item.images) return
+    if (!item.images || item.images.length === 0) {
+      write_log(`[gentleman] ${item.name} 无图片URL，跳过下载`)
+      return
+    }
 
     const chapterPath = path.join(this.mangaPath, item.name)
     if (!fs.existsSync(chapterPath)) {
       fs.mkdirSync(chapterPath, { recursive: true })
     }
 
+    let successCount = 0
     for (let i = 0; i < item.images.length; i++) {
       const img = item.images[i]
       const fileName = img.split('/').pop() || ''  // 取 URL 最后一段作为文件名
@@ -521,7 +573,9 @@ export default class Gentleman {
       this.onProgress?.subProgress?.(i + 1, item.images.length)
 
       await this.download_image(img, filePath)
+      if (fs.existsSync(filePath)) successCount++
     }
+    write_log(`[gentleman] ${item.name} 下载完成: ${successCount}/${item.images.length} 张成功`)
   }
 
   /**
@@ -529,9 +583,9 @@ export default class Gentleman {
    *
    * @param url      图片完整 URL
    * @param filePath 本地保存路径
-   * @param retry    最大重试次数（默认 2 次，即最多尝试 2 次后放弃）
+   * @param retry    最大重试次数（默认 7 次）
    */
-  private async download_image(url: string, filePath: string, retry = 2): Promise<void> {
+  private async download_image(url: string, filePath: string, retry = 7): Promise<void> {
     for (let attempt = 1; attempt <= retry; attempt++) {
       try {
         // 使用 AbortController 实现 30 秒超时，避免慢响应导致任务永久挂起
@@ -546,7 +600,6 @@ export default class Gentleman {
         fs.writeFileSync(filePath, Buffer.from(arrayBuffer))
         return  // 下载成功，直接返回
       } catch (err) {
-        write_log(`[download] 图片下载失败 (第 ${attempt} 次): ${url}`)
         if (attempt === retry) {
           // 所有重试均失败，记录日志并跳过此图（不抛出异常，允许流程继续）
           write_log(`[download] 图片下载最终失败，跳过: ${url}`)

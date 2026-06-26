@@ -25,6 +25,7 @@ import {
   get_config,
   isTaskAbortError,
   isTaskPauseError,
+  isTaskSkipError,
   shut_down,
   write_log,
 } from '#utils/index'
@@ -770,6 +771,13 @@ export class MangaTask extends Task {
         shouldRunCleanup = false
         this.pauseCurrentTask(error)
         write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${getErrorMessage(error)}`)
+        return result
+      }
+
+      if (isTaskSkipError(error)) {
+        result = 'failed'
+        this.failCurrentTask(error)
+        write_log(`[Task] 跳过任务: ${getErrorMessage(error)}`)
         return result
       }
 

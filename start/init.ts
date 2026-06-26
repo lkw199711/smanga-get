@@ -139,7 +139,7 @@ export function create_scan_cron() {
  */
 function hasChapterUpdate(mangaName: string, chapterCount: number, website: string, url?: string): boolean {
   // 修复模式：强制所有任务入队，用于补全损坏的 meta.json
-  if (process.env.FORCE_CHAPTER_UPDATE === '1') return true
+  // if (process.env.FORCE_CHAPTER_UPDATE === '1') return true
   // 从 URL 推断语言标签，匹配实际下载目录（与 Toomics 构造器一致）
   let configKey = website
   if (url) {
@@ -194,6 +194,11 @@ export async function task_allocation() {
         write_log(`[订阅分配] ${item.name} 无新章节 (本地已齐)，跳过入队`)
         continue
       }
+    }
+
+    // gentleman / omegascans 等非 toomics 订阅：打印入队信息
+    if (item.website !== 'toomics') {
+      write_log(`[订阅分配] ${item.website}:${item.id} ${item.name} 入队`)
     }
 
     mangaTask.add(item)

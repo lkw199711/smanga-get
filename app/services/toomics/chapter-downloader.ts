@@ -111,6 +111,47 @@ export class ToomicsChapterDownloader {
   }
 
   /**
+   * 直接下载单张图片（omegascans 风格）
+   *
+   * 用于弥补懒加载未完成的图片：创建独立页签，goto 图片 URL，
+   * 从 HTTP response buffer 获取图片数据，期间保存 cookie 防止登录态丢失。
+   *
+   * @returns buffer 或 null（失败时）
+   */
+  private async downloadImageDirectly(imageUrl: string): Promise<Buffer | null> {
+    if (!toomicsBrowser.browser) return null
+
+    const imgPage = await toomicsBrowser.new_page()
+    if (!imgPage) return null
+
+    try {
+      const gotoResponse = await imgPage
+        .goto(imageUrl, {
+          waitUntil: 'networkidle2',
+          timeout: 30 * 1000,
+        })
+        .catch(() => null)
+
+      if (!gotoResponse || !gotoResponse.ok()) {
+        return null
+      }
+
+      // 读取响应体 buffer
+      const buffer = await gotoResponse.buffer().catch(() => null)
+      if (!buffer) return null
+
+      // 保存 cookie，防止任务中断后登录态失效
+      await toomicsBrowser.save_cookie(false)
+
+      return buffer
+    } catch {
+      return null
+    } finally {
+      await imgPage.close().catch(() => {})
+    }
+  }
+
+  /**
    * 单次下载尝试（不含重试逻辑）
    *
    * 每次成功下载完成后调用 end_app()，在 cookie 已刷新的状态下尽快退出进程，
@@ -127,6 +168,7 @@ export class ToomicsChapterDownloader {
     const interfereImages: number[] = []
     let totalImages = 0
     let image403Count = 0
+    let directDownloadCount = 0
 
     const chapterPage = await toomicsBrowser.new_page()
     if (!chapterPage) return { needsRetry: false, retryIndexes: [] }
@@ -195,14 +237,23 @@ export class ToomicsChapterDownloader {
         .catch(() => {})
 
       // 从 DOM 提取所有图片 URL（id 以 "set_image_" 开头的 img 元素）
+      // 懒加载未完成的图片 src 可能是占位图，此时用 data-src 兜底
       const imageUrls: string[] = await chapterPage.evaluate(() => {
         const doc = (globalThis as any).document
         const els = doc.querySelectorAll('img[id^="set_image_"]')
-        return Array.from(els).map((el: any) => el.src)
+        return Array.from(els).map((el: any) => {
+          const src = el.getAttribute('src') || ''
+          // src 为空或为 data:image 占位图 → 回退到 data-src
+          if (!src || src.startsWith('data:image')) {
+            return el.getAttribute('data-src') || src
+          }
+          return src
+        })
       })
       totalImages = imageUrls.length
 
       // 从浏览器内存 buffer 读取图片并写入磁盘
+      // 对于 buffer 缺失或过小的图片，先用独立页签直接下载补漏
       this.onProgress?.message(`正在保存 ${chapterName} 图片 (共 ${imageUrls.length} 张)`)
       for (let i = 0; i < imageUrls.length; i++) {
         const imageUrl = imageUrls[i]
@@ -212,19 +263,30 @@ export class ToomicsChapterDownloader {
         // 重试模式下仅下载指定索引的图片
         if (reloadImageindexs.length > 0 && !reloadImageindexs.includes(i)) continue
 
-        // buffer 不存在 → 请求失败
-        if (!toomicsBrowser.buffs[imageUrl]) {
-          errImgs.push(i)
+        // buffer 缺失或过小 → 尝试直接下载补漏
+        const cached = toomicsBrowser.buffs[imageUrl]
+        if (!cached || cached.length < 250) {
+          if (!cached) {
+            // 无 buffer：可能是 data-src 兜底的图片，懒加载未完成
+          } else {
+            // buffer 过小：可能是干扰图
+          }
+          const directBuffer = await this.downloadImageDirectly(imageUrl)
+          if (directBuffer && directBuffer.length >= 250) {
+            fs.writeFileSync(localPath, directBuffer)
+            directDownloadCount++
+            continue
+          }
+          // 直接下载也失败 → 入重试列表
+          if (!cached) {
+            errImgs.push(i)
+          } else {
+            interfereImages.push(i)
+          }
           continue
         }
 
-        // buffer 体积过小（< 250 字节）→ 干扰图/占位图
-        if (toomicsBrowser.buffs[imageUrl].length < 250) {
-          interfereImages.push(i)
-          continue
-        }
-
-        fs.writeFileSync(localPath, toomicsBrowser.buffs[imageUrl])
+        fs.writeFileSync(localPath, cached)
       }
 
       // 在 clear_buffs() 之前捕获 403 计数，用于 cookie 过期检测
@@ -278,7 +340,8 @@ export class ToomicsChapterDownloader {
       // 存在干扰图或失败图片 → 合并后重试
       const interfereStr = interfereImages.length > 0 ? `, 干扰图片: ${interfereImages}` : ''
       const errorStr = errImgs.length > 0 ? `, 请求失败: ${errImgs}` : ''
-      write_log(`[chapter download] ${chapterName} 下载异常${interfereStr}${errorStr}，准备重试`)
+      const directStr = directDownloadCount > 0 ? `, 直接下载补漏: ${directDownloadCount}张` : ''
+      write_log(`[chapter download] ${chapterName} 下载异常${interfereStr}${errorStr}${directStr}，准备重试`)
       return { needsRetry: true, retryIndexes: interfereImages.concat(errImgs) }
     }
 

@@ -38,6 +38,7 @@ router.delete('/subscribe', [SubscribeController, 'remove'])
 router.delete('/subscribe/clear', [SubscribeController, 'clear'])
 
 router.get('/log', [LogController, 'get'])
+router.get('/log/dates', [LogController, 'dates'])
 router.delete('/log', [LogController, 'clear'])
 
 router.get('/manga', [MangaController, 'get'])

@@ -11,7 +11,7 @@
 
 import * as fs from 'fs'
 import path from 'path'
-import { delay, make_can_be_floder, read_json, write_log, dataRoot } from '#utils/index'
+import { delay, make_can_be_floder, read_json, write_log, dataRoot, TaskSkipError } from '#utils/index'
 import { humanScroll } from '#utils/human'
 import { toomicsBrowser } from '#api/browser'
 import { subscribe_remove } from '#api/subsribe'
@@ -452,6 +452,19 @@ export class ToomicsMetaFetcher {
       )
 
       const mangaUrl = `https://toomics.com/${this.langTag}/webtoon/episode/toon/${this.mangaId}`
+
+      // 监听 alert 弹窗：检测下架通知并跳过
+      let mangaTakenDown = false
+      const dialogListener = async (dialog: any) => {
+        const msg: string = dialog.message?.() || ''
+        await dialog.dismiss().catch(() => {})
+        if (msg.includes('下架') || msg.includes('合約中止')) {
+          mangaTakenDown = true
+          write_log(`[toomics] ${this.mangaName} 已下架: ${msg}`)
+        }
+      }
+      metaPage.on('dialog', dialogListener)
+
       await metaPage
         .goto(mangaUrl, {
           waitUntil: 'networkidle2',
@@ -461,6 +474,14 @@ export class ToomicsMetaFetcher {
         .catch(() => {})
 
       await delay(1000)
+
+      // 解除 dialog 监听
+      metaPage.off('dialog', dialogListener)
+
+      // 检测下架通知弹窗
+      if (mangaTakenDown) {
+        throw new TaskSkipError(`漫画已下架: ${this.mangaName}`)
+      }
 
       // 检测手机号验证弹框（若存在则抛出 TaskPauseError 暂停任务）
       await ToomicsBrowserSession.pauseIfMobileVerificationVisible(
