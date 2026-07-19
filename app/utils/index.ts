@@ -6,7 +6,7 @@ import * as path from 'path'
 
 const dataDir = process.env.DATA_DIR
 export const dataRoot = dataDir
-  ? (dataDir.endsWith('/') ? dataDir : dataDir + '/')
+  ? path.normalize(dataDir) + path.sep
   : (get_os() === 'Linux' ? '/' : '')
 
 /** 替代 os.tmpdir()：返回动态数据根路径（基于 DATA_DIR），测试环境即为隔离的临时目录 */
@@ -14,8 +14,8 @@ export function testTmpDir() {
   return dataRoot
 }
 
-const configFile = dataRoot + 'data/config.json'
-const failedChaptersFile = dataRoot + 'data/failed-chapters.json'
+const configFile = path.join(dataRoot, 'data', 'config.json')
+const failedChaptersFile = path.join(dataRoot, 'data', 'failed-chapters.json')
 function getLogFile(): string {
   const dir = path.join(dataRoot, 'data', 'logs')
   const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
@@ -168,7 +168,9 @@ export function write_log(logContent: string) {
 }
 
 export function get_log() {
-  return fs.readFileSync(getLogFile(), 'utf-8')
+  const logPath = getLogFile()
+  if (!fs.existsSync(logPath)) return ''
+  return fs.readFileSync(logPath, 'utf-8')
 }
 
 /**

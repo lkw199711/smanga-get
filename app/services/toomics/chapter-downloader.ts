@@ -111,24 +111,38 @@ export class ToomicsChapterDownloader {
   }
 
   /**
-   * 直接下载单张图片（omegascans 风格）
+   * 直接下载单张图片（模拟浏览器行为）
    *
    * 用于弥补懒加载未完成的图片：创建独立页签，goto 图片 URL，
    * 从 HTTP response buffer 获取图片数据，期间保存 cookie 防止登录态丢失。
    *
+   * 携带 chapterUrl 作为 Referer + 图片 Accept 头，还原真实浏览器加载行为，
+   * 避免 Toomics CDN 防盗链返回 403。
+   *
+   * @param imageUrl 图片资源地址
+   * @param chapterUrl 章节页面地址，用作 Referer
    * @returns buffer 或 null（失败时）
    */
-  private async downloadImageDirectly(imageUrl: string): Promise<Buffer | null> {
+  private async downloadImageDirectly(imageUrl: string, chapterUrl: string): Promise<Buffer | null> {
     if (!toomicsBrowser.browser) return null
 
     const imgPage = await toomicsBrowser.new_page()
     if (!imgPage) return null
 
     try {
+      // 模拟真实浏览器加载图片时的请求头
+      await imgPage.setExtraHTTPHeaders({
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Sec-Fetch-Dest': 'image',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'same-site',
+      })
+
       const gotoResponse = await imgPage
         .goto(imageUrl, {
           waitUntil: 'networkidle2',
           timeout: 30 * 1000,
+          referer: chapterUrl,
         })
         .catch(() => null)
 
@@ -271,7 +285,7 @@ export class ToomicsChapterDownloader {
           } else {
             // buffer 过小：可能是干扰图
           }
-          const directBuffer = await this.downloadImageDirectly(imageUrl)
+          const directBuffer = await this.downloadImageDirectly(imageUrl, chapter.url)
           if (directBuffer && directBuffer.length >= 250) {
             fs.writeFileSync(localPath, directBuffer)
             directDownloadCount++

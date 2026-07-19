@@ -38,8 +38,8 @@ interface MangaInfo {
 
 export default class ToomicsAll {
   private langTag: string = 'tc'            // 语言标签，默认繁体中文
-  private coverPath: string = dataRoot + 'data/toomics-covers'  // 封面图片缓存目录
-  private jsonFile: string = dataRoot + 'data/toomics-all.json' // 漫画列表 JSON 文件
+  private coverPath: string = path.join(dataRoot, 'data', 'toomics-covers')  // 封面图片缓存目录
+  private jsonFile: string = path.join(dataRoot, 'data', 'toomics-all.json') // 漫画列表 JSON 文件
   private scrollStep: number = 400          // 人类化滚动步长（像素）
   private scrollDelay: number = 500         // 人类化滚动延迟（毫秒）
   private browser: UseBrowser               // 浏览器实例（根据 nouser 选择有/无用户版本）
@@ -72,7 +72,8 @@ export default class ToomicsAll {
 
     // 检查当日快照
     const snapshotDir = path.join(dataRoot, 'data', 'snapshots', 'toomics')
-    const today = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const snapshotFile = path.join(snapshotDir, `${today}-${this.langTag}-all.json`)
 
     if (fs.existsSync(snapshotFile)) {

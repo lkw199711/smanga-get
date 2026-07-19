@@ -11,7 +11,7 @@ export default class SubscribesController {
     add({ request }: HttpContext) {
         const { website, id, name, mangaUrl, moveEndSubscribe } = request.all()
 
-        if (!website || !id || !name) {
+        if (!website || id === null || id === undefined || id === '' || !name) {
             return {
                 code: 400,
                 message: 'Missing parameters',
@@ -86,7 +86,7 @@ export default class SubscribesController {
     remove({ request }: HttpContext) {
         const { website, id, name } = request.all()
 
-        if (!website || !id) {
+        if (!website || id === null || id === undefined || id === '') {
             return {
                 code: 400,
                 message: 'Missing parameters',

@@ -22,7 +22,7 @@ let toomicsTcUpdateCron: any = { stop: () => { } }
 
 const crons = [subsribeCron, toomicsScAllCoversCron, toomicsTcAllCoversCron, toomicsScUpdateCron, toomicsTcUpdateCron];
 
-const dataPath = dataRoot + 'data/'
+const dataPath = path.join(dataRoot, 'data')
 
 export function create_config() {
   if (!fs.existsSync(dataPath)) {
