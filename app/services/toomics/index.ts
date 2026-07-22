@@ -117,9 +117,9 @@ export default class Toomics {
     this.config = config
     this.mangaId = Number(params.id)
     this.mangaName = make_can_be_floder(params.name)
-    this.mangaPath = `${this.downloadPath}/${this.mangaName}`
-    this.mangaCompressPath = `${this.compressPath}/${this.mangaName}`
-    this.metaFolder = `${this.mangaPath}/.smanga`
+    this.mangaPath = path.join(this.downloadPath, this.mangaName)
+    this.mangaCompressPath = path.join(this.compressPath, this.mangaName)
+    this.metaFolder = path.join(this.mangaPath, '.smanga')
     this.downloadLockedMeta = config?.downloadLockedMeta
     this.userName = config?.userName || ''
     this.passWord = config?.passWord || ''
@@ -172,7 +172,7 @@ export default class Toomics {
     console.log(`${this.mangaName} 正在分析`)
 
     // 跳过已完整下载的漫画
-    if (this.jumpExist && fs.existsSync(`${this.downloadPath}/${this.mangaName}`)) {
+    if (this.jumpExist && fs.existsSync(path.join(this.downloadPath, this.mangaName))) {
       write_log(`[toomics] ${this.mangaName} 已存在，跳过`)
       return
     }
@@ -213,8 +213,8 @@ export default class Toomics {
     // 若标题与订阅名不同，更新相关路径和下载器实例
     if (this.mangaName !== mangaName) {
       this.mangaName = mangaName
-      this.mangaPath = `${this.downloadPath}/${this.mangaName}`
-      this.mangaCompressPath = `${this.compressPath}/${this.mangaName}`
+      this.mangaPath = path.join(this.downloadPath, this.mangaName)
+      this.mangaCompressPath = path.join(this.compressPath, this.mangaName)
       this.chapterDownloader = new ToomicsChapterDownloader({
         mangaName: this.mangaName,
         mangaUrl: this.mangaUrl,
@@ -250,7 +250,7 @@ export default class Toomics {
     const indexResult = await tryIndexMangaMetaFile(metaFile, {
       website: this.website,
       source: 'download',
-      sourcePath: `${this.downloadPath}/${this.mangaName}`,
+      sourcePath: path.join(this.downloadPath, this.mangaName),
     })
     const mangaResultId = indexResult?.indexId ?? 0
 
@@ -323,13 +323,13 @@ export default class Toomics {
 
     for (const chapter of this.chapters) {
       const chapterName = make_can_be_floder(chapter.name)
-      const chapterFolder = `${this.downloadPath}/${this.mangaName}/${chapterName}`
+      const chapterFolder = path.join(this.downloadPath, this.mangaName, chapterName)
       let alreadyHas = false
 
       if (fs.existsSync(chapterFolder)) {
         const files = fs.readdirSync(chapterFolder)
         if (files.length > 0) alreadyHas = true
-      } else if (fs.existsSync(`${this.compressPath}/${this.mangaName}/${chapterName}.zip`)) {
+      } else if (fs.existsSync(path.join(this.compressPath, this.mangaName, chapterName + '.zip'))) {
         alreadyHas = true
       }
 
@@ -356,8 +356,8 @@ export default class Toomics {
     // 修复模式：强制跳过章节更新检查，重新下载
     // if (process.env.FORCE_CHAPTER_UPDATE === '1') return true
 
-    const mangaFolder = `${this.downloadPath}/${this.mangaName}`
-    const compressFolder = `${this.compressPath}/${this.mangaName}`
+    const mangaFolder = path.join(this.downloadPath, this.mangaName)
+    const compressFolder = path.join(this.compressPath, this.mangaName)
 
     // 统计本地已下载的章节目录数（排除 .smanga 元数据目录）
     let localChapters: string[] = []

@@ -272,7 +272,7 @@ export class ToomicsChapterDownloader {
       for (let i = 0; i < imageUrls.length; i++) {
         const imageUrl = imageUrls[i]
         const picName = i.toString().padStart(5, '0')
-        const localPath = `${downloadPath}/${picName}.jpg`
+        const localPath = path.join(downloadPath, picName + '.jpg')
 
         // 重试模式下仅下载指定索引的图片
         if (reloadImageindexs.length > 0 && !reloadImageindexs.includes(i)) continue

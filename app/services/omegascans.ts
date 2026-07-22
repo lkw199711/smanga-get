@@ -57,10 +57,10 @@ export default class OmegaScans {
     this.downloadChapterLimit = Number(config?.downloadChapterLimit || 0)
     this.e2eFastMode = Boolean(config?.e2eFastMode)
 
-    this.mangaFolder = `${this.downloadPath}/${this.name}`
-    this.metaFolder = `${this.downloadPath}/${this.name}/.smanga`
-    this.mangaPath = `${this.downloadPath}/${this.name}`
-    this.mangaCompressPath = `${this.compressPath}/${this.name}`
+    this.mangaFolder = path.join(this.downloadPath, this.name)
+    this.metaFolder = path.join(this.downloadPath, this.name, '.smanga')
+    this.mangaPath = path.join(this.downloadPath, this.name)
+    this.mangaCompressPath = path.join(this.compressPath, this.name)
     if (onProgress) this.onProgress = onProgress
   }
 
@@ -91,7 +91,7 @@ export default class OmegaScans {
     this.onProgress?.setTotal(validChapters.length)
 
     // 先建立 manga_result，获取 mangaResultId 供逐章入库使用
-    const indexResult = await tryIndexMangaMetaFile(`${this.metaFolder}/meta.json`, {
+    const indexResult = await tryIndexMangaMetaFile(path.join(this.metaFolder, 'meta.json'), {
       website: 'omegascans',
       source: 'download',
       sourcePath: this.mangaFolder,
@@ -148,8 +148,8 @@ export default class OmegaScans {
    * @returns 是否有更新
    */
   async check_update() {
-    const mangaFloder = `${this.downloadPath}/${this.mangaName}`
-    const compressFloder = `${this.compressPath}/${this.mangaName}`
+    const mangaFloder = path.join(this.downloadPath, this.mangaName)
+    const compressFloder = path.join(this.compressPath, this.mangaName)
     let mangaChapterFloders: any = []
     let mangacompressChapterFloders = []
     // 筛选目录中的章节文件夹
@@ -186,7 +186,7 @@ export default class OmegaScans {
     if (!omegascansBrowser?.browser) return
 
     const chapterName = make_can_be_floder(chapter.name)
-    const chapterFolder = `${this.mangaFolder}/${chapterName}`
+    const chapterFolder = path.join(this.mangaFolder, chapterName)
 
     // 已下载 跳过
     if (fs.existsSync(chapterFolder)) {
@@ -194,7 +194,7 @@ export default class OmegaScans {
       if (files.length > 0) {
         return
       }
-    } else if (fs.existsSync(`${this.compressPath}/${this.mangaName}/${chapterName}.zip`)) {
+    } else if (fs.existsSync(path.join(this.compressPath, this.mangaName, chapterName + '.zip'))) {
       return
     } else {
       // 创建章节文件夹
@@ -265,7 +265,7 @@ export default class OmegaScans {
     for (let i = 0; i < imageUrls.length; i++) {
       const imageUrl = imageUrls[i]
       const imageName = `${i.toString().padStart(5, '0')}.jpg`
-      const imagePath = `${chapterFolder}/${imageName}`
+      const imagePath = path.join(chapterFolder, imageName)
 
       this.onProgress?.message(`正在下载章节: ${chapter.name} (${i + 1}/${imageUrls.length})`)
       this.onProgress?.subProgress(i + 1, imageUrls.length)
@@ -405,32 +405,34 @@ export default class OmegaScans {
     meta.chapters = chapters
     this.meta = meta
 
-    if (fs.existsSync(`${this.metaFolder}/meta.json`)) {
-      const existingMeta = read_json(`${this.metaFolder}/meta.json`)
+    const metaJsonPath = path.join(this.metaFolder, 'meta.json')
+    if (fs.existsSync(metaJsonPath)) {
+      const existingMeta = read_json(metaJsonPath)
       if (existingMeta.chapters.length < meta.chapters.length) {
-        fs.writeFileSync(`${this.metaFolder}/meta.json`, JSON.stringify(meta, null, 2), 'utf-8')
+        fs.writeFileSync(metaJsonPath, JSON.stringify(meta, null, 2), 'utf-8')
       }
     } else {
-      fs.writeFileSync(`${this.metaFolder}/meta.json`, JSON.stringify(meta, null, 2), 'utf-8')
+      fs.writeFileSync(metaJsonPath, JSON.stringify(meta, null, 2), 'utf-8')
     }
 
     // 下载封面和章节封面
-    if (!fs.existsSync(`${this.metaFolder}/cover.jpg`)) {
+    const coverPath = path.join(this.metaFolder, 'cover.jpg')
+    if (!fs.existsSync(coverPath)) {
       if (!meta.cover) {
         write_log(`[manga cover]漫画 ${meta.title}，没有封面链接`)
         return
       } else {
-        await this.download_image(meta.cover, `${this.metaFolder}/cover.jpg`).catch(() => {
+        await this.download_image(meta.cover, coverPath).catch(() => {
           write_log(`[manga cover]封面下载失败 ${meta.title}`)
         })
       }
     }
 
     for (const chapter of chapters) {
-      const chapterCover = `${this.mangaFolder}/${chapter.name}.jpg`
-      const compressChapterCover = `${this.compressPath}/${this.mangaName}/${chapter.name}.jpg`
-      const metaCacheChapterCover = `C:\\12manga-meta-cache/${this.mangaName}/${chapter.name}.jpg`
-      const metaChapterCover = `C:\\12manga-meta/${this.mangaName}/${chapter.name}.jpg`
+      const chapterCover = path.join(this.mangaFolder, chapter.name + '.jpg')
+      const compressChapterCover = path.join(this.compressPath, this.mangaName, chapter.name + '.jpg')
+      const metaCacheChapterCover = path.join('C:', '12manga-meta-cache', this.mangaName, chapter.name + '.jpg')
+      const metaChapterCover = path.join('C:', '12manga-meta', this.mangaName, chapter.name + '.jpg')
 
       if (fs.existsSync(metaCacheChapterCover)) continue
       if (fs.existsSync(metaChapterCover)) continue
