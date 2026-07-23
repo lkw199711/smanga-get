@@ -10,9 +10,10 @@ import {
   resolveAllowedMangaAsset,
 } from '#api/manga'
 import { getTestDataDir, getTestDataFile, resetTestDataDir } from '#tests/helpers/test_data_dir'
+import { get_os_suffix } from '#utils/index'
 
 function writeConfig(config: any) {
-  fs.writeFileSync(getTestDataFile('config.json'), JSON.stringify(config, null, 2), 'utf-8')
+  fs.writeFileSync(getTestDataFile(`config.${get_os_suffix()}.json`), JSON.stringify(config, null, 2), 'utf-8')
 }
 
 function writeMangaMeta(

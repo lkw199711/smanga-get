@@ -22,12 +22,13 @@ const require = createRequire(import.meta.url)
   const fs = require('node:fs')
   // 先设 DATA_DIR，确保 require utils 时 dataRoot 正确初始化
   process.env.DATA_DIR = path.resolve('data', 'test-tmp')
-  const { testTmpDir } = require('../app/utils/index.js')
+  const { testTmpDir, get_os_suffix } = require('../app/utils/index.js')
   const TEST_DATA_DIR = testTmpDir()
+  const osSuffix = get_os_suffix()
   fs.mkdirSync(path.join(TEST_DATA_DIR, 'data'), { recursive: true })
   // 复制生产配置到隔离目录（保留 cookie/账号等凭据）
-  const prodConfigPath = path.resolve('data', 'config.json')
-  const testConfigPath = path.join(TEST_DATA_DIR, 'data', 'config.json')
+  const prodConfigPath = path.resolve('data', `config.${osSuffix}.json`)
+  const testConfigPath = path.join(TEST_DATA_DIR, 'data', `config.${osSuffix}.json`)
   if (fs.existsSync(prodConfigPath) && !fs.existsSync(testConfigPath)) {
     fs.copyFileSync(prodConfigPath, testConfigPath)
   }

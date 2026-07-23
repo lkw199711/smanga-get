@@ -14,7 +14,7 @@ export function testTmpDir() {
   return dataRoot
 }
 
-const configFile = path.join(dataRoot, 'data', 'config.json')
+const configFile = path.join(dataRoot, 'data', `config.${get_os_suffix()}.json`)
 const failedChaptersFile = path.join(dataRoot, 'data', 'failed-chapters.json')
 function getLogFile(): string {
   const dir = path.join(dataRoot, 'data', 'logs')
@@ -109,9 +109,19 @@ export function get_os() {
     return 'Windows'
   } else if (platform === 'linux') {
     return 'Linux'
+  } else if (platform === 'darwin') {
+    return 'Darwin'
   } else {
     return 'Other'
   }
+}
+
+/**
+ * 获取当前操作系统的标识字符串，用于配置文件后缀
+ * Windows → 'windows', Linux → 'linux', macOS → 'darwin'
+ */
+export function get_os_suffix(): string {
+  return get_os().toLowerCase()
 }
 
 export async function downloadImage(url: string, path: string): Promise<void> {

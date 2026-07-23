@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -384,7 +385,8 @@ Gentleman 漫画目录空格命名迁移脚本
   console.log('')
 
   // 读取配置
-  const configFile = path.join(dataPath, 'config.json')
+  const osSuffix = ({ win32: 'windows', linux: 'linux', darwin: 'darwin' })[os.platform()] || 'other'
+  const configFile = path.join(dataPath, `config.${osSuffix}.json`)
   const config = readJson(configFile)
   if (!config) {
     console.error(`错误：无法读取配置文件 ${configFile}`)
