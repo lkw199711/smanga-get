@@ -88,7 +88,14 @@ export default class OmegaScans {
 
     const chaptersToDownload = this.limitChaptersToDownload(this.meta.chapters)
     const validChapters = chaptersToDownload.filter((c: any) => c.price <= 0)
-    this.onProgress?.setTotal(validChapters.length)
+    // 进入下载循环前过滤本地已存在的章节，避免对已下载章节执行任何后置步骤
+    const pendingChapters = validChapters.filter((c: any) => !this.chapter_exists(c))
+    const paidCount = chaptersToDownload.length - validChapters.length
+    const existCount = validChapters.length - pendingChapters.length
+    write_log(
+      `[subscribe]${this.name} 章节共 ${chaptersToDownload.length}，付费跳过 ${paidCount}，本地已存在 ${existCount}，待下载 ${pendingChapters.length}`
+    )
+    this.onProgress?.setTotal(pendingChapters.length)
 
     // 先建立 manga_result，获取 mangaResultId 供逐章入库使用
     const indexResult = await tryIndexMangaMetaFile(path.join(this.metaFolder, 'meta.json'), {
@@ -99,16 +106,15 @@ export default class OmegaScans {
     const mangaResultId = indexResult?.indexId ?? 0
 
     let downloadedCount = 0
-    for (const chapter of chaptersToDownload) {
-      if (chapter.price > 0) {
-        write_log(
-          `[subscribe]${this.name} 章节 ${chapter.name} 需要付费 ${chapter.price}，跳过下载`
-        )
-        continue
-      }
+    for (const chapter of pendingChapters) {
       end_app() // 结束应用
       this.onProgress?.message(`正在下载章节: ${chapter.name}`)
-      await this.download_chapter(chapter)
+      const downloaded = await this.download_chapter(chapter)
+      // 已下载章节被跳过时，不入库、不清缓存、不执行章节间延时，直接进入下一话
+      if (!downloaded) {
+        this.onProgress?.report(`${chapter.name} 已存在，跳过`)
+        continue
+      }
       downloadedCount++
       // 逐章入库：记录本次实际下载的章节
       if (mangaResultId > 0) {
@@ -141,6 +147,19 @@ export default class OmegaScans {
     if (this.e2eFastMode) return
 
     await betweenChapterDelay()
+  }
+
+  /**
+   * @description 检查章节是否已存在于本地（章节目录非空或存在压缩包）
+   */
+  private chapter_exists(chapter: any): boolean {
+    const chapterName = make_can_be_floder(chapter.name)
+    const chapterFolder = path.join(this.mangaFolder, chapterName)
+
+    if (fs.existsSync(chapterFolder)) {
+      return fs.readdirSync(chapterFolder).length > 0
+    }
+    return fs.existsSync(path.join(this.compressPath, this.mangaName, chapterName + '.zip'))
   }
 
   /**
@@ -182,21 +201,21 @@ export default class OmegaScans {
     return false
   }
 
-  async download_chapter(chapter: any) {
-    if (!omegascansBrowser?.browser) return
+  /**
+   * @description 下载章节
+   * @returns 是否实际执行了下载（本地已存在被跳过时返回 false）
+   */
+  async download_chapter(chapter: any): Promise<boolean> {
+    if (!omegascansBrowser?.browser) return false
 
     const chapterName = make_can_be_floder(chapter.name)
     const chapterFolder = path.join(this.mangaFolder, chapterName)
 
-    // 已下载 跳过
-    if (fs.existsSync(chapterFolder)) {
-      const files = fs.readdirSync(chapterFolder)
-      if (files.length > 0) {
-        return
-      }
-    } else if (fs.existsSync(path.join(this.compressPath, this.mangaName, chapterName + '.zip'))) {
-      return
-    } else {
+    // 已下载 跳过（双保险，外层循环已提前过滤）
+    if (this.chapter_exists(chapter)) {
+      return false
+    }
+    if (!fs.existsSync(chapterFolder)) {
       // 创建章节文件夹
       await fs.promises.mkdir(chapterFolder, { recursive: true })
     }
@@ -229,8 +248,7 @@ export default class OmegaScans {
         throw pageError // 重新抛出错误以便上层处理
       }
       write_log(`[chapter download]重试第 ${this.retry} 次`)
-      await this.download_chapter(chapter) // 重试下载
-      return
+      return await this.download_chapter(chapter) // 重试下载
     }
 
     // page.goto 成功，不重置 retry（下面还有 HTML 匹配可能失败）
@@ -259,8 +277,7 @@ export default class OmegaScans {
         throw new Error(`chapter download failed after ${this.retry} retries`)
       }
       write_log(`[chapter download]重试第 ${this.retry} 次`)
-      await this.download_chapter(chapter) // 重试下载
-      return
+      return await this.download_chapter(chapter) // 重试下载
     }
     for (let i = 0; i < imageUrls.length; i++) {
       const imageUrl = imageUrls[i]
@@ -306,6 +323,7 @@ export default class OmegaScans {
 
     this.retry = 0 // 成功，重置章节重试次数
     write_log(`[chapter download]漫画 ${this.name} ${chapter.name} 章节下载完成 `)
+    return true
   }
 
   async get_meta() {
