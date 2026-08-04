@@ -337,7 +337,6 @@ export default class Gentleman {
         })
 
       const html = await page.content()
-      write_log(`[gentleman] get_browser_html: html长度=${html.length}, goto成功=${!!gotoResult}, url=${url.slice(0, 80)}`)
       return html
     } finally {
       await page.close().catch(() => {})

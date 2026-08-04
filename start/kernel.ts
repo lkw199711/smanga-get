@@ -60,7 +60,7 @@ const isTestEnvironment = process.env.NODE_ENV === 'test'
 
 if (process.env.SMANGA_KERNEL_DEBUG === 'game-organize') {
   const { default: GameOrganize } = await import('#services/game-organize')
-  await new GameOrganize('D:\\17H-game整理\\06').execute()
+  await new GameOrganize('D:\\17H-game整理\\07').execute()
   process.exit()
 }
 
