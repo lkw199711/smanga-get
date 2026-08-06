@@ -4,6 +4,7 @@ import { subscribe_read } from '#api/subsribe'
 import type { subsribeType } from '#type/index.js'
 import { write_log } from '#utils/index'
 import { repair_meta_queue, scan_broken_meta, clean_legacy_meta_dirs } from '../../start/init.js'
+import { normalizeImportedTasks } from '#api/task_import'
 
 type TaskTriggerType = 'toomics' | 'toptoon' | 'omegascans' | 'gentleman'
 
@@ -33,6 +34,27 @@ export default class TasksController {
         return {
             code: 200,
             message: 'Task added successfully',
+        }
+    }
+
+    importTasks({ request }: HttpContext) {
+        try {
+            const tasks = normalizeImportedTasks(request.input('tasks'))
+
+            tasks.forEach((task) => mangaTask.add(task))
+            write_log(`[task]从 JSON 文件导入 ${tasks.length} 个任务`)
+
+            return {
+                code: 200,
+                message: `成功导入 ${tasks.length} 个任务`,
+                imported: tasks.length,
+            }
+        } catch (error) {
+            return {
+                code: 400,
+                message: error instanceof Error ? error.message : '任务导入失败',
+                imported: 0,
+            }
         }
     }
 

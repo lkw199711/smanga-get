@@ -22,6 +22,7 @@ router.get('/', async () => {
 })
 
 router.post('/task', [TaskController, 'add'])
+router.post('/task/import', [TaskController, 'importTasks'])
 router.get('/task', [TaskController, 'get'])
 router.post('/task/trigger', [TaskController, 'trigger'])
 router.put('/task/reorder', [TaskController, 'reorder'])

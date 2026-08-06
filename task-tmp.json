@@ -1,0 +1,482 @@
+{
+    "manga": [
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "兄友之恋~和哥哥的朋友们在一起／哥哥朋友",
+            "url": "https://www.wnacg.ru/search/?q=%E5%85%84%E5%8F%8B%E4%B9%8B%E6%81%8B%7E%E5%92%8C%E5%93%A5%E5%93%A5%E7%9A%84%E6%9C%8B%E5%8F%8B%E4%BB%AC%E5%9C%A8%E4%B8%80%E8%B5%B7%EF%BC%8F%E5%93%A5%E5%93%A5%E6%9C%8B%E5%8F%8B&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "8fba899c-ae7b-4da4-adb8-ed00221e5ed5"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "鬼怪新娘",
+            "url": "https://www.wnacg.ru/search/?q=%E9%AC%BC%E6%80%AA%E6%96%B0%E5%A8%98&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "33c00bf8-0334-45c4-bcf5-1c8bc0e566e0"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "虐美人",
+            "url": "https://www.wnacg.ru/search/?q=%E8%99%90%E7%BE%8E%E4%BA%BA&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "c2b4b545-147e-46eb-a71b-21af24418def"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "Kill+Switch",
+            "url": "https://www.wnacg.ru/search/?q=Kill+Switch&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "0c6b316a-c0fe-4952-a497-95e9588bca03"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "瑪麗與亞歷克絲",
+            "url": "https://www.wnacg.ru/search/?q=%E7%91%AA%E9%BA%97%E8%88%87%E4%BA%9E%E6%AD%B7%E5%85%8B%E7%B5%B2&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "89e2629d-76ad-4f2e-b7bd-40392f4cc855"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "尋找金代理",
+            "url": "https://www.wnacg.ru/search/?q=%E5%B0%8B%E6%89%BE%E9%87%91%E4%BB%A3%E7%90%86&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "5deeb9e7-7cd5-46c8-a1ca-5af31992e390"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "壞想法日記+BAD+THINKING+DIARY",
+            "url": "https://www.wnacg.ru/search/?q=%E5%A3%9E%E6%83%B3%E6%B3%95%E6%97%A5%E8%A8%98+BAD+THINKING+DIARY&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "6df9fc5b-d412-4157-8cbb-74abda4c9f6c"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "我與她的曲線",
+            "url": "https://www.wnacg.ru/search/?q=%E6%88%91%E8%88%87%E5%A5%B9%E7%9A%84%E6%9B%B2%E7%B7%9A&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "a13302c0-3925-4355-9436-faddf29ffc8c"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "討厭妳",
+            "url": "https://www.wnacg.ru/search/?q=%E8%A8%8E%E5%8E%AD%E5%A6%B3&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "ea437c83-fc55-4fcd-b8e7-b5b2b9d9233f"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "吃掉妳♥(eat+u+up)",
+            "url": "https://www.wnacg.ru/search/?q=%E5%90%83%E6%8E%89%E5%A6%B3%E2%99%A5%28eat+u+up%29&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "b9b2fd00-5897-4df2-aee7-0c712ea5893f"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "來我家玩吧！",
+            "url": "https://www.wnacg.ru/search/?q=%E4%BE%86%E6%88%91%E5%AE%B6%E7%8E%A9%E5%90%A7%EF%BC%81&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "7a55fcbf-d210-4488-9947-2b2c193b7ce1"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "Barrel",
+            "url": "https://www.wnacg.ru/search/?q=Barrel&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "c571957d-07cd-4b5e-b1b9-b448c5d57921"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "尾曲",
+            "url": "https://www.wnacg.ru/search/?q=%E5%B0%BE%E6%9B%B2&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "ac5e6ded-bb84-45f0-9a62-99fb0dfcc71d"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "Living+Will／救贖",
+            "url": "https://www.wnacg.ru/search/?q=Living+Will%EF%BC%8F%E6%95%91%E8%B4%96&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "bae204d0-e3f3-47c5-92b7-bfa30eddcdbf"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "老闆，我要辭職",
+            "url": "https://www.wnacg.ru/search/?q=%E8%80%81%E9%97%86%EF%BC%8C%E6%88%91%E8%A6%81%E8%BE%AD%E8%81%B7&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "71e601b9-f1e0-4945-b669-2aae52f6b627"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "馴服格雷斯",
+            "url": "https://www.wnacg.ru/search/?q=%E9%A6%B4%E6%9C%8D%E6%A0%BC%E9%9B%B7%E6%96%AF&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "c441182d-27ae-4f06-bdb7-94a590530df9"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "她的妻子",
+            "url": "https://www.wnacg.ru/search/?q=%E5%A5%B9%E7%9A%84%E5%A6%BB%E5%AD%90&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "cae595d0-e095-4948-bfd2-0b48ace3cb01"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "野百合與紫羅蘭",
+            "url": "https://www.wnacg.ru/search/?q=%E9%87%8E%E7%99%BE%E5%90%88%E8%88%87%E7%B4%AB%E7%BE%85%E8%98%AD&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "8ccbba14-b932-4d50-828e-7bb0ca307993"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "她的召喚獸",
+            "url": "https://www.wnacg.ru/search/?q=%E5%A5%B9%E7%9A%84%E5%8F%AC%E5%96%9A%E7%8D%B8&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "b639884d-490f-43c0-a794-220dc93e6ea1"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "庄司二号]+同じゼミの染谷さんがAV女優だった話。",
+            "url": "https://www.wnacg.ru/search/?q=%E5%BA%84%E5%8F%B8%E4%BA%8C%E5%8F%B7%5D+%E5%90%8C%E3%81%98%E3%82%BC%E3%83%9F%E3%81%AE%E6%9F%93%E8%B0%B7%E3%81%95%E3%82%93%E3%81%8CAV%E5%A5%B3%E5%84%AA%E3%81%A0%E3%81%A3%E3%81%9F%E8%A9%B1%E3%80%82&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "a1e5cbb9-aefe-4947-9cca-1d5230302327"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "Scandal+of+the+Witch+妖女之禍",
+            "url": "https://www.wnacg.ru/search/?q=Scandal+of+the+Witch+%E5%A6%96%E5%A5%B3%E4%B9%8B%E7%A6%8D&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "cd29a95c-4937-4743-bbb3-505c22566e63"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "無名島",
+            "url": "https://www.wnacg.ru/search/?q=%E7%84%A1%E5%90%8D%E5%B3%B6&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "7521d06f-27de-486c-9254-6dce860ab308"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "今天有空嗎？",
+            "url": "https://www.wnacg.ru/search/?q=%E4%BB%8A%E5%A4%A9%E6%9C%89%E7%A9%BA%E5%97%8E%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "95c4e8a2-a8bc-4ed3-a690-cb14c68625d0"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "今天加班好咩？",
+            "url": "https://www.wnacg.ru/search/?q=%E4%BB%8A%E5%A4%A9%E5%8A%A0%E7%8F%AD%E5%A5%BD%E5%92%A9%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "c41d1669-04a2-4055-82ab-19c7ce66dbaf"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "Mom+cafe",
+            "url": "https://www.wnacg.ru/search/?q=Mom+cafe&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "3130937d-df60-487a-b29b-63ede061fc8e"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "前男友前女友／分手那些事",
+            "url": "https://www.wnacg.ru/search/?q=%E5%89%8D%E7%94%B7%E5%8F%8B%E5%89%8D%E5%A5%B3%E5%8F%8B%EF%BC%8F%E5%88%86%E6%89%8B%E9%82%A3%E4%BA%9B%E4%BA%8B&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "9eb8946a-3cf2-4838-a351-2e742fd294fc"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "一起享用吧？",
+            "url": "https://www.wnacg.ru/search/?q=%E4%B8%80%E8%B5%B7%E4%BA%AB%E7%94%A8%E5%90%A7%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "f256fe57-ad2d-49cc-84f6-447b94711604"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "派愛達人",
+            "url": "https://www.wnacg.ru/search/?q=%E6%B4%BE%E6%84%9B%E9%81%94%E4%BA%BA&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "6a77e9de-c4b8-46e4-bcab-4511a43c2e84"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "無法自拔",
+            "url": "https://www.wnacg.ru/search/?q=%E7%84%A1%E6%B3%95%E8%87%AA%E6%8B%94&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "90047915-3017-4cad-a8f9-23ea40eb73a8"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "青澀男孩初體驗",
+            "url": "https://www.wnacg.ru/search/?q=%E9%9D%92%E6%BE%80%E7%94%B7%E5%AD%A9%E5%88%9D%E9%AB%94%E9%A9%97&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "4b16d69f-588e-401d-afc0-97501d125d33"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "難攻不落的女孩是系上最M的變態！？",
+            "url": "https://www.wnacg.ru/search/?q=%E9%9B%A3%E6%94%BB%E4%B8%8D%E8%90%BD%E7%9A%84%E5%A5%B3%E5%AD%A9%E6%98%AF%E7%B3%BB%E4%B8%8A%E6%9C%80M%E7%9A%84%E8%AE%8A%E6%85%8B%EF%BC%81%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "73da4350-12e1-4ef3-8d42-c958e246598a"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "你劈腿了嗎？",
+            "url": "https://www.wnacg.ru/search/?q=%E4%BD%A0%E5%8A%88%E8%85%BF%E4%BA%86%E5%97%8E%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "a905d904-8b1e-448c-8a0e-4ac56fbd5b01"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "朋友的妻子：有妳在的家",
+            "url": "https://www.wnacg.ru/search/?q=%E6%9C%8B%E5%8F%8B%E7%9A%84%E5%A6%BB%E5%AD%90%EF%BC%9A%E6%9C%89%E5%A6%B3%E5%9C%A8%E7%9A%84%E5%AE%B6&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "e80c8543-0c55-4b2f-9f6d-cdea052a0339"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "戀愛前奏曲：歸來",
+            "url": "https://www.wnacg.ru/search/?q=%E6%88%80%E6%84%9B%E5%89%8D%E5%A5%8F%E6%9B%B2%EF%BC%9A%E6%AD%B8%E4%BE%86&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "bedfa814-7016-44fb-b041-2402448c6666"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "我與妓女結婚了",
+            "url": "https://www.wnacg.ru/search/?q=%E6%88%91%E8%88%87%E5%A6%93%E5%A5%B3%E7%B5%90%E5%A9%9A%E4%BA%86&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "2e08b5c8-5411-42e0-87cc-2cde86816752"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "我統治的世界+A+World+that+I+Rule",
+            "url": "https://www.wnacg.ru/search/?q=%E6%88%91%E7%B5%B1%E6%B2%BB%E7%9A%84%E4%B8%96%E7%95%8C+A+World+that+I+Rule&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "c76e76ee-e4a5-4fe8-a37c-c976e5d06081"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "黑暗之海",
+            "url": "https://www.wnacg.ru/search/?q=%E9%BB%91%E6%9A%97%E4%B9%8B%E6%B5%B7&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "8423d4f7-4dbf-4601-9d23-2d55bbac0756"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "一個不會拒絕的女人",
+            "url": "https://www.wnacg.ru/search/?q=%E4%B8%80%E5%80%8B%E4%B8%8D%E6%9C%83%E6%8B%92%E7%B5%95%E7%9A%84%E5%A5%B3%E4%BA%BA&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "1345b681-e8d3-419c-8993-a38ab27de789"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "聖誕節也要上夜班！",
+            "url": "https://www.wnacg.ru/search/?q=%E8%81%96%E8%AA%95%E7%AF%80%E4%B9%9F%E8%A6%81%E4%B8%8A%E5%A4%9C%E7%8F%AD%EF%BC%81&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "5b1976f3-5fa9-410e-b34d-5cbe067e2d6d"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "心動任務／焦慮的警官",
+            "url": "https://www.wnacg.ru/search/?q=%E5%BF%83%E5%8B%95%E4%BB%BB%E5%8B%99%EF%BC%8F%E7%84%A6%E6%85%AE%E7%9A%84%E8%AD%A6%E5%AE%98&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "a91d2dae-de06-4cc7-8357-623785353cf1"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "灰姑娘的哥哥們",
+            "url": "https://www.wnacg.ru/search/?q=%E7%81%B0%E5%A7%91%E5%A8%98%E7%9A%84%E5%93%A5%E5%93%A5%E5%80%91&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "af53d4f6-bfca-4769-a61f-a8cf0b98c1a7"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "可以摸你嗎？",
+            "url": "https://www.wnacg.ru/search/?q=%E5%8F%AF%E4%BB%A5%E6%91%B8%E4%BD%A0%E5%97%8E%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "b6651a4a-a2d7-4eec-9991-6cf4ea866f64"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "TOUCH+ME",
+            "url": "https://www.wnacg.ru/search/?q=TOUCH+ME&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "fa0eea4b-46c9-4564-8396-c29f7c0a62fc"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "站著的女人",
+            "url": "https://www.wnacg.ru/search/?q=%E7%AB%99%E8%91%97%E7%9A%84%E5%A5%B3%E4%BA%BA&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "9f62aa17-9f49-4518-85bb-34e5b3890c9b"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "偶像養成記",
+            "url": "https://www.wnacg.ru/search/?q=%E5%81%B6%E5%83%8F%E9%A4%8A%E6%88%90%E8%A8%98&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "c4d39c6e-02b0-46a1-8b8e-137772721ddd"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "月紅夜花",
+            "url": "https://www.wnacg.ru/search/?q=%E6%9C%88%E7%B4%85%E5%A4%9C%E8%8A%B1&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "ac6cc7ba-2217-4a82-b09d-f4e59b1de93a"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "戀愛實境",
+            "url": "https://www.wnacg.ru/search/?q=%E6%88%80%E6%84%9B%E5%AF%A6%E5%A2%83&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "fe73e468-7a34-431b-9492-ae317ebb70f2"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "這是怎麼回事？",
+            "url": "https://www.wnacg.ru/search/?q=%E9%80%99%E6%98%AF%E6%80%8E%E9%BA%BC%E5%9B%9E%E4%BA%8B%EF%BC%9F&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "088da98b-cb08-4d3d-a627-deaf27087605"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "黑暗之海",
+            "url": "https://www.wnacg.ru/search/?q=%E9%BB%91%E6%9A%97%E4%B9%8B%E6%B5%B7&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "be44b88c-a58e-4449-8392-2cf446a88dc7"
+        },
+        {
+            "website": "gentleman",
+            "id": 1,
+            "name": "換裝的浪漫",
+            "url": "https://www.wnacg.ru/search/?q=%E6%8F%9B%E8%A3%9D%E7%9A%84%E6%B5%AA%E6%BC%AB&f=_all&s=create_time_DESC&syn=yes",
+            "moveEndSubscribe": true,
+            "manual": true,
+            "taskId": "4e36d873-c072-482e-8ebf-f7061a73ee34"
+        }
+    ],
+    "bilibili": [],
+    "toomics": [],
+    "omegascans": [],
+    "running": {
+        "manga": {
+            "status": "running",
+            "task": {
+                "website": "gentleman",
+                "id": 1,
+                "name": "換裝的浪漫",
+                "url": "https://www.wnacg.ru/search/?q=%E6%8F%9B%E8%A3%9D%E7%9A%84%E6%B5%AA%E6%BC%AB&f=_all&s=create_time_DESC&syn=yes",
+                "moveEndSubscribe": true,
+                "manual": true,
+                "taskId": "81a7eb35-a6c8-4da0-8259-51833e2e0588"
+            },
+            "progress": {
+                "percent": 0,
+                "stage": "准备任务服务",
+                "message": "gentleman 換裝的浪漫 正在执行",
+                "updatedAt": "2026-08-06T10:42:58.926Z"
+            },
+            "startedAt": "2026-08-06T10:42:58.925Z",
+            "updatedAt": "2026-08-06T10:42:58.926Z"
+        },
+        "bilibili": null,
+        "toomics": null,
+        "omegascans": null
+    }
+}
