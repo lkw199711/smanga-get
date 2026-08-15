@@ -163,6 +163,7 @@ class UseBrowser {
   protected nouser = false
   private bufferBytes = 0
   private bufferOrder: string[] = []
+  private launchPromise: Promise<void> | null = null
   website = ''
 
   constructor(options: BrowserOptions = defaultParams) {
@@ -205,28 +206,71 @@ class UseBrowser {
 
   // 启动底层 Chromium 实例。大多数调用方随后会调用 get_cookie() 和 new_page()。
   async init(options: { headless?: boolean } = {}) {
+    if (this.browser?.connected) return
+    if (this.launchPromise) return this.launchPromise
+
+    // Browser.close() 后对象仍然为 truthy。启动前主动丢弃失效引用，避免后续
+    // 调用把已断开的 CDP 连接误认为可用浏览器。
+    this.browser = null
+    this.loadConfig()
+
     const headless = options.headless ?? this.config.headless
     const executablePath =
       this.config.executablePath ||
       process.env.PUPPETEER_EXECUTABLE_PATH ||
       puppeteer.executablePath()
 
-    this.browser = await puppeteer.launch({
-      headless,
-      executablePath,
-      timeout: 60 * 1000,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--lang=zh-CN,zh',
-        ...this.proxyArgs,
-      ],
-      defaultViewport: {
-        width: 1920,
-        height: 1440,
-      },
-    })
+    this.launchPromise = (async () => {
+      const browser = await puppeteer.launch({
+        headless,
+        executablePath,
+        timeout: 60 * 1000,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--lang=zh-CN,zh',
+          ...this.proxyArgs,
+        ],
+        defaultViewport: {
+          width: 1920,
+          height: 1440,
+        },
+      })
+
+      this.browser = browser
+      browser.once('disconnected', () => {
+        if (this.browser === browser) this.browser = null
+      })
+    })()
+
+    try {
+      await this.launchPromise
+    } finally {
+      this.launchPromise = null
+    }
+  }
+
+  /** 确保浏览器连接可用；断线或已关闭时自动重启并恢复 cookie。 */
+  async ensureBrowser(options: { headless?: boolean } = {}) {
+    if (this.browser?.connected) return this.browser
+
+    await this.init(options)
+    await this.get_cookie()
+    return this.browser
+  }
+
+  /**
+   * 关闭浏览器并立即清空公开引用。
+   * 先清空再等待 close，可避免队列收尾期间新任务拿到正在关闭的实例。
+   */
+  async close() {
+    const browser = this.browser
+    this.browser = null
+    this.clear_buffs()
+
+    if (!browser) return
+    await browser.close()
   }
 
   // 从磁盘加载 cookie；只有 cookieFallbacks 中列出的站点才会回退到环境变量。
@@ -253,7 +297,7 @@ class UseBrowser {
     const cookies = await this.browser.cookies().catch(() => null)
     if (!cookies) {
       safeLog('[cookie] Failed to read browser cookies')
-      await this.browser?.close().catch(() => {})
+      await this.close().catch(() => {})
       throw new Error('Failed to read browser cookies')
     }
 
@@ -266,7 +310,7 @@ class UseBrowser {
 
   // 打开可见浏览器窗口，用于手动登录或验证流程。
   async start_manual_auth(url: string) {
-    if (this.browser && (this.browser as any).connected) {
+    if (this.browser?.connected) {
       throw new Error(`${this.website} manual auth browser is already open`)
     }
 
@@ -287,20 +331,36 @@ class UseBrowser {
 
   // 保存手动认证窗口中的 cookie，并关闭这个专用浏览器实例。
   async finish_manual_auth() {
-    if (!this.browser || !(this.browser as any).connected) {
+    if (!this.browser?.connected) {
       throw new Error(`${this.website} manual auth browser is not open`)
     }
 
     await this.save_cookie(false)
-    await this.browser.close()
-    this.browser = null
+    await this.close()
   }
 
   // 创建带通用伪装头、请求过滤和图片捕获能力的页面。
   async new_page() {
+    await this.ensureBrowser()
     if (!this.browser) return null
 
-    const page = await this.browser.newPage()
+    let page: puppeteer.Page
+    try {
+      page = await this.browser.newPage()
+    } catch (error) {
+      // Chromium 可能恰好在 connected 检查后退出。连接类错误只在页面创建层
+      // 自愈一次，避免同一个失效句柄被任务队列连续重试十次。
+      const message = error instanceof Error ? error.message : String(error)
+      if (!this.browser?.connected || /connection closed|target closed|session closed/i.test(message)) {
+        await this.close().catch(() => {})
+        await this.ensureBrowser()
+        if (!this.browser) return null
+        page = await this.browser.newPage()
+      } else {
+        throw error
+      }
+    }
+
     await this.setupCommonPage(page)
     await this.setupRequestInterception(page)
     this.captureImageResponses(page)

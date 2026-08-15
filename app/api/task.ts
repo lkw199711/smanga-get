@@ -355,21 +355,19 @@ export function task_remove({ website, id, name, taskId, url }: TaskRemoveOption
   }
 }
 
-async function closeBrowser(name: string, browser?: { close(): Promise<void> } | null) {
-  if (!browser) return
-
-  await browser.close().catch((error) => {
+async function closeBrowser(name: string, browserManager: { close(): Promise<void> }) {
+  await browserManager.close().catch((error) => {
     safeLog(`[browser] 关闭 ${name} 浏览器失败: ${getErrorMessage(error)}`)
   })
 }
 
 export async function close_all_browsers() {
   await Promise.all([
-    closeBrowser('toomics', toomicsBrowser.browser),
-    closeBrowser('bilibili', bilibiliBrowser.browser),
-    closeBrowser('toomics-no-user', toomicsBrowserNoUser.browser),
-    closeBrowser('omegascans', omegascansBrowser.browser),
-    closeBrowser('gentleman', gentlemanBrowser.browser),
+    closeBrowser('toomics', toomicsBrowser),
+    closeBrowser('bilibili', bilibiliBrowser),
+    closeBrowser('toomics-no-user', toomicsBrowserNoUser),
+    closeBrowser('omegascans', omegascansBrowser),
+    closeBrowser('gentleman', gentlemanBrowser),
   ])
 }
 
@@ -702,8 +700,9 @@ export class MangaTask extends Task {
         const task = this.tasks.shift()
 
         if (!task) {
-          await this.finishQueue()
-          return
+          const queueFinished = await this.finishQueue()
+          if (queueFinished) return
+          continue
         }
 
         const result = await this.runTask(task)
@@ -719,11 +718,20 @@ export class MangaTask extends Task {
     }
   }
 
-  private async finishQueue() {
+  private async finishQueue(): Promise<boolean> {
     write_log('[MangaTask] 所有任务执行完毕')
     await close_all_browsers()
+
+    // close_all_browsers() 是异步的；期间通过 WebUI/定时器加入的任务会因为
+    // running=true 而不另起执行循环。这里必须复查队列并由当前循环继续处理。
+    if (this.tasks.length > 0) {
+      write_log(`[MangaTask] 浏览器收尾期间新增 ${this.tasks.length} 个任务，继续执行`)
+      return false
+    }
+
     this.clearCurrentTask()
     this.shutdownSafely()
+    return true
   }
 
   private async runTask(task: taskType): Promise<TaskRunResult> {

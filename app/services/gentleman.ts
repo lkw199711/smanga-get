@@ -171,9 +171,9 @@ export default class Gentleman {
 
   /** 确保浏览器已初始化 */
   private async ensureBrowser() {
-    if (!gentlemanBrowser.browser || !(gentlemanBrowser.browser as any).isConnected?.()) {
+    if (!gentlemanBrowser.browser?.connected) {
       write_log(`[gentleman] 正在启动浏览器...`)
-      await gentlemanBrowser.init()
+      await gentlemanBrowser.ensureBrowser()
       write_log(`[gentleman] 浏览器启动完成, browser=${!!gentlemanBrowser.browser}`)
     }
   }

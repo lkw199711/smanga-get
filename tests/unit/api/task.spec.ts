@@ -1,8 +1,10 @@
+import fs from 'node:fs'
 import { test } from '@japa/runner'
 import { MangaTask, task_read, task_remove, task_write } from '#api/task'
+import { omegascansBrowser } from '#api/browser'
 import type { taskType } from '#type/index.js'
 import { TaskAbortError, TaskPauseError } from '#utils/index'
-import { resetTestDataDir } from '#tests/helpers/test_data_dir'
+import { getTestDataFile, resetTestDataDir } from '#tests/helpers/test_data_dir'
 
 function makeTask(params: Partial<taskType> = {}): taskType {
   return {
@@ -37,6 +39,7 @@ function usePassThroughScheduler(taskQueue: MangaTask) {
 test.group('task queue', (group) => {
   group.each.setup(() => {
     resetTestDataDir()
+    fs.rmSync(getTestDataFile('task.json'), { force: true })
   })
 
   test('历史任务文件不存在时返回空数组', ({ assert }) => {
@@ -140,6 +143,31 @@ test.group('task queue', (group) => {
 
     assert.equal(startCount, 11)
     assert.equal(taskQueue.running, false)
+    assert.equal(taskQueue.get().length, 0)
+  })
+
+  test('浏览器收尾期间新增的任务会由当前队列继续执行', async ({ assert }) => {
+    const started: Array<number | string> = []
+    const firstTask = makeTask({ id: 1, name: 'A' })
+    const secondTask = makeTask({ id: 2, name: 'B' })
+    const taskQueue = new MangaTask([firstTask], (task) => ({
+      async start() {
+        started.push(task.id)
+      },
+    }))
+    usePassThroughScheduler(taskQueue)
+
+    omegascansBrowser.browser = {
+      connected: true,
+      async close() {
+        taskQueue.add(secondTask)
+      },
+    } as any
+
+    await taskQueue.run()
+
+    assert.deepEqual(started, [1, 2])
+    assert.isNull(omegascansBrowser.browser)
     assert.equal(taskQueue.get().length, 0)
   })
 })

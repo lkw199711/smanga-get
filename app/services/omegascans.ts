@@ -82,12 +82,9 @@ export default class OmegaScans {
       await fs.promises.mkdir(this.mangaFolder, { recursive: true })
     end_app() // 结束应用
 
-    if (!omegascansBrowser.browser) {
-      await omegascansBrowser.init()
-      await omegascansBrowser.get_cookie()
-    }
-    if (!omegascansBrowser.browser) return
+    await omegascansBrowser.ensureBrowser()
     this.page = await omegascansBrowser.new_page()
+    if (!this.page) throw new Error('OmegaScans 浏览器页面创建失败')
 
     await this.get_meta()
 
@@ -198,8 +195,6 @@ export default class OmegaScans {
    * @returns 是否实际执行了下载（本地已存在被跳过时返回 false）
    */
   async download_chapter(chapter: any): Promise<boolean> {
-    if (!omegascansBrowser?.browser) return false
-
     const chapterName = make_can_be_floder(chapter.name)
     const chapterFolder = path.join(this.mangaFolder, chapterName)
 
@@ -306,8 +301,7 @@ export default class OmegaScans {
           if (this.imageReTry >= 10) {
             this.imageReTry = 0
             write_log(`[chapter download]图片累计失败次数过多，重置浏览器.`)
-            await omegascansBrowser.browser?.close().catch(() => {})
-            omegascansBrowser.browser = null
+            await omegascansBrowser.close().catch(() => {})
           }
         }
       }
@@ -478,19 +472,17 @@ export default class OmegaScans {
   }
 
   async page_open() {
-    if (!omegascansBrowser.browser) return
-    if (this.page.isClosed()) {
+    await omegascansBrowser.ensureBrowser()
+    if (!this.page || this.page.isClosed()) {
       this.page = await omegascansBrowser.new_page()
+      if (!this.page) throw new Error('OmegaScans 浏览器页面创建失败')
     }
   }
 
   async download_image(url: string, filePath: string) {
     // url = encodeURI(url); // 确保URL是正确的格式
     url = url.replace(/ /g, '%20') // 替换空格为%20
-    if (!omegascansBrowser.browser) return
-    if (this.page.isClosed()) {
-      this.page = await omegascansBrowser.new_page()
-    }
+    await this.page_open()
 
     // 直接捕获 page.goto() 的 HTTP 响应，从其 buffer 获取图片数据。
     // 不再依赖 omegascansBrowser.buffs，因为 goto 到图片 URL 时

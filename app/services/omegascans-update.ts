@@ -44,13 +44,10 @@ export default class OmegaScansUpdate {
 
     if (!res) {
       // 当日快照可直接用于扫描；只有确实需要访问 API 时才启动浏览器。
-      if (!omegascansBrowser.browser) {
-        await omegascansBrowser.init()
-        await omegascansBrowser.get_cookie()
-      }
-      if (!omegascansBrowser.browser) return
+      await omegascansBrowser.ensureBrowser()
 
       this.page = await omegascansBrowser.new_page()
+      if (!this.page) throw new Error('OmegaScans 浏览器页面创建失败')
       res = await this.request_interface(
         `https://api.omegascans.org/query?series_type=Comic&perPage=9999&adult=true&order=desc&orderBy=latest&page=1`
       )
@@ -120,9 +117,10 @@ export default class OmegaScansUpdate {
   }
 
   async page_open() {
-    if (!omegascansBrowser.browser) return
-    if (this.page.isClosed()) {
+    await omegascansBrowser.ensureBrowser()
+    if (!this.page || this.page.isClosed()) {
       this.page = await omegascansBrowser.new_page()
+      if (!this.page) throw new Error('OmegaScans 浏览器页面创建失败')
     }
   }
 
