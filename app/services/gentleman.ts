@@ -582,7 +582,7 @@ export default class Gentleman {
       this.onProgress?.message(`正在下载章节: ${item.name} (${i + 1}/${item.images.length})`)
       this.onProgress?.subProgress?.(i + 1, item.images.length)
 
-      await this.download_image(img, filePath)
+      await this.download_image(img, filePath, item.url)
       if (fs.existsSync(filePath)) successCount++
     }
     write_log(`[gentleman] ${item.name} 下载完成: ${successCount}/${item.images.length} 张成功`)
@@ -593,27 +593,59 @@ export default class Gentleman {
    *
    * @param url      图片完整 URL
    * @param filePath 本地保存路径
+   * @param referer  当前章节页 URL，用于模拟浏览器从章节页加载跨站 CDN 图片
    * @param retry    最大重试次数（默认 7 次）
    */
-  private async download_image(url: string, filePath: string, retry = 7): Promise<void> {
+  private async download_image(
+    url: string,
+    filePath: string,
+    referer: string,
+    retry = 7
+  ): Promise<void> {
+    const imageUrl = url.replace(/ /g, '%20')
+
     for (let attempt = 1; attempt <= retry; attempt++) {
+      let page: Awaited<ReturnType<typeof gentlemanBrowser.new_page>> = null
+
       try {
-        // 使用 AbortController 实现 30 秒超时，避免慢响应导致任务永久挂起
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30_000)
-        const response = await fetch(url, { signal: controller.signal })
-        clearTimeout(timeoutId)
+        // 每张图片使用独立页签下载，让请求自动继承 Gentleman 浏览器的
+        // 代理认证、Cookie、User-Agent 及其他浏览器环境。
+        page = await gentlemanBrowser.new_page()
+        if (!page) throw new Error('Gentleman 图片下载页签创建失败')
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        await page.setExtraHTTPHeaders({
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Sec-Fetch-Dest': 'image',
+          'Sec-Fetch-Mode': 'no-cors',
+          // 章节页是 wnacg.ru，图片 CDN 是 qy0.ru，二者属于跨站请求。
+          'Sec-Fetch-Site': 'cross-site',
+        })
 
-        const arrayBuffer = await response.arrayBuffer()
-        fs.writeFileSync(filePath, Buffer.from(arrayBuffer))
-        return  // 下载成功，直接返回
+        const response = await page.goto(imageUrl, {
+          waitUntil: 'networkidle2',
+          timeout: 30_000,
+          referer,
+        })
+
+        if (!response) throw new Error('page.goto 未返回响应')
+        if (!response.ok()) throw new Error(`HTTP ${response.status()}`)
+
+        const buffer = await response.buffer()
+        if (!buffer.length) throw new Error('图片响应体为空')
+
+        fs.writeFileSync(filePath, buffer)
+        return // 下载成功，直接返回
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        write_log(`[download] 图片下载失败 (${attempt}/${retry}): ${url}, 原因: ${message}`)
+
         if (attempt === retry) {
           // 所有重试均失败，记录日志并跳过此图（不抛出异常，允许流程继续）
           write_log(`[download] 图片下载最终失败，跳过: ${url}`)
         }
+      } finally {
+        // 单图单页签：无论成功、HTTP 错误还是导航超时，都立即释放页签。
+        await page?.close().catch(() => {})
       }
     }
   }
