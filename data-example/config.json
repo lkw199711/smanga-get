@@ -170,6 +170,7 @@
     "downloadPath": "A:\\05temp\\01软件\\manga-reptile\\download\\绅士漫画",
     "organizePath": "D:\\11manga\\gentleman",
     "organize": 0,
+    "downloadImageWithBrowser": false,
     "skipDays": 7,
     "compressPath": "D:\\12manga-compress\\gentleman",
     "scrollStep": 400,

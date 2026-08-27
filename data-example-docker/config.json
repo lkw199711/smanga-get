@@ -21,6 +21,7 @@
     "downloadPath": "/download",
     "organizePath": "/organize",
     "organize": 0,
+    "downloadImageWithBrowser": false,
     "compressPath": "D:\\12manga-compress\\gentleman",
     "latestSyncCloud": 1765017319232
   },

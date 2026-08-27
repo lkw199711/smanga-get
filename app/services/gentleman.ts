@@ -589,7 +589,8 @@ export default class Gentleman {
   }
 
   /**
-   * 下载单张图片到本地文件，支持失败自动重试
+   * 下载单张图片到本地文件，支持直接请求和浏览器页签两种模式。
+   * 默认直接请求；配置 gentleman.downloadImageWithBrowser=true 时改用浏览器页签。
    *
    * @param url      图片完整 URL
    * @param filePath 本地保存路径
@@ -603,50 +604,83 @@ export default class Gentleman {
     retry = 7
   ): Promise<void> {
     const imageUrl = url.replace(/ /g, '%20')
+    const useBrowser = this.should_download_image_with_browser()
+    const mode = useBrowser ? 'browser' : 'direct'
 
     for (let attempt = 1; attempt <= retry; attempt++) {
-      let page: Awaited<ReturnType<typeof gentlemanBrowser.new_page>> = null
-
       try {
-        // 每张图片使用独立页签下载，让请求自动继承 Gentleman 浏览器的
-        // 代理认证、Cookie、User-Agent 及其他浏览器环境。
-        page = await gentlemanBrowser.new_page()
-        if (!page) throw new Error('Gentleman 图片下载页签创建失败')
-
-        await page.setExtraHTTPHeaders({
-          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-          'Sec-Fetch-Dest': 'image',
-          'Sec-Fetch-Mode': 'no-cors',
-          // 章节页是 wnacg.ru，图片 CDN 是 qy0.ru，二者属于跨站请求。
-          'Sec-Fetch-Site': 'cross-site',
-        })
-
-        const response = await page.goto(imageUrl, {
-          waitUntil: 'networkidle2',
-          timeout: 30_000,
-          referer,
-        })
-
-        if (!response) throw new Error('page.goto 未返回响应')
-        if (!response.ok()) throw new Error(`HTTP ${response.status()}`)
-
-        const buffer = await response.buffer()
+        const buffer = useBrowser
+          ? await this.download_image_with_browser(imageUrl, referer)
+          : await this.download_image_directly(imageUrl, referer)
         if (!buffer.length) throw new Error('图片响应体为空')
 
         fs.writeFileSync(filePath, buffer)
         return // 下载成功，直接返回
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
-        write_log(`[download] 图片下载失败 (${attempt}/${retry}): ${url}, 原因: ${message}`)
+        write_log(`[download] 图片下载失败 (${attempt}/${retry}, ${mode}): ${url}, 原因: ${message}`)
 
         if (attempt === retry) {
           // 所有重试均失败，记录日志并跳过此图（不抛出异常，允许流程继续）
           write_log(`[download] 图片下载最终失败，跳过: ${url}`)
         }
-      } finally {
-        // 单图单页签：无论成功、HTTP 错误还是导航超时，都立即释放页签。
-        await page?.close().catch(() => {})
       }
+    }
+  }
+
+  /** 是否启用浏览器页签下载；未配置时默认 false（直接请求）。 */
+  private should_download_image_with_browser(): boolean {
+    const value = this.config.downloadImageWithBrowser
+    return value === true || value === 1 || value === '1' || value === 'true'
+  }
+
+  /** 使用 Node fetch 直接获取单张图片。 */
+  private async download_image_directly(imageUrl: string, referer: string): Promise<Buffer> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30_000)
+
+    try {
+      const response = await fetch(imageUrl, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Referer': referer,
+        },
+      })
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return Buffer.from(await response.arrayBuffer())
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
+  /** 使用独立浏览器页签获取单张图片，并确保页签始终被释放。 */
+  private async download_image_with_browser(imageUrl: string, referer: string): Promise<Buffer> {
+    const page = await gentlemanBrowser.new_page()
+    if (!page) throw new Error('Gentleman 图片下载页签创建失败')
+
+    try {
+      await page.setExtraHTTPHeaders({
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Sec-Fetch-Dest': 'image',
+        'Sec-Fetch-Mode': 'no-cors',
+        // 章节页是 wnacg.ru，图片 CDN 是 qy0.ru，二者属于跨站请求。
+        'Sec-Fetch-Site': 'cross-site',
+      })
+
+      const response = await page.goto(imageUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30_000,
+        referer,
+      })
+
+      if (!response) throw new Error('page.goto 未返回响应')
+      if (!response.ok()) throw new Error(`HTTP ${response.status()}`)
+
+      return await response.buffer()
+    } finally {
+      await page.close().catch(() => {})
     }
   }
 
