@@ -48,22 +48,35 @@ function assertZeroBasedImageSequence(assert: Assert, chapterDir: string, images
 }
 
 function assertTrailingNumberImageSequence(assert: Assert, chapterDir: string, images: string[]) {
-  const numberedImages = images
-    .map((image) => ({ image, index: getTrailingNumber(image) }))
-    .filter((item): item is { image: string; index: number } => item.index !== null)
-    .sort((a, b) => a.index - b.index)
+  const sequenceImages = images.filter((image) => !/(cover|logo)/i.test(path.parse(image).name))
+  const numberedImages = sequenceImages
+    .map((image) => ({
+      image,
+      index: getTrailingNumber(image),
+      group: path.parse(image).name.replace(/\d+$/, ''),
+    }))
+    .filter((item): item is { image: string; index: number; group: string } => item.index !== null)
 
   assert.equal(
     numberedImages.length,
-    images.length,
+    sequenceImages.length,
     `章节图片文件名无法全部提取页码: ${chapterDir}`
   )
 
-  const indexes = numberedImages.map((item) => item.index)
-  const firstIndex = indexes[0] ?? 0
-  const expected = Array.from({ length: indexes.length }, (_, index) => firstIndex + index)
+  const groups = new Map<string, typeof numberedImages>()
+  for (const item of numberedImages) {
+    const group = groups.get(item.group) || []
+    group.push(item)
+    groups.set(item.group, group)
+  }
 
-  assert.deepEqual(indexes, expected, `章节图片命名不连续: ${chapterDir}`)
+  for (const [group, groupImages] of groups) {
+    const indexes = groupImages.map((item) => item.index).sort((a, b) => a - b)
+    const firstIndex = indexes[0] ?? 0
+    const expected = Array.from({ length: indexes.length }, (_, index) => firstIndex + index)
+
+    assert.deepEqual(indexes, expected, `章节图片命名不连续: ${chapterDir} (${group || 'default'})`)
+  }
 }
 
 function assertImageSequence(

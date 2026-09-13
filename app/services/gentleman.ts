@@ -5,7 +5,7 @@
  * 下载流程：
  *   1. 通过 Puppeteer 加载漫画目录页，解析所有章节链接
  *   2. 按配置规则过滤章节（名称正则匹配、包含/排除关键词）
- *   3. 逐章节获取图片 URL（支持分页递归），下载到本地目录
+ *   3. 逐章节打开每张图片的详情页，获取带验证参数的原图 URL 并下载
  *   4. 整理封面元数据，可选地将文件归档到 organize 目录
  *   5. 若检测到「完結」章节，自动移除订阅
  */
@@ -22,10 +22,11 @@ import { gentlemanBrowser } from '#api/browser'
 type ChapterInfo = {
   name: string       // 章节名称（已清理为合法目录名），如「同事換愛 185話」
   url: string        // 章节列表页完整 URL
-  prefix?: string    // 图片 CDN 域名前缀，首次解析后缓存，如 "t4.images.example.com"
   imageNum?: number  // 页面标注的图片总数（仅用于展示，不参与下载逻辑）
   images: string[]   // 解析出的所有图片完整 URL 列表
 }
+
+type GentlemanPage = NonNullable<Awaited<ReturnType<typeof gentlemanBrowser.new_page>>>
 
 export default class Gentleman {
   // ── 站点与身份 ──────────────────────────────────────────────
@@ -46,7 +47,6 @@ export default class Gentleman {
   private mangaPath: string = ''            // 本漫画的下载目录：downloadPath/mangaName
   private metaPath: string = ''             // 元数据目录：mangaPath/.smanga（存放封面等）
   private organizeMetaPath: string = ''     // 归档元数据目录：organizePath/mangaName/.smanga
-  private textPrefix: string = ''           // 图片 CDN 前缀，从第一张图解析后全局复用
   private mangaStatus: string = ''          // 漫画状态，检测到「完結」时置为 'finished'
   private params: any                       // 订阅参数（来自 subscribe 模块传入）
 
@@ -311,6 +311,7 @@ export default class Gentleman {
    *
    * @param url 目标页面 URL
    * @returns   页面 HTML 字符串；浏览器不可用或页面创建失败时返回空字符串
+   * @throws    页面连续导航失败或安全验证重试耗尽时抛出错误，避免把验证页误当成空内容
    */
   async get_browser_html(url: string): Promise<string> {
     await this.ensureBrowser()
@@ -326,21 +327,62 @@ export default class Gentleman {
     if (!page) return ''
 
     try {
-      const gotoResult = await page
-        .goto(url, {
-          waitUntil: 'networkidle2',
-          timeout: 60 * 1000,
-        })
-        .catch((e) => {
-          write_log(`[gentleman] get_browser_html: 导航失败 ${e?.message || e}, url=${url.slice(0, 80)}`)
-          return null
-        })
-
-      const html = await page.content()
-      return html
+      return await this.get_page_html(page, url)
     } finally {
       await page.close().catch(() => {})
     }
+  }
+
+  /** 等待指定时间；独立成方法便于单元测试跳过真实延时。 */
+  private async wait(milliseconds: number): Promise<void> {
+    if (milliseconds <= 0) return
+    await new Promise((resolve) => setTimeout(resolve, milliseconds))
+  }
+
+  /** 识别 Cloudflare 或站点返回的自动程序安全验证页。 */
+  private is_challenge_page(html: string, title: string, status: number): boolean {
+    if ([403, 429, 503].includes(status)) return true
+
+    return /just a moment|checking your browser|请稍候|正在进行安全验证|cf-chl|challenge-platform|ray id/i.test(
+      `${title}\n${html}`
+    )
+  }
+
+  /** 在已有页签中加载 HTML，遇到安全验证或临时导航失败时退避重试。 */
+  private async get_page_html(page: GentlemanPage, url: string): Promise<string> {
+    const retry = Math.max(1, Number(this.config.detailPageRetry || 3))
+    const retryDelay = Math.max(0, Number(this.config.challengeRetryDelayMs ?? 30_000))
+    let lastError: unknown = null
+
+    for (let attempt = 1; attempt <= retry; attempt++) {
+      try {
+        const response = await page.goto(url, {
+          waitUntil: 'networkidle2',
+          timeout: 60 * 1000,
+        })
+        const html = await page.content()
+        const title = await page.title().catch(() => '')
+        const status = response?.status() || 0
+
+        if (!this.is_challenge_page(html, title, status)) return html
+
+        lastError = new Error(`触发站点安全验证 (HTTP ${status || 'unknown'}, title=${title})`)
+      } catch (error) {
+        lastError = error
+      }
+
+      const message = lastError instanceof Error ? lastError.message : String(lastError)
+      write_log(`[gentleman] 页面加载失败 (${attempt}/${retry}): ${url}, 原因: ${message}`)
+
+      if (attempt < retry) {
+        const delay = retryDelay * attempt
+        write_log(`[gentleman] ${Math.ceil(delay / 1000)} 秒后重试当前页面`)
+        await this.wait(delay)
+      }
+    }
+
+    const message = lastError instanceof Error ? lastError.message : String(lastError)
+    throw new Error(`Gentleman 页面重试耗尽: ${url}, 原因: ${message}`)
   }
 
   /**
@@ -441,114 +483,157 @@ export default class Gentleman {
     }
   }
 
-  /**
-   * 从章节列表页的 HTML 中解析出所有图片的完整 URL
-   *
-   * 站点图片区域 HTML 结构：
-   *   <div class="gallary_wrap">
-   *     <div class="gallary_item">
-   *       <img src="//t4.images.../data/123/456/imagename.jpg" />
-   *       <span class="name tb">imagename</span>
-   *       ...pic_ctl...
-   *     </div>
-   *     ...
-   *   </div>
-   *   <div class="comment_wrap">
-   *
-   * 图片 URL 构建公式：
-   *   https://{prefix中t替换为img}{imgTag路径}{图片名称}{后缀}
-   *   例：https://img4.images.example.com/data/123/456/imagename.jpg
-   */
-  private get_subpage_images(html: string): string[] {
-    const list: string[] = []
+  /** 将站点中的相对地址、协议相对地址统一转换为完整 HTTPS URL。 */
+  private absolute_url(rawUrl: string, baseUrl: string = this.domain): string {
+    const decodedUrl = rawUrl.trim().replace(/&amp;/g, '&')
+    if (!decodedUrl) return ''
+    if (decodedUrl.startsWith('//')) return `https:${decodedUrl}`
 
-    // 提取图片区域：从 gallary_wrap 到 comment_wrap 之间的内容
-    const imageBoxMatch = html.match(/(?<=gallary_wrap).+?(?=comment_wrap)/s)
-    if (!imageBoxMatch) {
-      write_log(`[gentleman] get_subpage_images: 未找到 gallary_wrap→comment_wrap 区域`)
-      return list
+    try {
+      return new URL(decodedUrl, baseUrl).toString()
+    } catch {
+      return ''
+    }
+  }
+
+  /** 从章节列表页中收集当页每张图片的详情页链接。 */
+  private get_subpage_view_urls(html: string, pageUrl: string): string[] {
+    const imageBox = html.match(/(?<=gallary_wrap).+?(?=comment_wrap)/s)?.[0] || html
+    const matches = imageBox.matchAll(/href=["']([^"']*\/photos-view-id-\d+\.html[^"']*)["']/gi)
+    const viewUrls = Array.from(matches, (match) => this.absolute_url(match[1], pageUrl)).filter(
+      Boolean
+    )
+
+    return [...new Set(viewUrls)]
+  }
+
+  /** 从图片详情页的 #picarea 中提取带 verify 参数的完整原图地址。 */
+  private get_view_image_url(html: string, viewUrl: string): string {
+    const imageTag = html.match(/<img\b(?=[^>]*\bid=["']picarea["'])[^>]*>/i)?.[0] || ''
+    const rawImageUrl = imageTag.match(/\bsrc=["']([^"']+)["']/i)?.[1] || ''
+    return this.absolute_url(rawImageUrl, viewUrl)
+  }
+
+  /** 等待浏览器的异步 response 监听器把 #picarea 原图写入内存缓存。 */
+  private async wait_for_image_buffer(imageUrl: string): Promise<boolean> {
+    const configuredTimeout = Number(this.config.detailImageBufferTimeoutMs ?? 5_000)
+    const configuredPollInterval = Number(this.config.detailImageBufferPollIntervalMs ?? 100)
+    const timeout = Number.isFinite(configuredTimeout) ? Math.max(0, configuredTimeout) : 5_000
+    const pollInterval = Number.isFinite(configuredPollInterval)
+      ? Math.max(1, configuredPollInterval)
+      : 100
+    const attempts = Math.ceil(timeout / pollInterval)
+
+    for (let attempt = 0; attempt <= attempts; attempt++) {
+      if (gentlemanBrowser.buffs[imageUrl]?.length) return true
+      if (attempt < attempts) await this.wait(pollInterval)
     }
 
-    // 分割出每个图片条目（以 gallary_item 为界）
-    const srcMatches = imageBoxMatch[0].match(/(?<=gallary_item).+?(?=pic_ctl)/gs)
-    if (!srcMatches) {
-      write_log(`[gentleman] get_subpage_images: gallary_wrap内未找到 gallary_item 条目`)
-      return list
+    return false
+  }
+
+  /** 从章节图片列表的分页中，先完整收集全部详情页 URL。 */
+  private async get_chapter_view_urls(
+    chapter: ChapterInfo,
+    url: string = chapter.url,
+    visitedPages = new Set<string>()
+  ): Promise<string[]> {
+    if (visitedPages.has(url)) return []
+    visitedPages.add(url)
+
+    const html = await this.get_browser_html(url)
+    const viewUrls = this.get_subpage_view_urls(html, url)
+    if (viewUrls.length === 0) {
+      throw new Error(`${chapter.name} 未在章节页找到图片详情页链接: ${url}`)
     }
 
-    let skippedView = 0, skippedTag = 0, skippedName = 0
-    for (const m of srcMatches) {
-      // 提取缩略图的 src 属性值（含 CDN 路径和图片标识）
-      const viewMatch = m.match(/(?<=src=").+?(?=")/s)
-      if (!viewMatch) { skippedView++; continue }
-      const view = viewMatch[0]
+    const pageBox = html.match(/(?<=paginator).+?(?=f_right)/s)?.[0] || ''
+    const nextPage = pageBox.match(/(?<=next"><a\shref=").+?(?=">後頁)/s)?.[0] || ''
+    if (!nextPage) return viewUrls
 
-      // 提取 data/t 之后的路径段（如 "123/456/"），用于拼接原图 URL
-      const imgTagMatch = view.match(/(?<=data\/t)\/(\d+\/)(\d+\/)(?=\b)/)
-      if (!imgTagMatch) { skippedTag++; continue }
+    const nextPageUrl = this.absolute_url(nextPage, url)
+    const nextViewUrls = await this.get_chapter_view_urls(chapter, nextPageUrl, visitedPages)
+    return [...new Set([...viewUrls, ...nextViewUrls])]
+  }
 
-      // 提取文件后缀（如 .jpg）
-      const suffixMatch = view.match(/\.[^.]+$/)
-      const suffix = suffixMatch ? suffixMatch[0] : ''
+  /** 详情页之间的礼貌限速，默认每次等待 4～6 秒，可通过 Gentleman 配置覆盖。 */
+  private async wait_before_detail_page(): Promise<void> {
+    const configuredMin = Number(this.config.detailPageDelayMinMs ?? 4_000)
+    const configuredMax = Number(this.config.detailPageDelayMaxMs ?? 6_000)
+    const min = Math.max(0, Math.min(configuredMin, configuredMax))
+    const max = Math.max(min, configuredMin, configuredMax)
+    const delay = min === max ? min : Math.floor(min + Math.random() * (max - min + 1))
 
-      // 提取图片名称（从 class="name tb" 的 span 内容中获取）
-      const imgNameMatch = m.match(/(?<=name\stb">).+?(?=<)/)
-      if (!imgNameMatch) { skippedName++; continue }
+    await this.wait(delay)
+  }
 
-      // 将 CDN 前缀中的 "t" 替换为 "img"（缩略图域名 → 原图域名）
-      const img = `https://${this.textPrefix.replace(/^t/, 'img')}${imgTagMatch[0]}${imgNameMatch[0]}${suffix}`
-      list.push(img)
+  /** 在同一个页签中读取详情页；普通空页也会重试，避免瞬时 DOM 不完整造成漏图。 */
+  private async get_detail_image_url(page: GentlemanPage, chapter: ChapterInfo, viewUrl: string) {
+    const retry = Math.max(1, Number(this.config.detailPageRetry || 3))
+
+    for (let attempt = 1; attempt <= retry; attempt++) {
+      const html = await this.get_page_html(page, viewUrl)
+      const imageUrl = this.get_view_image_url(html, viewUrl)
+      if (imageUrl) {
+        const bufferReady = await this.wait_for_image_buffer(imageUrl)
+        if (bufferReady) return imageUrl
+
+        write_log(
+          `[gentleman] ${chapter.name} 详情页原图缓存未捕获 (${attempt}/${retry}): ${viewUrl}`
+        )
+      } else {
+        write_log(
+          `[gentleman] ${chapter.name} 详情页未找到 #picarea (${attempt}/${retry}): ${viewUrl}`
+        )
+      }
+      if (attempt < retry) await this.wait_before_detail_page()
     }
 
-    if (srcMatches.length > 0 && list.length < srcMatches.length) {
-      write_log(`[gentleman] get_subpage_images: ${srcMatches.length}条目 → 跳过(view:${skippedView} tag:${skippedTag} name:${skippedName}) → 成功${list.length}`)
-    }
-    return list
+    return ''
   }
 
   /**
-   * 获取某章节所有图片的完整 URL（递归处理分页）
+   * 获取某章节所有图片的完整 URL
    *
    * 处理流程：
-   *   1. 加载章节列表页 HTML
-   *   2. 首次调用时解析图片 CDN 前缀（从第一张图的 src 中提取，后续复用）
-   *   3. 解析当前页的所有图片 URL
-   *   4. 若存在「後頁」分页链接，递归加载下一页继续解析
+   *   1. 先递归加载全部章节列表分页，收齐详情页链接，避免解析途中受限后丢失后续分页
+   *   2. 复用同一个浏览器页签，限速访问每个详情页
+   *   3. 从 #picarea 中读取带 verify 参数的原图 URL
+   *   4. 安全验证页退避重试，最终数量不符时直接报错
    *
-   * @param chapter 当前章节对象（prefix 和 images 字段会被原地更新）
-   * @param url     当前页 URL，默认使用章节的列表页地址
+   * @param chapter 当前章节对象（images 字段会被原地更新）
    */
-  private async get_chapter_images(chapter: ChapterInfo, url: string = chapter.url): Promise<string[]> {
-    const html = await this.get_browser_html(url)
-
-    // 首次进入章节时解析 CDN 前缀：打开章节内第一张图的查看页，从 imgarea 中提取 src 域名
-    if (!chapter.prefix) {
-      // 获取第一张图片的查看页链接（格式：/photos-view-id-xxx.html）
-      const firstViewUrlMatch = html.match(/\/photos-view-id-[^\"]+/)
-      const firstViewUrl = firstViewUrlMatch ? firstViewUrlMatch[0] : ''
-      const viewHtml = await this.get_browser_html(this.domain + firstViewUrl)
-
-      // 从 id="imgarea" 的 span 中提取图片 src 的域名部分（如 t4.images.example.com/data）
-      const imgAreaMatch = viewHtml.match(/<span[^>]*id=["']imgarea["'][^>]*>(.*?)<\/span>/s)
-      const imgAreaContent = imgAreaMatch ? imgAreaMatch[1] : viewHtml
-
-      chapter.prefix = imgAreaContent.match(/(?<=src="\/\/).+?\/data/)?.[0] || ''
-      // 缓存到类属性，供 get_subpage_images 中 CDN 域名替换使用
-      this.textPrefix = chapter.prefix
+  private async get_chapter_images(chapter: ChapterInfo): Promise<string[]> {
+    const viewUrls = await this.get_chapter_view_urls(chapter)
+    if (chapter.imageNum && viewUrls.length !== chapter.imageNum) {
+      throw new Error(
+        `${chapter.name} 详情页数量不完整: 页面标注 ${chapter.imageNum} 张，实际找到 ${viewUrls.length} 个链接`
+      )
     }
 
-    // 解析当前页的所有图片 URL 并追加到章节图片列表
-    const pageImages = this.get_subpage_images(html)
-    chapter.images = chapter.images.concat(pageImages)
+    const page = await gentlemanBrowser.new_page()
+    if (!page) throw new Error(`${chapter.name} 无法创建图片详情页页签`)
 
-    // 查找分页导航中的「後頁」链接（位于 class="paginator" 区域内）
-    const pageBox = html.match(/(?<=paginator).+?(?=f_right)/s)?.[0] || ''
-    const nextPage = pageBox.match(/(?<=next"><a\shref=").+?(?=">後頁)/s)?.[0] || ''
+    try {
+      for (let index = 0; index < viewUrls.length; index++) {
+        if (index > 0) await this.wait_before_detail_page()
 
-    if (nextPage) {
-      // 拼接下一页完整 URL 并递归处理
-      const page = `https://${this.domain.replace(/^https?:\/\//, '')}${nextPage}`
-      return await this.get_chapter_images(chapter, page)
+        const viewUrl = viewUrls[index]
+        this.onProgress?.message(`正在解析章节: ${chapter.name} (${index + 1}/${viewUrls.length})`)
+        const imageUrl = await this.get_detail_image_url(page, chapter, viewUrl)
+        if (!imageUrl || chapter.images.includes(imageUrl)) continue
+
+        chapter.images.push(imageUrl)
+      }
+    } finally {
+      await page.close().catch(() => {})
+    }
+
+    const expectedCount = chapter.imageNum || viewUrls.length
+    if (chapter.images.length !== expectedCount) {
+      throw new Error(
+        `${chapter.name} 原图解析不完整: 预期 ${expectedCount} 张，实际 ${chapter.images.length} 张`
+      )
     }
 
     write_log(`[gentleman] ${chapter.name} 图片解析完毕，共 ${chapter.images.length} 张`)
@@ -575,113 +660,41 @@ export default class Gentleman {
     let successCount = 0
     for (let i = 0; i < item.images.length; i++) {
       const img = item.images[i]
-      const fileName = img.split('/').pop() || ''  // 取 URL 最后一段作为文件名
+      // URL 现在含有 ?verify=...，文件名只能取 pathname，否则 Windows 下的 ? 会导致写入失败。
+      const fileName = this.get_image_file_name(img, i)
       const filePath = path.join(chapterPath, fileName)
 
       // 上报当前下载进度（章节内图片级进度）
       this.onProgress?.message(`正在下载章节: ${item.name} (${i + 1}/${item.images.length})`)
       this.onProgress?.subProgress?.(i + 1, item.images.length)
 
-      await this.download_image(img, filePath, item.url)
-      if (fs.existsSync(filePath)) successCount++
-    }
-    write_log(`[gentleman] ${item.name} 下载完成: ${successCount}/${item.images.length} 张成功`)
-  }
-
-  /**
-   * 下载单张图片到本地文件，支持直接请求和浏览器页签两种模式。
-   * 默认直接请求；配置 gentleman.downloadImageWithBrowser=true 时改用浏览器页签。
-   *
-   * @param url      图片完整 URL
-   * @param filePath 本地保存路径
-   * @param referer  当前章节页 URL，用于模拟浏览器从章节页加载跨站 CDN 图片
-   * @param retry    最大重试次数（默认 7 次）
-   */
-  private async download_image(
-    url: string,
-    filePath: string,
-    referer: string,
-    retry = 7
-  ): Promise<void> {
-    const imageUrl = url.replace(/ /g, '%20')
-    const useBrowser = this.should_download_image_with_browser()
-    const mode = useBrowser ? 'browser' : 'direct'
-
-    for (let attempt = 1; attempt <= retry; attempt++) {
-      try {
-        const buffer = useBrowser
-          ? await this.download_image_with_browser(imageUrl, referer)
-          : await this.download_image_directly(imageUrl, referer)
-        if (!buffer.length) throw new Error('图片响应体为空')
-
-        fs.writeFileSync(filePath, buffer)
-        return // 下载成功，直接返回
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        write_log(`[download] 图片下载失败 (${attempt}/${retry}, ${mode}): ${url}, 原因: ${message}`)
-
-        if (attempt === retry) {
-          // 所有重试均失败，记录日志并跳过此图（不抛出异常，允许流程继续）
-          write_log(`[download] 图片下载最终失败，跳过: ${url}`)
-        }
+      const encodedImageUrl = img.replace(/ /g, '%20')
+      const buffer =
+        gentlemanBrowser.take_image_buffer(img) ||
+        (encodedImageUrl !== img ? gentlemanBrowser.take_image_buffer(encodedImageUrl) : null)
+      if (!buffer?.length) {
+        throw new Error(`${item.name} 浏览器图片缓存缺失: ${img}`)
       }
+
+      fs.writeFileSync(filePath, buffer)
+      successCount++
     }
+    write_log(
+      `[gentleman] ${item.name} 下载完成: ${successCount}/${item.images.length} 张成功，全部来自浏览器缓存`
+    )
   }
 
-  /** 是否启用浏览器页签下载；未配置时默认 false（直接请求）。 */
-  private should_download_image_with_browser(): boolean {
-    const value = this.config.downloadImageWithBrowser
-    return value === true || value === 1 || value === '1' || value === 'true'
-  }
-
-  /** 使用 Node fetch 直接获取单张图片。 */
-  private async download_image_directly(imageUrl: string, referer: string): Promise<Buffer> {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30_000)
-
+  /** 从原图 URL 中生成不含验证查询参数的本地文件名。 */
+  private get_image_file_name(imageUrl: string, index: number): string {
     try {
-      const response = await fetch(imageUrl, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-          'Referer': referer,
-        },
-      })
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return Buffer.from(await response.arrayBuffer())
-    } finally {
-      clearTimeout(timeoutId)
+      const fileName = path.posix.basename(new URL(imageUrl).pathname)
+      if (fileName) return decodeURIComponent(fileName)
+    } catch {
+      const fileName = imageUrl.split(/[?#]/, 1)[0].split('/').pop()
+      if (fileName) return fileName
     }
-  }
 
-  /** 使用独立浏览器页签获取单张图片，并确保页签始终被释放。 */
-  private async download_image_with_browser(imageUrl: string, referer: string): Promise<Buffer> {
-    const page = await gentlemanBrowser.new_page()
-    if (!page) throw new Error('Gentleman 图片下载页签创建失败')
-
-    try {
-      await page.setExtraHTTPHeaders({
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Sec-Fetch-Dest': 'image',
-        'Sec-Fetch-Mode': 'no-cors',
-        // 章节页是 wnacg.ru，图片 CDN 是 qy0.ru，二者属于跨站请求。
-        'Sec-Fetch-Site': 'cross-site',
-      })
-
-      const response = await page.goto(imageUrl, {
-        waitUntil: 'networkidle2',
-        timeout: 30_000,
-        referer,
-      })
-
-      if (!response) throw new Error('page.goto 未返回响应')
-      if (!response.ok()) throw new Error(`HTTP ${response.status()}`)
-
-      return await response.buffer()
-    } finally {
-      await page.close().catch(() => {})
-    }
+    return `${String(index + 1).padStart(3, '0')}.jpg`
   }
 
   /**

@@ -351,7 +351,10 @@ class UseBrowser {
       // Chromium 可能恰好在 connected 检查后退出。连接类错误只在页面创建层
       // 自愈一次，避免同一个失效句柄被任务队列连续重试十次。
       const message = error instanceof Error ? error.message : String(error)
-      if (!this.browser?.connected || /connection closed|target closed|session closed/i.test(message)) {
+      if (
+        !this.browser?.connected ||
+        /connection closed|target closed|session closed/i.test(message)
+      ) {
         await this.close().catch(() => {})
         await this.ensureBrowser()
         if (!this.browser) return null
@@ -376,6 +379,22 @@ class UseBrowser {
     this.bufferBytes = 0
     this.bufferOrder = []
     this.image403Count = 0
+  }
+
+  /**
+   * 取出并移除已捕获的图片响应，同时维护缓存容量计数。
+   * 调用方保存图片后即可释放这份内存，避免长章节持续占用 buffer。
+   */
+  take_image_buffer(url: string): Buffer | null {
+    const buffer = this.buffs[url]
+    if (!buffer) return null
+
+    delete this.buffs[url]
+    this.bufferBytes = Math.max(0, this.bufferBytes - buffer.length)
+    const orderIndex = this.bufferOrder.indexOf(url)
+    if (orderIndex >= 0) this.bufferOrder.splice(orderIndex, 1)
+
+    return buffer
   }
 
   // 通用页面准备：设置语言请求头，并补少量浏览器指纹字段。
