@@ -334,16 +334,20 @@ export default class Gentleman {
       return ''
     }
 
-    const page = await gentlemanBrowser.new_page().catch((e) => {
-      write_log(`[gentleman] get_browser_html: 创建页面失败 ${e?.message || e}`)
-      return null
-    })
-    if (!page) return ''
-
+    let page: GentlemanPage | null = null
+    gentlemanBrowser.set_image_capture_mode('none')
     try {
+      page = await gentlemanBrowser.new_page().catch((e) => {
+        write_log(`[gentleman] get_browser_html: 创建页面失败 ${e?.message || e}`)
+        return null
+      })
+      if (!page) return ''
+
       return await this.get_page_html(page, url)
     } finally {
-      await page.close().catch(() => {})
+      await page?.close().catch(() => {})
+      gentlemanBrowser.clear_buffs()
+      gentlemanBrowser.set_image_capture_mode('all')
     }
   }
 
@@ -553,15 +557,17 @@ export default class Gentleman {
    * 这里只保留体积很小的详情页 URL；列表页产生的缩略图 buffer 会在页签关闭后清空。
    */
   private async get_chapter_view_urls(chapter: ChapterInfo): Promise<string[]> {
-    const page = await gentlemanBrowser.new_page()
-    if (!page) throw new Error(`${chapter.name} 无法创建章节分页页签`)
-
     const visitedPages = new Set<string>()
     const visitedViews = new Set<string>()
     const viewUrls: string[] = []
     let currentUrl = chapter.url
+    let page: GentlemanPage | null = null
 
+    gentlemanBrowser.set_image_capture_mode('none')
     try {
+      page = await gentlemanBrowser.new_page()
+      if (!page) throw new Error(`${chapter.name} 无法创建章节分页页签`)
+
       while (currentUrl && !visitedPages.has(currentUrl)) {
         visitedPages.add(currentUrl)
         const html = await this.get_page_html(page, currentUrl)
@@ -581,8 +587,9 @@ export default class Gentleman {
         currentUrl = nextPage ? this.absolute_url(nextPage, currentUrl) : ''
       }
     } finally {
-      await page.close().catch(() => {})
+      await page?.close().catch(() => {})
       gentlemanBrowser.clear_buffs()
+      gentlemanBrowser.set_image_capture_mode('all')
     }
 
     return viewUrls
@@ -718,12 +725,15 @@ export default class Gentleman {
     }
 
     item.images = []
-    const page = await gentlemanBrowser.new_page()
-    if (!page) throw new Error(`${item.name} 无法创建图片详情页页签`)
-
+    let page: GentlemanPage | null = null
     let successCount = 0
     let requestedCount = 0
+
+    gentlemanBrowser.set_image_capture_mode('original-only')
     try {
+      page = await gentlemanBrowser.new_page()
+      if (!page) throw new Error(`${item.name} 无法创建图片详情页页签`)
+
       for (let index = 0; index < viewUrls.length; index++) {
         const viewUrl = viewUrls[index]
         const existing = completed.get(viewUrl)
@@ -764,8 +774,9 @@ export default class Gentleman {
         gentlemanBrowser.clear_buffs()
       }
     } finally {
-      await page.close().catch(() => {})
+      await page?.close().catch(() => {})
       gentlemanBrowser.clear_buffs()
+      gentlemanBrowser.set_image_capture_mode('all')
     }
 
     if (successCount !== expectedCount) {

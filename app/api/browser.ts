@@ -613,12 +613,68 @@ class UseToomicsBrowser extends UseBrowser {
   }
 }
 
+type GentlemanImageCaptureMode = 'all' | 'none' | 'original-only'
+
+/**
+ * Gentleman 列表页可能包含成千上万张缩略图。任务可以按阶段切换图片模式：
+ * HTML 列表页完全禁图，详情页只放行带 verify 签名的原图，手动认证仍使用默认 all。
+ */
+class UseGentlemanBrowser extends UseBrowser {
+  private imageCaptureMode: GentlemanImageCaptureMode = 'all'
+
+  constructor() {
+    super({ website: 'gentleman' })
+  }
+
+  set_image_capture_mode(mode: GentlemanImageCaptureMode) {
+    this.imageCaptureMode = mode
+    if (mode === 'none') this.clear_buffs()
+  }
+
+  private isSignedOriginalImage(url: string) {
+    try {
+      const parsed = new URL(url)
+      return (
+        parsed.searchParams.has('verify') &&
+        /^\/data\//i.test(parsed.pathname) &&
+        !/^\/data\/t(?:\/|$)/i.test(parsed.pathname)
+      )
+    } catch {
+      return false
+    }
+  }
+
+  protected async handleRequest(page: puppeteer.Page, request: puppeteer.HTTPRequest) {
+    if (request.resourceType() === 'image') {
+      const shouldBlock =
+        this.imageCaptureMode === 'none' ||
+        (this.imageCaptureMode === 'original-only' && !this.isSignedOriginalImage(request.url()))
+
+      if (shouldBlock) {
+        await request.abort().catch(() => {})
+        return
+      }
+    }
+
+    await super.handleRequest(page, request)
+  }
+
+  protected async handleImageResponse(page: puppeteer.Page, response: puppeteer.HTTPResponse) {
+    if (this.imageCaptureMode === 'none') return
+    if (this.imageCaptureMode === 'original-only' && !this.isSignedOriginalImage(response.url())) {
+      return
+    }
+
+    await super.handleImageResponse(page, response)
+  }
+}
+
 // 导出单例浏览器管理器，方便长任务共享 cookie 和图片 buffer。
 const toomicsBrowser = new UseToomicsBrowser()
 const bilibiliBrowser = new UseBrowser({ website: 'bilibili' })
 const toomicsBrowserNoUser = new UseBrowser({ nouser: true, website: 'toomics' })
 const omegascansBrowser = new UseBrowser({ website: 'omegascans' })
-const gentlemanBrowser = new UseBrowser({ website: 'gentleman' })
+const gentlemanBrowser = new UseGentlemanBrowser()
 
 export {
   UseBrowser,

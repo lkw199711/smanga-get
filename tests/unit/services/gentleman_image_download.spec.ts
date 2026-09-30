@@ -32,12 +32,78 @@ test.group('Gentleman image download', (group) => {
       },
     })
     gentlemanBrowser.clear_buffs()
+    gentlemanBrowser.set_image_capture_mode('all')
   })
 
   group.each.teardown(() => {
     gentlemanBrowser.clear_buffs()
+    gentlemanBrowser.set_image_capture_mode('all')
     set_config({ gentleman: originalConfig || {} })
     fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  test('blocks list thumbnails and captures only signed original images', async ({ assert }) => {
+    const thumbnailUrl = 'https://t5.qy0.ru/data/t/1/1/thumb.jpg'
+    const unsignedImageUrl = 'https://img5.qy0.ru/data/1/1/001.jpg'
+    const originalImageUrl = 'https://img5.qy0.ru/data/1/1/001.jpg?verify=signed'
+
+    const makeRequest = (url: string) => {
+      let aborted = 0
+      let continued = 0
+      return {
+        request: {
+          resourceType: () => 'image',
+          url: () => url,
+          abort: async () => {
+            aborted++
+          },
+          continue: async () => {
+            continued++
+          },
+        },
+        counts: () => ({ aborted, continued }),
+      }
+    }
+
+    gentlemanBrowser.set_image_capture_mode('none')
+    const listThumbnail = makeRequest(thumbnailUrl)
+    await (gentlemanBrowser as any).handleRequest({}, listThumbnail.request)
+    assert.deepEqual(listThumbnail.counts(), { aborted: 1, continued: 0 })
+
+    gentlemanBrowser.set_image_capture_mode('original-only')
+    const detailThumbnail = makeRequest(thumbnailUrl)
+    const unsignedImage = makeRequest(unsignedImageUrl)
+    const signedOriginal = makeRequest(originalImageUrl)
+    await (gentlemanBrowser as any).handleRequest({}, detailThumbnail.request)
+    await (gentlemanBrowser as any).handleRequest({}, unsignedImage.request)
+    await (gentlemanBrowser as any).handleRequest({}, signedOriginal.request)
+
+    assert.deepEqual(detailThumbnail.counts(), { aborted: 1, continued: 0 })
+    assert.deepEqual(unsignedImage.counts(), { aborted: 1, continued: 0 })
+    assert.deepEqual(signedOriginal.counts(), { aborted: 0, continued: 1 })
+
+    let bufferReads = 0
+    const makeResponse = (url: string) => ({
+      url: () => url,
+      headers: () => ({ 'content-type': 'image/jpeg' }),
+      request: () => ({ resourceType: () => 'image' }),
+      buffer: async () => {
+        bufferReads++
+        return Buffer.from('signed-original')
+      },
+    })
+
+    await (gentlemanBrowser as any).handleImageResponse({}, makeResponse(thumbnailUrl))
+    await (gentlemanBrowser as any).handleImageResponse({}, makeResponse(unsignedImageUrl))
+    await (gentlemanBrowser as any).handleImageResponse({}, makeResponse(originalImageUrl))
+
+    assert.equal(bufferReads, 1)
+    assert.equal(
+      gentlemanBrowser.take_image_buffer(originalImageUrl)?.toString(),
+      'signed-original'
+    )
+    assert.isNull(gentlemanBrowser.take_image_buffer(thumbnailUrl))
+    assert.isNull(gentlemanBrowser.take_image_buffer(unsignedImageUrl))
   })
 
   test('extracts the signed original image URL from the saved detail page', ({ assert }) => {
