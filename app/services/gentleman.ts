@@ -20,42 +20,50 @@ import { gentlemanBrowser } from '#api/browser'
 
 /** 章节信息，贯穿解析→下载→整理全流程 */
 type ChapterInfo = {
-  name: string       // 章节名称（已清理为合法目录名），如「同事換愛 185話」
-  url: string        // 章节列表页完整 URL
-  imageNum?: number  // 页面标注的图片总数（仅用于展示，不参与下载逻辑）
-  images: string[]   // 解析出的所有图片完整 URL 列表
+  name: string // 章节名称（已清理为合法目录名），如「同事換愛 185話」
+  url: string // 章节列表页完整 URL
+  imageNum?: number // 页面标注的图片总数（仅用于展示，不参与下载逻辑）
+  images: string[] // 解析出的所有图片完整 URL 列表
+}
+
+type ChapterDownloadProgress = {
+  viewUrl: string
+  imageUrl: string
+  fileName: string
 }
 
 type GentlemanPage = NonNullable<Awaited<ReturnType<typeof gentlemanBrowser.new_page>>>
 
+const chapterProgressFileName = '.gentleman-progress.jsonl'
+
 export default class Gentleman {
   // ── 站点与身份 ──────────────────────────────────────────────
-  private domain = 'https://www.wnacg.ru'   // 绅士漫画当前可用域名（镜像站可能变化）
-  private website: string = 'gentleman'     // 配置文件中的 key，对应 config.json["gentleman"]
-  private mangaId: number | string          // 订阅系统的漫画唯一 ID
-  private mangaName: string                 // 漫画名称（已处理为合法目录名）
-  private mangaUrl: string = ''             // 漫画目录页 URL（域名已替换为 this.domain）
+  private domain = 'https://www.wnacg.ru' // 绅士漫画当前可用域名（镜像站可能变化）
+  private website: string = 'gentleman' // 配置文件中的 key，对应 config.json["gentleman"]
+  private mangaId: number | string // 订阅系统的漫画唯一 ID
+  private mangaName: string // 漫画名称（已处理为合法目录名）
+  private mangaUrl: string = '' // 漫画目录页 URL（域名已替换为 this.domain）
 
   // ── 路径配置（来自 config.json）─────────────────────────────
-  private downloadPath: string              // 原始下载根目录，如 D:/manga-download
-  private organizePath: string              // 整理后归档目录，如 D:/manga-organized
-  private config: any                       // 当前站点的完整配置对象
-  private downloadChapterLimit = 0          // E2E/调试用：限制本次最多下载的章节数，0 表示不限制
+  private downloadPath: string // 原始下载根目录，如 D:/manga-download
+  private organizePath: string // 整理后归档目录，如 D:/manga-organized
+  private config: any // 当前站点的完整配置对象
+  private downloadChapterLimit = 0 // E2E/调试用：限制本次最多下载的章节数，0 表示不限制
 
   // ── 运行时状态 ──────────────────────────────────────────────
-  private chapters: ChapterInfo[] = []      // 解析得到的全部章节列表
-  private mangaPath: string = ''            // 本漫画的下载目录：downloadPath/mangaName
-  private metaPath: string = ''             // 元数据目录：mangaPath/.smanga（存放封面等）
-  private organizeMetaPath: string = ''     // 归档元数据目录：organizePath/mangaName/.smanga
-  private mangaStatus: string = ''          // 漫画状态，检测到「完結」时置为 'finished'
-  private params: any                       // 订阅参数（来自 subscribe 模块传入）
+  private chapters: ChapterInfo[] = [] // 解析得到的全部章节列表
+  private mangaPath: string = '' // 本漫画的下载目录：downloadPath/mangaName
+  private metaPath: string = '' // 元数据目录：mangaPath/.smanga（存放封面等）
+  private organizeMetaPath: string = '' // 归档元数据目录：organizePath/mangaName/.smanga
+  private mangaStatus: string = '' // 漫画状态，检测到「完結」时置为 'finished'
+  private params: any // 订阅参数（来自 subscribe 模块传入）
 
   // ── 进度回调（可选，由任务调度层注入）────────────────────────
   private onProgress?: {
-    setTotal: (n: number) => void           // 设置待下载章节总数
-    report: (msg: string) => void           // 上报章节完成消息
-    message: (msg: string) => void          // 上报实时进度文本
-    subProgress?: (current: number, total: number) => void  // 上报章节内图片进度
+    setTotal: (n: number) => void // 设置待下载章节总数
+    report: (msg: string) => void // 上报章节完成消息
+    message: (msg: string) => void // 上报实时进度文本
+    subProgress?: (current: number, total: number) => void // 上报章节内图片进度
   }
 
   /**
@@ -120,20 +128,21 @@ export default class Gentleman {
     write_log(`[gentleman] ${this.mangaName} 线上共解析到 ${this.chapters.length} 个章节`)
     const existingChapters = this.chapters.filter((item) => this.chapterExists(item.name))
     const newChaptersRaw = this.chapters.filter((item) => !this.chapterExists(item.name))
-    write_log(`[gentleman] ${this.mangaName} 本地已存在 ${existingChapters.length} 个，待下载 ${newChaptersRaw.length} 个`)
+    write_log(
+      `[gentleman] ${this.mangaName} 本地已存在 ${existingChapters.length} 个，待下载 ${newChaptersRaw.length} 个`
+    )
 
     // Step 3: 过滤出尚未下载的章节（目录不存在或为空则视为需要下载）
     const newChapters = this.limitChaptersToDownload(newChaptersRaw)
     this.onProgress?.setTotal(newChapters.length)
 
-    // Step 4: 逐章节解析图片 URL 并下载
+    // Step 4: 逐章节解析图片 URL，并在每张原图到达后立即写盘释放内存
     let downloadedCount = 0
     const downloadedChapters: ChapterInfo[] = []
     for (const item of newChapters) {
       write_log(`[chapter]${item.name} 正在下载`)
       this.onProgress?.message(`正在下载章节: ${item.name}`)
-      await this.get_chapter_images(item)     // 解析图片 URL 列表（含分页）
-      await this.download_chapter_images(item) // 批量下载图片到本地
+      await this.download_chapter_images(item)
       downloadedCount++
       downloadedChapters.push(item)
       this.onProgress?.report(`${item.name} 下载完成`)
@@ -234,7 +243,9 @@ export default class Gentleman {
     // 提取所有分页链接（href 属性值）
     const pagesMatch = pageBox.match(/(?<=href=").+?(?=")/gs)
     if (!pagesMatch) {
-      write_log(`[gentleman] ${this.mangaName} 目录翻页: pageBox中无href链接, pageBox="${pageBox.slice(0, 200)}"`)
+      write_log(
+        `[gentleman] ${this.mangaName} 目录翻页: pageBox中无href链接, pageBox="${pageBox.slice(0, 200)}"`
+      )
       return this.chapters
     }
 
@@ -274,9 +285,12 @@ export default class Gentleman {
       write_log(`  被过滤章节样本: ${samples.join(' | ')}`)
       for (const s of samples) {
         const reasons: string[] = []
-        if (this.params?.nameMatch !== false && !nameMatchRegex.test(s)) reasons.push('nameMatch不匹配')
-        if (chapterIncludes && !new RegExp(chapterIncludes).test(s)) reasons.push('chapterIncludes不匹配')
-        if (chapterExcludes && new RegExp(chapterExcludes).test(s)) reasons.push('chapterExcludes排除')
+        if (this.params?.nameMatch !== false && !nameMatchRegex.test(s))
+          reasons.push('nameMatch不匹配')
+        if (chapterIncludes && !new RegExp(chapterIncludes).test(s))
+          reasons.push('chapterIncludes不匹配')
+        if (chapterExcludes && new RegExp(chapterExcludes).test(s))
+          reasons.push('chapterExcludes排除')
         write_log(`  "${s}" → ${reasons.join(', ') || '通过(不应出现)'}`)
       }
     }
@@ -400,6 +414,7 @@ export default class Gentleman {
     const chapters = fs.readdirSync(this.mangaPath)
 
     for (const chapter of chapters) {
+      if (chapter.endsWith('.downloading')) continue
       const filePath = path.join(this.mangaPath, chapter)
       if (!fs.statSync(filePath).isDirectory()) continue
       fs.readdirSync(filePath)
@@ -430,13 +445,14 @@ export default class Gentleman {
   async organize_files() {
     const sourceChapters = fs.readdirSync(this.mangaPath)
     const organizeMangaPath = path.join(this.organizePath, this.mangaName)
-    let coverFile = ''  // 追踪最后遇到的封面文件路径，用于后续复制到各章节目录
+    let coverFile = '' // 追踪最后遇到的封面文件路径，用于后续复制到各章节目录
 
     if (!fs.existsSync(organizeMangaPath)) fs.mkdirSync(organizeMangaPath, { recursive: true })
     const organizeChapters = fs.readdirSync(organizeMangaPath)
 
     // 遍历下载目录中的每个章节子目录
     for (const chapter of sourceChapters) {
+      if (chapter.endsWith('.downloading')) continue
       const filePath = path.join(this.mangaPath, chapter)
       if (!fs.statSync(filePath).isDirectory()) continue
 
@@ -455,7 +471,7 @@ export default class Gentleman {
         if (imageNums.length < 2) continue
 
         const [chapterNum, imageNumRaw] = imageNums
-        const imageNum = imageNumRaw.split('.')[0]  // 去掉 .jpg 后缀
+        const imageNum = imageNumRaw.split('.')[0] // 去掉 .jpg 后缀
         const organizeChapterPath = path.join(organizeMangaPath, chapterNum)
         const organizeFile = path.join(organizeChapterPath, `${imageNum}.jpg`)
 
@@ -477,7 +493,7 @@ export default class Gentleman {
         const chapterDir = path.join(organizeMangaPath, chapter)
         if (!fs.statSync(chapterDir).isDirectory()) continue
         const chapterCover = `${chapterDir}.jpg`
-        if (fs.existsSync(chapterCover)) continue  // 已有封面则跳过
+        if (fs.existsSync(chapterCover)) continue // 已有封面则跳过
         fs.copyFileSync(coverFile, chapterCover)
       }
     }
@@ -532,28 +548,44 @@ export default class Gentleman {
     return false
   }
 
-  /** 从章节图片列表的分页中，先完整收集全部详情页 URL。 */
-  private async get_chapter_view_urls(
-    chapter: ChapterInfo,
-    url: string = chapter.url,
-    visitedPages = new Set<string>()
-  ): Promise<string[]> {
-    if (visitedPages.has(url)) return []
-    visitedPages.add(url)
+  /**
+   * 复用同一个页签循环读取章节分页，避免超大合并章节不断创建、销毁 Chromium Target。
+   * 这里只保留体积很小的详情页 URL；列表页产生的缩略图 buffer 会在页签关闭后清空。
+   */
+  private async get_chapter_view_urls(chapter: ChapterInfo): Promise<string[]> {
+    const page = await gentlemanBrowser.new_page()
+    if (!page) throw new Error(`${chapter.name} 无法创建章节分页页签`)
 
-    const html = await this.get_browser_html(url)
-    const viewUrls = this.get_subpage_view_urls(html, url)
-    if (viewUrls.length === 0) {
-      throw new Error(`${chapter.name} 未在章节页找到图片详情页链接: ${url}`)
+    const visitedPages = new Set<string>()
+    const visitedViews = new Set<string>()
+    const viewUrls: string[] = []
+    let currentUrl = chapter.url
+
+    try {
+      while (currentUrl && !visitedPages.has(currentUrl)) {
+        visitedPages.add(currentUrl)
+        const html = await this.get_page_html(page, currentUrl)
+        const pageViewUrls = this.get_subpage_view_urls(html, currentUrl)
+        if (pageViewUrls.length === 0) {
+          throw new Error(`${chapter.name} 未在章节页找到图片详情页链接: ${currentUrl}`)
+        }
+
+        for (const viewUrl of pageViewUrls) {
+          if (visitedViews.has(viewUrl)) continue
+          visitedViews.add(viewUrl)
+          viewUrls.push(viewUrl)
+        }
+
+        const pageBox = html.match(/(?<=paginator).+?(?=f_right)/s)?.[0] || ''
+        const nextPage = pageBox.match(/(?<=next"><a\shref=").+?(?=">後頁)/s)?.[0] || ''
+        currentUrl = nextPage ? this.absolute_url(nextPage, currentUrl) : ''
+      }
+    } finally {
+      await page.close().catch(() => {})
+      gentlemanBrowser.clear_buffs()
     }
 
-    const pageBox = html.match(/(?<=paginator).+?(?=f_right)/s)?.[0] || ''
-    const nextPage = pageBox.match(/(?<=next"><a\shref=").+?(?=">後頁)/s)?.[0] || ''
-    if (!nextPage) return viewUrls
-
-    const nextPageUrl = this.absolute_url(nextPage, url)
-    const nextViewUrls = await this.get_chapter_view_urls(chapter, nextPageUrl, visitedPages)
-    return [...new Set([...viewUrls, ...nextViewUrls])]
+    return viewUrls
   }
 
   /** 详情页之间的礼貌限速，默认每次等待 4～6 秒，可通过 Gentleman 配置覆盖。 */
@@ -593,94 +625,167 @@ export default class Gentleman {
   }
 
   /**
-   * 获取某章节所有图片的完整 URL
-   *
-   * 处理流程：
-   *   1. 先递归加载全部章节列表分页，收齐详情页链接，避免解析途中受限后丢失后续分页
-   *   2. 复用同一个浏览器页签，限速访问每个详情页
-   *   3. 从 #picarea 中读取带 verify 参数的原图 URL
-   *   4. 安全验证页退避重试，最终数量不符时直接报错
-   *
-   * @param chapter 当前章节对象（images 字段会被原地更新）
+   * 读取可恢复的逐图下载记录。损坏的末行会被忽略，已不存在的图片文件会重新下载。
    */
-  private async get_chapter_images(chapter: ChapterInfo): Promise<string[]> {
-    const viewUrls = await this.get_chapter_view_urls(chapter)
-    if (chapter.imageNum && viewUrls.length !== chapter.imageNum) {
-      throw new Error(
-        `${chapter.name} 详情页数量不完整: 页面标注 ${chapter.imageNum} 张，实际找到 ${viewUrls.length} 个链接`
-      )
-    }
+  private read_chapter_progress(progressPath: string, downloadPath: string) {
+    const completed = new Map<string, ChapterDownloadProgress>()
+    if (!fs.existsSync(progressPath)) return completed
 
-    const page = await gentlemanBrowser.new_page()
-    if (!page) throw new Error(`${chapter.name} 无法创建图片详情页页签`)
+    const lines = fs.readFileSync(progressPath, 'utf-8').split(/\r?\n/)
+    for (const line of lines) {
+      if (!line.trim()) continue
 
-    try {
-      for (let index = 0; index < viewUrls.length; index++) {
-        if (index > 0) await this.wait_before_detail_page()
+      try {
+        const record = JSON.parse(line) as ChapterDownloadProgress
+        if (!record.viewUrl || !record.imageUrl || !record.fileName) continue
 
-        const viewUrl = viewUrls[index]
-        this.onProgress?.message(`正在解析章节: ${chapter.name} (${index + 1}/${viewUrls.length})`)
-        const imageUrl = await this.get_detail_image_url(page, chapter, viewUrl)
-        if (!imageUrl || chapter.images.includes(imageUrl)) continue
-
-        chapter.images.push(imageUrl)
+        const imagePath = path.join(downloadPath, record.fileName)
+        if (!fs.existsSync(imagePath) || fs.statSync(imagePath).size <= 0) continue
+        completed.set(record.viewUrl, record)
+      } catch {
+        // 进程可能在追加 JSONL 时退出；仅忽略不完整的最后一条记录。
       }
-    } finally {
-      await page.close().catch(() => {})
     }
 
-    const expectedCount = chapter.imageNum || viewUrls.length
-    if (chapter.images.length !== expectedCount) {
-      throw new Error(
-        `${chapter.name} 原图解析不完整: 预期 ${expectedCount} 张，实际 ${chapter.images.length} 张`
-      )
+    return completed
+  }
+
+  /** 追加一条进度记录；每张图独立落盘，避免为超大章节反复重写完整清单。 */
+  private append_chapter_progress(progressPath: string, record: ChapterDownloadProgress) {
+    fs.appendFileSync(progressPath, `${JSON.stringify(record)}\n`, 'utf-8')
+  }
+
+  /** 从 Gentleman 图片缓存中取出原图，兼容 URL 中空格被浏览器编码的情况。 */
+  private take_image_buffer(imageUrl: string): Buffer | null {
+    const encodedImageUrl = imageUrl.replace(/ /g, '%20')
+    return (
+      gentlemanBrowser.take_image_buffer(imageUrl) ||
+      (encodedImageUrl !== imageUrl ? gentlemanBrowser.take_image_buffer(encodedImageUrl) : null)
+    )
+  }
+
+  /** 文件名冲突时增加稳定的顺序前缀，避免合并章节的同名图片互相覆盖。 */
+  private get_unique_image_file_name(
+    imageUrl: string,
+    index: number,
+    usedFileNames: Map<string, string>,
+    viewUrl: string
+  ) {
+    const originalName = this.get_image_file_name(imageUrl, index)
+    let fileName = originalName
+    let collisionIndex = 0
+
+    while (usedFileNames.has(fileName) && usedFileNames.get(fileName) !== viewUrl) {
+      collisionIndex++
+      const suffix = collisionIndex === 1 ? '' : `-${collisionIndex}`
+      fileName = `${String(index + 1).padStart(5, '0')}${suffix}-${originalName}`
     }
 
-    write_log(`[gentleman] ${chapter.name} 图片解析完毕，共 ${chapter.images.length} 张`)
-    return chapter.images
+    return fileName
   }
 
   /**
-   * 下载某章节的所有图片到本地目录
+   * 流式下载某章节：列表分页和图片详情各自复用一个页签，原图捕获后立即写盘并释放。
    *
-   * 目录结构：mangaPath/{章节名}/{图片文件名}
-   * 文件名直接复用 URL 最后一段（如 t4_images..._185_001.jpg）
+   * 下载中的图片保存在 `{章节名}.downloading`，并以 JSONL 记录完成项。进程异常退出后，
+   * 下次任务会跳过已经成功写入的详情页；全部校验通过后再原子重命名为正式章节目录。
    */
   private async download_chapter_images(item: ChapterInfo): Promise<void> {
-    if (!item.images || item.images.length === 0) {
-      write_log(`[gentleman] ${item.name} 无图片URL，跳过下载`)
-      return
+    const viewUrls = await this.get_chapter_view_urls(item)
+    const expectedCount = item.imageNum || viewUrls.length
+    if (item.imageNum && viewUrls.length !== item.imageNum) {
+      throw new Error(
+        `${item.name} 详情页数量不完整: 页面标注 ${item.imageNum} 张，实际找到 ${viewUrls.length} 个链接`
+      )
     }
+
+    if (viewUrls.length === 0) throw new Error(`${item.name} 未找到图片详情页链接`)
 
     const chapterPath = path.join(this.mangaPath, item.name)
-    if (!fs.existsSync(chapterPath)) {
-      fs.mkdirSync(chapterPath, { recursive: true })
+    const downloadingPath = `${chapterPath}.downloading`
+    const progressPath = path.join(downloadingPath, chapterProgressFileName)
+    fs.mkdirSync(downloadingPath, { recursive: true })
+
+    const completed = this.read_chapter_progress(progressPath, downloadingPath)
+    const usedFileNames = new Map<string, string>()
+    for (const record of completed.values()) usedFileNames.set(record.fileName, record.viewUrl)
+
+    const resumedCount = viewUrls.filter((viewUrl) => completed.has(viewUrl)).length
+    if (resumedCount > 0) {
+      write_log(
+        `[gentleman] ${item.name} 从临时目录续传，已完成 ${resumedCount}/${viewUrls.length} 张`
+      )
     }
+
+    item.images = []
+    const page = await gentlemanBrowser.new_page()
+    if (!page) throw new Error(`${item.name} 无法创建图片详情页页签`)
 
     let successCount = 0
-    for (let i = 0; i < item.images.length; i++) {
-      const img = item.images[i]
-      // URL 现在含有 ?verify=...，文件名只能取 pathname，否则 Windows 下的 ? 会导致写入失败。
-      const fileName = this.get_image_file_name(img, i)
-      const filePath = path.join(chapterPath, fileName)
+    let requestedCount = 0
+    try {
+      for (let index = 0; index < viewUrls.length; index++) {
+        const viewUrl = viewUrls[index]
+        const existing = completed.get(viewUrl)
+        if (existing) {
+          item.images.push(existing.imageUrl)
+          successCount++
+          this.onProgress?.message(`正在续传章节: ${item.name} (${index + 1}/${viewUrls.length})`)
+          this.onProgress?.subProgress?.(index + 1, viewUrls.length)
+          continue
+        }
 
-      // 上报当前下载进度（章节内图片级进度）
-      this.onProgress?.message(`正在下载章节: ${item.name} (${i + 1}/${item.images.length})`)
-      this.onProgress?.subProgress?.(i + 1, item.images.length)
+        if (requestedCount > 0) await this.wait_before_detail_page()
+        requestedCount++
+        gentlemanBrowser.clear_buffs()
 
-      const encodedImageUrl = img.replace(/ /g, '%20')
-      const buffer =
-        gentlemanBrowser.take_image_buffer(img) ||
-        (encodedImageUrl !== img ? gentlemanBrowser.take_image_buffer(encodedImageUrl) : null)
-      if (!buffer?.length) {
-        throw new Error(`${item.name} 浏览器图片缓存缺失: ${img}`)
+        this.onProgress?.message(`正在下载章节: ${item.name} (${index + 1}/${viewUrls.length})`)
+        const imageUrl = await this.get_detail_image_url(page, item, viewUrl)
+        if (!imageUrl) throw new Error(`${item.name} 未能解析原图: ${viewUrl}`)
+
+        const buffer = this.take_image_buffer(imageUrl)
+        if (!buffer?.length) {
+          throw new Error(`${item.name} 浏览器图片缓存缺失: ${imageUrl}`)
+        }
+
+        const fileName = this.get_unique_image_file_name(imageUrl, index, usedFileNames, viewUrl)
+        const filePath = path.join(downloadingPath, fileName)
+        fs.writeFileSync(filePath, buffer)
+
+        const record = { viewUrl, imageUrl, fileName }
+        this.append_chapter_progress(progressPath, record)
+        completed.set(viewUrl, record)
+        usedFileNames.set(fileName, viewUrl)
+        item.images.push(imageUrl)
+        successCount++
+        this.onProgress?.subProgress?.(index + 1, viewUrls.length)
+
+        // 页面中还可能有缩略图、logo 等响应；原图写盘后全部释放，内存峰值保持在单图级别。
+        gentlemanBrowser.clear_buffs()
       }
-
-      fs.writeFileSync(filePath, buffer)
-      successCount++
+    } finally {
+      await page.close().catch(() => {})
+      gentlemanBrowser.clear_buffs()
     }
+
+    if (successCount !== expectedCount) {
+      throw new Error(
+        `${item.name} 原图下载不完整: 预期 ${expectedCount} 张，实际 ${successCount} 张`
+      )
+    }
+
+    if (fs.existsSync(chapterPath)) {
+      const existingEntries = fs.readdirSync(chapterPath)
+      if (existingEntries.length > 0) {
+        throw new Error(`${item.name} 正式章节目录在下载期间出现文件，保留临时目录等待人工确认`)
+      }
+      fs.rmdirSync(chapterPath)
+    }
+
+    fs.renameSync(downloadingPath, chapterPath)
+    fs.rmSync(path.join(chapterPath, chapterProgressFileName), { force: true })
     write_log(
-      `[gentleman] ${item.name} 下载完成: ${successCount}/${item.images.length} 张成功，全部来自浏览器缓存`
+      `[gentleman] ${item.name} 下载完成: ${successCount}/${viewUrls.length} 张成功，原图均已流式写盘`
     )
   }
 

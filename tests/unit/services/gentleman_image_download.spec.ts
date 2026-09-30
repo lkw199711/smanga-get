@@ -40,33 +40,6 @@ test.group('Gentleman image download', (group) => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 
-  test('writes captured detail-page buffers without a second image request', async ({ assert }) => {
-    const service = new Gentleman({
-      website: 'gentleman',
-      id: 1,
-      name: 'Buffered Test Manga',
-      url: 'https://www.wnacg.ru/photos-index-aid-2.html',
-    })
-    const imageUrl = 'https://img5.qy0.ru/data/2/buffered.jpg?verify=from-detail-page'
-
-    ;(gentlemanBrowser as any).rememberImageBuffer(imageUrl, Buffer.from('browser-buffer-data'))
-
-    await (service as any).download_chapter_images({
-      name: 'Buffered Test Manga 1話',
-      url: 'https://www.wnacg.ru/photos-index-aid-2.html',
-      images: [imageUrl],
-    })
-
-    const imagePath = path.join(
-      downloadPath,
-      'Buffered Test Manga',
-      'Buffered Test Manga 1話',
-      'buffered.jpg'
-    )
-    assert.equal(fs.readFileSync(imagePath, 'utf-8'), 'browser-buffer-data')
-    assert.isNull(gentlemanBrowser.take_image_buffer(imageUrl))
-  })
-
   test('extracts the signed original image URL from the saved detail page', ({ assert }) => {
     const service = new Gentleman({
       website: 'gentleman',
@@ -97,7 +70,7 @@ test.group('Gentleman image download', (group) => {
     )
   })
 
-  test('opens every image detail page instead of constructing URLs from thumbnails', async ({
+  test('reuses pagination/detail pages and streams every image buffer to disk', async ({
     assert,
   }) => {
     const service = new Gentleman({
@@ -113,7 +86,7 @@ test.group('Gentleman image download', (group) => {
     const listPageUrls: string[] = []
     const detailPageUrls: string[] = []
     const originalNewPage = gentlemanBrowser.new_page
-    let currentUrl = ''
+    let createdPages = 0
     let closedPages = 0
     const pages = new Map<string, string>([
       [
@@ -133,15 +106,15 @@ test.group('Gentleman image download', (group) => {
       [secondViewUrl, '<img id="picarea" src="//img5.qy0.ru/data/1/1/002.jpg?verify=222--second">'],
     ])
 
-    ;(service as any).get_browser_html = async (url: string) => {
-      listPageUrls.push(url)
-      return pages.get(url) || ''
-    }
-    gentlemanBrowser.new_page = async () =>
-      ({
+    gentlemanBrowser.new_page = async () => {
+      const pageKind = createdPages++ === 0 ? 'list' : 'detail'
+      let currentUrl = ''
+
+      return {
         goto: async (url: string) => {
           currentUrl = url
-          detailPageUrls.push(url)
+          if (pageKind === 'list') listPageUrls.push(url)
+          else detailPageUrls.push(url)
           return { status: () => 200 }
         },
         content: async () => {
@@ -164,23 +137,104 @@ test.group('Gentleman image download', (group) => {
         close: async () => {
           closedPages++
         },
-      }) as any
+      } as any
+    }
 
     const chapter = { name: 'Detail Page Test 1話', url: chapterUrl, imageNum: 2, images: [] }
-    let images: string[]
     try {
-      images = await (service as any).get_chapter_images(chapter)
+      await (service as any).download_chapter_images(chapter)
     } finally {
       gentlemanBrowser.new_page = originalNewPage
     }
 
     assert.deepEqual(listPageUrls, [chapterUrl, nextChapterPageUrl])
     assert.deepEqual(detailPageUrls, [firstViewUrl, secondViewUrl])
-    assert.equal(closedPages, 1)
-    assert.deepEqual(images, [
+    assert.equal(createdPages, 2)
+    assert.equal(closedPages, 2)
+    assert.deepEqual(chapter.images, [
       'https://img5.qy0.ru/data/1/1/001.jpg?verify=111--first',
       'https://img5.qy0.ru/data/1/1/002.jpg?verify=222--second',
     ])
+    const chapterPath = path.join(downloadPath, 'Detail Page Test', chapter.name)
+    assert.equal(fs.readFileSync(path.join(chapterPath, '001.jpg'), 'utf-8'), 'first')
+    assert.equal(fs.readFileSync(path.join(chapterPath, '002.jpg'), 'utf-8'), 'second')
+    assert.isFalse(fs.existsSync(`${chapterPath}.downloading`))
+    assert.isNull(
+      gentlemanBrowser.take_image_buffer('https://img5.qy0.ru/data/1/1/002.jpg?verify=222--second')
+    )
+  })
+
+  test('resumes a merged chapter from its per-image progress log', async ({ assert }) => {
+    const service = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: 'Resume Test',
+      url: 'https://www.wnacg.ru/photos-index-aid-9.html',
+    })
+    const chapterUrl = 'https://www.wnacg.ru/photos-index-aid-9.html'
+    const firstViewUrl = 'https://www.wnacg.ru/photos-view-id-91.html'
+    const secondViewUrl = 'https://www.wnacg.ru/photos-view-id-92.html'
+    const firstImageUrl = 'https://img5.qy0.ru/data/9/1/091.jpg?verify=old'
+    const secondImageUrl = 'https://img5.qy0.ru/data/9/1/092.jpg?verify=new'
+    const chapterName = 'Resume Test 1話'
+    const chapterPath = path.join(downloadPath, 'Resume Test', chapterName)
+    const downloadingPath = `${chapterPath}.downloading`
+    fs.mkdirSync(downloadingPath, { recursive: true })
+    fs.writeFileSync(path.join(downloadingPath, '091.jpg'), 'already-downloaded')
+    fs.writeFileSync(
+      path.join(downloadingPath, '.gentleman-progress.jsonl'),
+      `${JSON.stringify({ viewUrl: firstViewUrl, imageUrl: firstImageUrl, fileName: '091.jpg' })}\n`
+    )
+
+    const pages = new Map<string, string>([
+      [
+        chapterUrl,
+        `<div class="gallary_wrap">
+          <a href="/photos-view-id-91.html">first</a>
+          <a href="/photos-view-id-92.html">second</a>
+        </div><div class="comment_wrap"></div>`,
+      ],
+      [secondViewUrl, `<img id="picarea" src="${secondImageUrl}">`],
+    ])
+    const detailPageUrls: string[] = []
+    const originalNewPage = gentlemanBrowser.new_page
+    let createdPages = 0
+
+    gentlemanBrowser.new_page = async () => {
+      const pageKind = createdPages++ === 0 ? 'list' : 'detail'
+      let currentUrl = ''
+      return {
+        goto: async (url: string) => {
+          currentUrl = url
+          if (pageKind === 'detail') detailPageUrls.push(url)
+          return { status: () => 200 }
+        },
+        content: async () => {
+          if (currentUrl === secondViewUrl) {
+            ;(gentlemanBrowser as any).rememberImageBuffer(
+              secondImageUrl,
+              Buffer.from('newly-downloaded')
+            )
+          }
+          return pages.get(currentUrl) || ''
+        },
+        title: async () => 'resume test',
+        close: async () => {},
+      } as any
+    }
+
+    const chapter = { name: chapterName, url: chapterUrl, imageNum: 2, images: [] }
+    try {
+      await (service as any).download_chapter_images(chapter)
+    } finally {
+      gentlemanBrowser.new_page = originalNewPage
+    }
+
+    assert.deepEqual(detailPageUrls, [secondViewUrl])
+    assert.equal(fs.readFileSync(path.join(chapterPath, '091.jpg'), 'utf-8'), 'already-downloaded')
+    assert.equal(fs.readFileSync(path.join(chapterPath, '092.jpg'), 'utf-8'), 'newly-downloaded')
+    assert.isFalse(fs.existsSync(downloadingPath))
+    assert.deepEqual(chapter.images, [firstImageUrl, secondImageUrl])
   })
 
   test('backs off and retries when a detail request reaches the security challenge', async ({
@@ -221,9 +275,7 @@ test.group('Gentleman image download', (group) => {
     assert.equal(imageUrl, 'https://img5.qy0.ru/data/1/1/001.jpg?verify=retry-ok')
   })
 
-  test('removes verify parameters from filenames saved from browser buffers', async ({
-    assert,
-  }) => {
+  test('removes verify parameters from filenames', ({ assert }) => {
     const service = new Gentleman({
       website: 'gentleman',
       id: 1,
@@ -232,23 +284,7 @@ test.group('Gentleman image download', (group) => {
     })
     const imageUrl = 'https://img5.qy0.ru/data/3840/66/76_02.jpg?verify=123--signature'
 
-    ;(gentlemanBrowser as any).rememberImageBuffer(imageUrl, Buffer.from('signed-image-data'))
-
-    await (service as any).download_chapter_images({
-      name: 'Verified Download 1話',
-      url: 'https://www.wnacg.ru/photos-index-aid-1.html',
-      images: [imageUrl],
-    })
-
-    const savedImage = path.join(
-      downloadPath,
-      'Verified Download',
-      'Verified Download 1話',
-      '76_02.jpg'
-    )
-    assert.isTrue(fs.existsSync(savedImage))
-    assert.equal(fs.readFileSync(savedImage, 'utf-8'), 'signed-image-data')
-    assert.isNull(gentlemanBrowser.take_image_buffer(imageUrl))
+    assert.equal((service as any).get_image_file_name(imageUrl, 0), '76_02.jpg')
   })
 
   test('accepts continuous image sequences in a merged chapter and ignores its cover', ({
