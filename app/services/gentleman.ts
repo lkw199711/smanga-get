@@ -561,6 +561,7 @@ export default class Gentleman {
     const visitedViews = new Set<string>()
     const viewUrls: string[] = []
     let currentUrl = chapter.url
+    let pageNumber = 0
     let page: GentlemanPage | null = null
 
     gentlemanBrowser.set_image_capture_mode('none')
@@ -569,6 +570,12 @@ export default class Gentleman {
       if (!page) throw new Error(`${chapter.name} 无法创建章节分页页签`)
 
       while (currentUrl && !visitedPages.has(currentUrl)) {
+        if (pageNumber > 0) await this.wait_before_chapter_page()
+        pageNumber++
+        this.onProgress?.message(
+          `正在读取章节分页: ${chapter.name} (第${pageNumber}页，已找到${viewUrls.length}张)`
+        )
+
         visitedPages.add(currentUrl)
         const html = await this.get_page_html(page, currentUrl)
         const pageViewUrls = this.get_subpage_view_urls(html, currentUrl)
@@ -593,6 +600,17 @@ export default class Gentleman {
     }
 
     return viewUrls
+  }
+
+  /** 章节图片分页之间的随机间隔，避免连续导航让浏览器和站点瞬时负载过高。 */
+  private async wait_before_chapter_page(): Promise<void> {
+    const configuredMin = Number(this.config.chapterPageDelayMinMs ?? 2_000)
+    const configuredMax = Number(this.config.chapterPageDelayMaxMs ?? 4_000)
+    const min = Math.max(0, Math.min(configuredMin, configuredMax))
+    const max = Math.max(min, configuredMin, configuredMax)
+    const delay = min === max ? min : Math.floor(min + Math.random() * (max - min + 1))
+
+    await this.wait(delay)
   }
 
   /** 详情页之间的礼貌限速，默认每次等待 4～6 秒，可通过 Gentleman 配置覆盖。 */

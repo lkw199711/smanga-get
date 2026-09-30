@@ -152,6 +152,7 @@ test.group('Gentleman image download', (group) => {
     const listPageUrls: string[] = []
     const detailPageUrls: string[] = []
     const originalNewPage = gentlemanBrowser.new_page
+    let chapterPageWaits = 0
     let createdPages = 0
     let closedPages = 0
     const pages = new Map<string, string>([
@@ -205,6 +206,9 @@ test.group('Gentleman image download', (group) => {
         },
       } as any
     }
+    ;(service as any).wait_before_chapter_page = async () => {
+      chapterPageWaits++
+    }
 
     const chapter = { name: 'Detail Page Test 1話', url: chapterUrl, imageNum: 2, images: [] }
     try {
@@ -215,6 +219,7 @@ test.group('Gentleman image download', (group) => {
 
     assert.deepEqual(listPageUrls, [chapterUrl, nextChapterPageUrl])
     assert.deepEqual(detailPageUrls, [firstViewUrl, secondViewUrl])
+    assert.equal(chapterPageWaits, 1)
     assert.equal(createdPages, 2)
     assert.equal(closedPages, 2)
     assert.deepEqual(chapter.images, [
