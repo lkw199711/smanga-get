@@ -235,6 +235,125 @@ test.group('Gentleman image download', (group) => {
     )
   })
 
+  test('restarts a frozen browser and resumes pagination from its checkpoint', async ({
+    assert,
+  }) => {
+    const service = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: 'Pagination Recovery',
+      url: 'https://www.wnacg.ru/photos-index-aid-62.html',
+    })
+    const firstPageUrl = 'https://www.wnacg.ru/photos-index-aid-62.html'
+    const secondPageUrl = 'https://www.wnacg.ru/photos-index-page-2-aid-62.html'
+    const firstViewUrl = 'https://www.wnacg.ru/photos-view-id-621.html'
+    const secondViewUrl = 'https://www.wnacg.ru/photos-view-id-622.html'
+    const pageProgressPath = path.join(root, 'pagination-recovery', '.gentleman-pages.jsonl')
+    fs.mkdirSync(path.dirname(pageProgressPath), { recursive: true })
+
+    const pages = new Map<string, string>([
+      [
+        firstPageUrl,
+        `<div class="gallary_wrap"><a href="/photos-view-id-621.html">first</a></div>
+         <div class="comment_wrap"></div>
+         <div class="paginator"><span class="next"><a href="/photos-index-page-2-aid-62.html">後頁</a></span><div class="f_right"></div>`,
+      ],
+      [
+        secondPageUrl,
+        `<div class="gallary_wrap"><a href="/photos-view-id-622.html">second</a></div>
+         <div class="comment_wrap"></div>`,
+      ],
+    ])
+    const originalNewPage = gentlemanBrowser.new_page
+    let newPageCalls = 0
+    let secondPageAttempts = 0
+    let restartCalls = 0
+
+    gentlemanBrowser.new_page = async () => {
+      newPageCalls++
+      return { close: async () => {} } as any
+    }
+    ;(service as any).wait_before_chapter_page = async () => {}
+    ;(service as any).get_page_html = async (
+      _page: unknown,
+      url: string,
+      options: { retry?: number }
+    ) => {
+      assert.equal(options.retry, 1)
+      if (url === secondPageUrl) {
+        secondPageAttempts++
+        if (secondPageAttempts === 1) {
+          throw new Error(
+            `Gentleman 页面重试耗尽: ${url}, 原因: Navigation timeout of 60000 ms exceeded`
+          )
+        }
+      }
+      return pages.get(url) || ''
+    }
+    ;(service as any).restart_gentleman_browser = async (
+      _chapterName: string,
+      pageUrl: string,
+      attempt: number
+    ) => {
+      restartCalls++
+      assert.equal(pageUrl, secondPageUrl)
+      assert.equal(attempt, 1)
+      return { close: async () => {} } as any
+    }
+
+    const chapter = {
+      name: 'Pagination Recovery 1話',
+      url: firstPageUrl,
+      imageNum: 2,
+      images: [],
+    }
+    let viewUrls: string[]
+    try {
+      viewUrls = await (service as any).get_chapter_view_urls(chapter, pageProgressPath)
+    } finally {
+      gentlemanBrowser.new_page = originalNewPage
+    }
+
+    assert.deepEqual(viewUrls, [firstViewUrl, secondViewUrl])
+    assert.equal(newPageCalls, 1)
+    assert.equal(secondPageAttempts, 2)
+    assert.equal(restartCalls, 1)
+
+    const checkpoints = fs
+      .readFileSync(pageProgressPath, 'utf-8')
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line))
+    assert.deepEqual(
+      checkpoints.map((item) => item.pageNumber),
+      [1, 2]
+    )
+
+    const resumedService = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: 'Pagination Recovery',
+      url: firstPageUrl,
+    })
+    let unexpectedPageCreations = 0
+    gentlemanBrowser.new_page = async () => {
+      unexpectedPageCreations++
+      return { close: async () => {} } as any
+    }
+    let resumedViewUrls: string[]
+    try {
+      resumedViewUrls = await (resumedService as any).get_chapter_view_urls(
+        chapter,
+        pageProgressPath
+      )
+    } finally {
+      gentlemanBrowser.new_page = originalNewPage
+    }
+
+    assert.deepEqual(resumedViewUrls, [firstViewUrl, secondViewUrl])
+    assert.equal(unexpectedPageCreations, 0)
+  })
+
   test('resumes a merged chapter from its per-image progress log', async ({ assert }) => {
     const service = new Gentleman({
       website: 'gentleman',

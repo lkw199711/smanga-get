@@ -32,9 +32,17 @@ type ChapterDownloadProgress = {
   fileName: string
 }
 
+type ChapterPageProgress = {
+  pageNumber: number
+  pageUrl: string
+  viewUrls: string[]
+  nextPageUrl: string
+}
+
 type GentlemanPage = NonNullable<Awaited<ReturnType<typeof gentlemanBrowser.new_page>>>
 
 const chapterProgressFileName = '.gentleman-progress.jsonl'
+const chapterPageProgressFileName = '.gentleman-pages.jsonl'
 
 export default class Gentleman {
   // ── 站点与身份 ──────────────────────────────────────────────
@@ -367,9 +375,15 @@ export default class Gentleman {
   }
 
   /** 在已有页签中加载 HTML，遇到安全验证或临时导航失败时退避重试。 */
-  private async get_page_html(page: GentlemanPage, url: string): Promise<string> {
-    const retry = Math.max(1, Number(this.config.detailPageRetry || 3))
-    const retryDelay = Math.max(0, Number(this.config.challengeRetryDelayMs ?? 30_000))
+  private async get_page_html(
+    page: GentlemanPage,
+    url: string,
+    options: { retry?: number; retryDelayMs?: number } = {}
+  ): Promise<string> {
+    const configuredRetry = options.retry ?? this.config.detailPageRetry ?? 3
+    const configuredRetryDelay = options.retryDelayMs ?? this.config.challengeRetryDelayMs ?? 30_000
+    const retry = Math.max(1, Number(configuredRetry))
+    const retryDelay = Math.max(0, Number(configuredRetryDelay))
     let lastError: unknown = null
 
     for (let attempt = 1; attempt <= retry; attempt++) {
@@ -552,17 +566,159 @@ export default class Gentleman {
     return false
   }
 
+  /** 读取已完成的章节分页；只接受从第一页开始连续、URL 能首尾衔接的记录。 */
+  private read_chapter_page_progress(progressPath: string, chapterUrl: string) {
+    const visitedPages = new Set<string>()
+    const visitedViews = new Set<string>()
+    const viewUrls: string[] = []
+    let currentUrl = chapterUrl
+    let pageNumber = 0
+
+    if (!fs.existsSync(progressPath)) {
+      return { visitedPages, visitedViews, viewUrls, currentUrl, pageNumber }
+    }
+
+    const lines = fs.readFileSync(progressPath, 'utf-8').split(/\r?\n/)
+    for (const line of lines) {
+      if (!line.trim()) continue
+
+      let record: ChapterPageProgress
+      try {
+        record = JSON.parse(line) as ChapterPageProgress
+      } catch {
+        break
+      }
+
+      if (
+        record.pageNumber !== pageNumber + 1 ||
+        record.pageUrl !== currentUrl ||
+        !Array.isArray(record.viewUrls)
+      ) {
+        break
+      }
+
+      visitedPages.add(record.pageUrl)
+      for (const viewUrl of record.viewUrls) {
+        if (!viewUrl || visitedViews.has(viewUrl)) continue
+        visitedViews.add(viewUrl)
+        viewUrls.push(viewUrl)
+      }
+
+      pageNumber = record.pageNumber
+      currentUrl = record.nextPageUrl || ''
+      if (!currentUrl) break
+    }
+
+    return { visitedPages, visitedViews, viewUrls, currentUrl, pageNumber }
+  }
+
+  /** 每成功解析一页就追加检查点，进程重启后可以直接从下一页继续。 */
+  private append_chapter_page_progress(progressPath: string, record: ChapterPageProgress) {
+    fs.appendFileSync(progressPath, `${JSON.stringify(record)}\n`, 'utf-8')
+  }
+
+  private is_browser_navigation_error(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return /navigation timeout|target closed|session closed|connection closed|page crashed|protocol error/i.test(
+      message
+    )
+  }
+
+  /** Chromium 无响应时先尝试正常关闭；超时后终止它的主进程。 */
+  private async close_gentleman_browser_forcefully() {
+    const browser = gentlemanBrowser.browser
+    const browserProcess = browser?.process()
+    const configuredCloseTimeout = Number(this.config.browserCloseTimeoutMs ?? 10_000)
+    const closeTimeout = Number.isFinite(configuredCloseTimeout)
+      ? Math.max(1_000, configuredCloseTimeout)
+      : 10_000
+    let closed = !browser
+
+    if (browser) {
+      const closePromise = gentlemanBrowser
+        .close()
+        .then(() => {
+          closed = true
+        })
+        .catch((error) => {
+          write_log(
+            `[gentleman] 浏览器正常关闭失败: ${error instanceof Error ? error.message : error}`
+          )
+        })
+
+      await Promise.race([closePromise, this.wait(closeTimeout)])
+      if (!closed && browserProcess) {
+        write_log(`[gentleman] 浏览器 ${Math.ceil(closeTimeout / 1000)} 秒内未退出，强制终止进程`)
+        try {
+          browserProcess.kill()
+        } catch (error) {
+          write_log(
+            `[gentleman] 强制终止浏览器失败: ${error instanceof Error ? error.message : error}`
+          )
+        }
+      }
+    }
+  }
+
+  /** 关闭失去响应的 Chromium，再启动全新的浏览器并恢复 cookie。 */
+  private async restart_gentleman_browser(
+    chapterName: string,
+    pageUrl: string,
+    restartAttempt: number
+  ): Promise<GentlemanPage> {
+    await this.close_gentleman_browser_forcefully()
+
+    const configuredRestartDelay = Number(this.config.browserRestartDelayMs ?? 3_000)
+    const restartDelay = Number.isFinite(configuredRestartDelay)
+      ? Math.max(0, configuredRestartDelay)
+      : 3_000
+    if (restartDelay > 0) await this.wait(restartDelay)
+
+    gentlemanBrowser.set_image_capture_mode('none')
+    await gentlemanBrowser.ensureBrowser()
+    const page = await gentlemanBrowser.new_page()
+    if (!page) throw new Error(`${chapterName} 浏览器重启后无法创建章节分页页签`)
+
+    write_log(`[gentleman] ${chapterName} 浏览器已重启 (${restartAttempt})，继续加载: ${pageUrl}`)
+    return page
+  }
+
   /**
    * 复用同一个页签循环读取章节分页，避免超大合并章节不断创建、销毁 Chromium Target。
    * 这里只保留体积很小的详情页 URL；列表页产生的缩略图 buffer 会在页签关闭后清空。
    */
-  private async get_chapter_view_urls(chapter: ChapterInfo): Promise<string[]> {
-    const visitedPages = new Set<string>()
-    const visitedViews = new Set<string>()
-    const viewUrls: string[] = []
-    let currentUrl = chapter.url
-    let pageNumber = 0
+  private async get_chapter_view_urls(
+    chapter: ChapterInfo,
+    pageProgressPath: string
+  ): Promise<string[]> {
+    let progress = this.read_chapter_page_progress(pageProgressPath, chapter.url)
+    if (!progress.currentUrl && progress.pageNumber > 0) {
+      if (!chapter.imageNum || progress.viewUrls.length === chapter.imageNum) {
+        write_log(
+          `[gentleman] ${chapter.name} 复用已完成的分页记录，共 ${progress.pageNumber} 页、${progress.viewUrls.length} 张`
+        )
+        return progress.viewUrls
+      }
+
+      write_log(
+        `[gentleman] ${chapter.name} 分页记录数量已变化 (${progress.viewUrls.length}/${chapter.imageNum})，从第一页重新读取`
+      )
+      fs.rmSync(pageProgressPath, { force: true })
+      progress = this.read_chapter_page_progress(pageProgressPath, chapter.url)
+    } else if (progress.pageNumber > 0) {
+      write_log(
+        `[gentleman] ${chapter.name} 从第${progress.pageNumber + 1}页继续，已记录 ${progress.viewUrls.length} 张`
+      )
+    }
+
+    const { visitedPages, visitedViews, viewUrls } = progress
+    let { currentUrl, pageNumber } = progress
     let page: GentlemanPage | null = null
+    let restartAttempt = 0
+    const configuredRestartLimit = Number(this.config.chapterPageBrowserRestartLimit ?? 3)
+    const restartLimit = Number.isFinite(configuredRestartLimit)
+      ? Math.max(1, configuredRestartLimit)
+      : 3
 
     gentlemanBrowser.set_image_capture_mode('none')
     try {
@@ -571,13 +727,34 @@ export default class Gentleman {
 
       while (currentUrl && !visitedPages.has(currentUrl)) {
         if (pageNumber > 0) await this.wait_before_chapter_page()
-        pageNumber++
         this.onProgress?.message(
-          `正在读取章节分页: ${chapter.name} (第${pageNumber}页，已找到${viewUrls.length}张)`
+          `正在读取章节分页: ${chapter.name} (第${pageNumber + 1}页，已找到${viewUrls.length}张)`
         )
 
-        visitedPages.add(currentUrl)
-        const html = await this.get_page_html(page, currentUrl)
+        let html: string
+        try {
+          html = await this.get_page_html(page, currentUrl, { retry: 1 })
+        } catch (error) {
+          if (!this.is_browser_navigation_error(error)) throw error
+          if (restartAttempt >= restartLimit) {
+            write_log(
+              `[gentleman] ${chapter.name} 第${pageNumber + 1}页连续重启 ${restartLimit} 次仍失败，关闭浏览器并交由任务队列续试`
+            )
+            page = null
+            await this.close_gentleman_browser_forcefully()
+            throw error
+          }
+
+          restartAttempt++
+          write_log(
+            `[gentleman] ${chapter.name} 第${pageNumber + 1}页导航异常，关闭并重启浏览器 (${restartAttempt}/${restartLimit})`
+          )
+          page = null
+          page = await this.restart_gentleman_browser(chapter.name, currentUrl, restartAttempt)
+          continue
+        }
+
+        restartAttempt = 0
         const pageViewUrls = this.get_subpage_view_urls(html, currentUrl)
         if (pageViewUrls.length === 0) {
           throw new Error(`${chapter.name} 未在章节页找到图片详情页链接: ${currentUrl}`)
@@ -591,7 +768,18 @@ export default class Gentleman {
 
         const pageBox = html.match(/(?<=paginator).+?(?=f_right)/s)?.[0] || ''
         const nextPage = pageBox.match(/(?<=next"><a\shref=").+?(?=">後頁)/s)?.[0] || ''
-        currentUrl = nextPage ? this.absolute_url(nextPage, currentUrl) : ''
+        const nextPageUrl = nextPage ? this.absolute_url(nextPage, currentUrl) : ''
+        const completedPageNumber = pageNumber + 1
+
+        this.append_chapter_page_progress(pageProgressPath, {
+          pageNumber: completedPageNumber,
+          pageUrl: currentUrl,
+          viewUrls: pageViewUrls,
+          nextPageUrl,
+        })
+        visitedPages.add(currentUrl)
+        pageNumber = completedPageNumber
+        currentUrl = nextPageUrl
       }
     } finally {
       await page?.close().catch(() => {})
@@ -716,7 +904,13 @@ export default class Gentleman {
    * 下次任务会跳过已经成功写入的详情页；全部校验通过后再原子重命名为正式章节目录。
    */
   private async download_chapter_images(item: ChapterInfo): Promise<void> {
-    const viewUrls = await this.get_chapter_view_urls(item)
+    const chapterPath = path.join(this.mangaPath, item.name)
+    const downloadingPath = `${chapterPath}.downloading`
+    const progressPath = path.join(downloadingPath, chapterProgressFileName)
+    const pageProgressPath = path.join(downloadingPath, chapterPageProgressFileName)
+    fs.mkdirSync(downloadingPath, { recursive: true })
+
+    const viewUrls = await this.get_chapter_view_urls(item, pageProgressPath)
     const expectedCount = item.imageNum || viewUrls.length
     if (item.imageNum && viewUrls.length !== item.imageNum) {
       throw new Error(
@@ -725,11 +919,6 @@ export default class Gentleman {
     }
 
     if (viewUrls.length === 0) throw new Error(`${item.name} 未找到图片详情页链接`)
-
-    const chapterPath = path.join(this.mangaPath, item.name)
-    const downloadingPath = `${chapterPath}.downloading`
-    const progressPath = path.join(downloadingPath, chapterProgressFileName)
-    fs.mkdirSync(downloadingPath, { recursive: true })
 
     const completed = this.read_chapter_progress(progressPath, downloadingPath)
     const usedFileNames = new Map<string, string>()
@@ -813,6 +1002,7 @@ export default class Gentleman {
 
     fs.renameSync(downloadingPath, chapterPath)
     fs.rmSync(path.join(chapterPath, chapterProgressFileName), { force: true })
+    fs.rmSync(path.join(chapterPath, chapterPageProgressFileName), { force: true })
     write_log(
       `[gentleman] ${item.name} 下载完成: ${successCount}/${viewUrls.length} 张成功，原图均已流式写盘`
     )
