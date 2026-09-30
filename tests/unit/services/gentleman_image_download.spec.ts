@@ -421,6 +421,81 @@ test.group('Gentleman image download', (group) => {
     assert.deepEqual(chapter.images, [firstImageUrl, secondImageUrl])
   })
 
+  test('restarts a frozen browser and retries the current image detail page', async ({
+    assert,
+  }) => {
+    const service = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: 'Frozen Detail',
+      url: 'https://www.wnacg.ru/photos-index-aid-33733485.html',
+    })
+    const viewUrl = 'https://www.wnacg.ru/photos-view-id-33733485.html'
+    const imageUrl = 'https://img5.qy0.ru/data/3373/34/85.jpg?verify=restarted'
+    const chapter = {
+      name: 'Frozen Detail 1話',
+      url: 'https://www.wnacg.ru/photos-index-aid-33733485.html',
+      imageNum: 1,
+      images: [],
+    }
+    const originalNewPage = gentlemanBrowser.new_page
+    let frozenPageAttempts = 0
+    let restartedPageAttempts = 0
+    let restartCalls = 0
+
+    ;(service as any).get_chapter_view_urls = async () => [viewUrl]
+    gentlemanBrowser.new_page = async () =>
+      ({
+        goto: async () => {
+          frozenPageAttempts++
+          throw new Error('Navigation timeout of 60000 ms exceeded')
+        },
+        close: async () => {},
+      }) as any
+    ;(service as any).restart_gentleman_browser = async (
+      chapterName: string,
+      pageUrl: string,
+      attempt: number,
+      imageCaptureMode: string,
+      pageType: string
+    ) => {
+      restartCalls++
+      assert.equal(chapterName, chapter.name)
+      assert.equal(pageUrl, viewUrl)
+      assert.equal(attempt, 1)
+      assert.equal(imageCaptureMode, 'original-only')
+      assert.equal(pageType, '图片详情页')
+
+      return {
+        goto: async () => {
+          restartedPageAttempts++
+          return { status: () => 200 }
+        },
+        content: async () => {
+          ;(gentlemanBrowser as any).rememberImageBuffer(imageUrl, Buffer.from('recovered-image'))
+          return `<img id="picarea" src="${imageUrl}">`
+        },
+        title: async () => 'recovered',
+        close: async () => {},
+      } as any
+    }
+
+    try {
+      await (service as any).download_chapter_images(chapter)
+    } finally {
+      gentlemanBrowser.new_page = originalNewPage
+    }
+
+    assert.equal(frozenPageAttempts, 1)
+    assert.equal(restartCalls, 1)
+    assert.equal(restartedPageAttempts, 1)
+    assert.deepEqual(chapter.images, [imageUrl])
+    assert.equal(
+      fs.readFileSync(path.join(downloadPath, 'Frozen Detail', chapter.name, '85.jpg'), 'utf-8'),
+      'recovered-image'
+    )
+  })
+
   test('backs off and retries when a detail request reaches the security challenge', async ({
     assert,
   }) => {

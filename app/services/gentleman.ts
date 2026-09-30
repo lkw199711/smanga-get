@@ -40,6 +40,7 @@ type ChapterPageProgress = {
 }
 
 type GentlemanPage = NonNullable<Awaited<ReturnType<typeof gentlemanBrowser.new_page>>>
+type GentlemanImageCaptureMode = 'all' | 'none' | 'original-only'
 
 const chapterProgressFileName = '.gentleman-progress.jsonl'
 const chapterPageProgressFileName = '.gentleman-pages.jsonl'
@@ -378,7 +379,11 @@ export default class Gentleman {
   private async get_page_html(
     page: GentlemanPage,
     url: string,
-    options: { retry?: number; retryDelayMs?: number } = {}
+    options: {
+      retry?: number
+      retryDelayMs?: number
+      failFastOnNavigationError?: boolean
+    } = {}
   ): Promise<string> {
     const configuredRetry = options.retry ?? this.config.detailPageRetry ?? 3
     const configuredRetryDelay = options.retryDelayMs ?? this.config.challengeRetryDelayMs ?? 30_000
@@ -401,6 +406,11 @@ export default class Gentleman {
         lastError = new Error(`触发站点安全验证 (HTTP ${status || 'unknown'}, title=${title})`)
       } catch (error) {
         lastError = error
+        if (options.failFastOnNavigationError && this.is_browser_navigation_error(error)) {
+          const message = error instanceof Error ? error.message : String(error)
+          write_log(`[gentleman] 页面加载失败 (1/${retry}): ${url}, 原因: ${message}`)
+          throw new Error(`Gentleman 页面重试耗尽: ${url}, 原因: ${message}`)
+        }
       }
 
       const message = lastError instanceof Error ? lastError.message : String(lastError)
@@ -664,7 +674,9 @@ export default class Gentleman {
   private async restart_gentleman_browser(
     chapterName: string,
     pageUrl: string,
-    restartAttempt: number
+    restartAttempt: number,
+    imageCaptureMode: GentlemanImageCaptureMode = 'none',
+    pageType = '章节分页'
   ): Promise<GentlemanPage> {
     await this.close_gentleman_browser_forcefully()
 
@@ -674,10 +686,10 @@ export default class Gentleman {
       : 3_000
     if (restartDelay > 0) await this.wait(restartDelay)
 
-    gentlemanBrowser.set_image_capture_mode('none')
+    gentlemanBrowser.set_image_capture_mode(imageCaptureMode)
     await gentlemanBrowser.ensureBrowser()
     const page = await gentlemanBrowser.new_page()
-    if (!page) throw new Error(`${chapterName} 浏览器重启后无法创建章节分页页签`)
+    if (!page) throw new Error(`${chapterName} 浏览器重启后无法创建${pageType}页签`)
 
     write_log(`[gentleman] ${chapterName} 浏览器已重启 (${restartAttempt})，继续加载: ${pageUrl}`)
     return page
@@ -805,7 +817,9 @@ export default class Gentleman {
     const retry = Math.max(1, Number(this.config.detailPageRetry || 3))
 
     for (let attempt = 1; attempt <= retry; attempt++) {
-      const html = await this.get_page_html(page, viewUrl)
+      const html = await this.get_page_html(page, viewUrl, {
+        failFastOnNavigationError: true,
+      })
       const imageUrl = this.get_view_image_url(html, viewUrl)
       if (imageUrl) {
         const bufferReady = await this.wait_for_image_buffer(imageUrl)
@@ -923,6 +937,10 @@ export default class Gentleman {
     let page: GentlemanPage | null = null
     let successCount = 0
     let requestedCount = 0
+    const configuredRestartLimit = Number(this.config.detailPageBrowserRestartLimit ?? 3)
+    const restartLimit = Number.isFinite(configuredRestartLimit)
+      ? Math.max(1, configuredRestartLimit)
+      : 3
 
     gentlemanBrowser.set_image_capture_mode('original-only')
     try {
@@ -945,7 +963,39 @@ export default class Gentleman {
         gentlemanBrowser.clear_buffs()
 
         this.onProgress?.message(`正在下载章节: ${item.name} (${index + 1}/${viewUrls.length})`)
-        const imageUrl = await this.get_detail_image_url(page, item, viewUrl)
+        let imageUrl = ''
+        let restartAttempt = 0
+        while (true) {
+          if (!page) throw new Error(`${item.name} 图片详情页页签不可用: ${viewUrl}`)
+
+          try {
+            imageUrl = await this.get_detail_image_url(page, item, viewUrl)
+            break
+          } catch (error) {
+            if (!this.is_browser_navigation_error(error)) throw error
+            if (restartAttempt >= restartLimit) {
+              write_log(
+                `[gentleman] ${item.name} 第${index + 1}/${viewUrls.length}张连续重启 ${restartLimit} 次仍失败，关闭浏览器并交由任务队列续试`
+              )
+              page = null
+              await this.close_gentleman_browser_forcefully()
+              throw error
+            }
+
+            restartAttempt++
+            write_log(
+              `[gentleman] ${item.name} 第${index + 1}/${viewUrls.length}张详情页导航异常，关闭并重启浏览器 (${restartAttempt}/${restartLimit})`
+            )
+            page = null
+            page = await this.restart_gentleman_browser(
+              item.name,
+              viewUrl,
+              restartAttempt,
+              'original-only',
+              '图片详情页'
+            )
+          }
+        }
         if (!imageUrl) throw new Error(`${item.name} 未能解析原图: ${viewUrl}`)
 
         const buffer = this.take_image_buffer(imageUrl)
