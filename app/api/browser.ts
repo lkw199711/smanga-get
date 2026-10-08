@@ -621,6 +621,7 @@ type GentlemanImageCaptureMode = 'all' | 'none' | 'original-only'
  */
 class UseGentlemanBrowser extends UseBrowser {
   private imageCaptureMode: GentlemanImageCaptureMode = 'all'
+  private imagePageWhitelist = new WeakSet<puppeteer.Page>()
 
   constructor() {
     super({ website: 'gentleman' })
@@ -628,7 +629,17 @@ class UseGentlemanBrowser extends UseBrowser {
 
   set_image_capture_mode(mode: GentlemanImageCaptureMode) {
     this.imageCaptureMode = mode
+    this.imagePageWhitelist = new WeakSet<puppeteer.Page>()
     if (mode === 'none') this.clear_buffs()
+  }
+
+  /** 仅白名单中的详情页页签可以在 original-only 阶段发起图片请求。 */
+  allow_image_page(page: puppeteer.Page) {
+    this.imagePageWhitelist.add(page)
+  }
+
+  remove_image_page(page: puppeteer.Page) {
+    this.imagePageWhitelist.delete(page)
   }
 
   private isSignedOriginalImage(url: string) {
@@ -648,7 +659,8 @@ class UseGentlemanBrowser extends UseBrowser {
     if (request.resourceType() === 'image') {
       const shouldBlock =
         this.imageCaptureMode === 'none' ||
-        (this.imageCaptureMode === 'original-only' && !this.isSignedOriginalImage(request.url()))
+        (this.imageCaptureMode === 'original-only' &&
+          (!this.imagePageWhitelist.has(page) || !this.isSignedOriginalImage(request.url())))
 
       if (shouldBlock) {
         await request.abort().catch(() => {})
@@ -661,7 +673,10 @@ class UseGentlemanBrowser extends UseBrowser {
 
   protected async handleImageResponse(page: puppeteer.Page, response: puppeteer.HTTPResponse) {
     if (this.imageCaptureMode === 'none') return
-    if (this.imageCaptureMode === 'original-only' && !this.isSignedOriginalImage(response.url())) {
+    if (
+      this.imageCaptureMode === 'original-only' &&
+      (!this.imagePageWhitelist.has(page) || !this.isSignedOriginalImage(response.url()))
+    ) {
       return
     }
 

@@ -951,6 +951,7 @@ export default class Gentleman {
     try {
       page = await gentlemanBrowser.new_page()
       if (!page) throw new Error(`${item.name} 无法创建图片详情页页签`)
+      gentlemanBrowser.allow_image_page(page)
 
       for (let index = 0; index < viewUrls.length; index++) {
         const viewUrl = viewUrls[index]
@@ -972,9 +973,11 @@ export default class Gentleman {
         let restartAttempt = 0
         while (true) {
           if (detailPageLoadCount >= maxLoadsPerTab) {
+            if (page) gentlemanBrowser.remove_image_page(page)
             await page?.close().catch(() => {})
             page = await gentlemanBrowser.new_page()
             if (!page) throw new Error(`${item.name} 无法创建新的图片详情页页签`)
+            gentlemanBrowser.allow_image_page(page)
 
             detailPageLoadCount = 0
             write_log(
@@ -993,6 +996,7 @@ export default class Gentleman {
               write_log(
                 `[gentleman] ${item.name} 第${index + 1}/${viewUrls.length}张连续重启 ${restartLimit} 次仍失败，关闭浏览器并交由任务队列续试`
               )
+              gentlemanBrowser.remove_image_page(page)
               page = null
               await this.close_gentleman_browser_forcefully()
               throw error
@@ -1002,6 +1006,7 @@ export default class Gentleman {
             write_log(
               `[gentleman] ${item.name} 第${index + 1}/${viewUrls.length}张详情页导航异常，关闭并重启浏览器 (${restartAttempt}/${restartLimit})`
             )
+            gentlemanBrowser.remove_image_page(page)
             page = null
             page = await this.restart_gentleman_browser(
               item.name,
@@ -1010,6 +1015,7 @@ export default class Gentleman {
               'original-only',
               '图片详情页'
             )
+            gentlemanBrowser.allow_image_page(page)
             detailPageLoadCount = 0
           }
         }
@@ -1036,6 +1042,7 @@ export default class Gentleman {
         gentlemanBrowser.clear_buffs()
       }
     } finally {
+      if (page) gentlemanBrowser.remove_image_page(page)
       await page?.close().catch(() => {})
       gentlemanBrowser.clear_buffs()
       gentlemanBrowser.set_image_capture_mode('all')

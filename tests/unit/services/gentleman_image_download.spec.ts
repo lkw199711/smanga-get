@@ -42,7 +42,7 @@ test.group('Gentleman image download', (group) => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 
-  test('blocks list thumbnails and captures only signed original images', async ({ assert }) => {
+  test('captures signed originals only from whitelisted detail pages', async ({ assert }) => {
     const thumbnailUrl = 'https://t5.qy0.ru/data/t/1/1/thumb.jpg'
     const unsignedImageUrl = 'https://img5.qy0.ru/data/1/1/001.jpg'
     const originalImageUrl = 'https://img5.qy0.ru/data/1/1/001.jpg?verify=signed'
@@ -71,12 +71,18 @@ test.group('Gentleman image download', (group) => {
     assert.deepEqual(listThumbnail.counts(), { aborted: 1, continued: 0 })
 
     gentlemanBrowser.set_image_capture_mode('original-only')
+    const blockedOriginal = makeRequest(originalImageUrl)
+    await (gentlemanBrowser as any).handleRequest({}, blockedOriginal.request)
+    assert.deepEqual(blockedOriginal.counts(), { aborted: 1, continued: 0 })
+
+    const detailPage = {} as any
+    gentlemanBrowser.allow_image_page(detailPage)
     const detailThumbnail = makeRequest(thumbnailUrl)
     const unsignedImage = makeRequest(unsignedImageUrl)
     const signedOriginal = makeRequest(originalImageUrl)
-    await (gentlemanBrowser as any).handleRequest({}, detailThumbnail.request)
-    await (gentlemanBrowser as any).handleRequest({}, unsignedImage.request)
-    await (gentlemanBrowser as any).handleRequest({}, signedOriginal.request)
+    await (gentlemanBrowser as any).handleRequest(detailPage, detailThumbnail.request)
+    await (gentlemanBrowser as any).handleRequest(detailPage, unsignedImage.request)
+    await (gentlemanBrowser as any).handleRequest(detailPage, signedOriginal.request)
 
     assert.deepEqual(detailThumbnail.counts(), { aborted: 1, continued: 0 })
     assert.deepEqual(unsignedImage.counts(), { aborted: 1, continued: 0 })
@@ -93,9 +99,10 @@ test.group('Gentleman image download', (group) => {
       },
     })
 
-    await (gentlemanBrowser as any).handleImageResponse({}, makeResponse(thumbnailUrl))
-    await (gentlemanBrowser as any).handleImageResponse({}, makeResponse(unsignedImageUrl))
     await (gentlemanBrowser as any).handleImageResponse({}, makeResponse(originalImageUrl))
+    await (gentlemanBrowser as any).handleImageResponse(detailPage, makeResponse(thumbnailUrl))
+    await (gentlemanBrowser as any).handleImageResponse(detailPage, makeResponse(unsignedImageUrl))
+    await (gentlemanBrowser as any).handleImageResponse(detailPage, makeResponse(originalImageUrl))
 
     assert.equal(bufferReads, 1)
     assert.equal(
@@ -104,6 +111,7 @@ test.group('Gentleman image download', (group) => {
     )
     assert.isNull(gentlemanBrowser.take_image_buffer(thumbnailUrl))
     assert.isNull(gentlemanBrowser.take_image_buffer(unsignedImageUrl))
+    gentlemanBrowser.remove_image_page(detailPage)
   })
 
   test('extracts the signed original image URL from the saved detail page', ({ assert }) => {
@@ -247,6 +255,7 @@ test.group('Gentleman image download', (group) => {
     })
     const originalNewPage = gentlemanBrowser.new_page
     const detailPageIds: number[] = []
+    const allowedRequestPageIds: number[] = []
     const closedPageIds: number[] = []
     let createdPages = 0
 
@@ -260,6 +269,16 @@ test.group('Gentleman image download', (group) => {
       const index = viewUrls.indexOf(viewUrl)
       const imageUrl = imageUrls[index]
       detailPageIds.push(page.id)
+      await (gentlemanBrowser as any).handleRequest(page, {
+        resourceType: () => 'image',
+        url: () => imageUrl,
+        abort: async () => {
+          throw new Error(`detail page ${page.id} was not whitelisted`)
+        },
+        continue: async () => {
+          allowedRequestPageIds.push(page.id)
+        },
+      })
       ;(gentlemanBrowser as any).rememberImageBuffer(imageUrl, Buffer.from(`image-${index + 1}`))
       return imageUrl
     }
@@ -286,6 +305,7 @@ test.group('Gentleman image download', (group) => {
     }
 
     assert.deepEqual(detailPageIds, [...Array(58).fill(1), 2])
+    assert.deepEqual(allowedRequestPageIds, detailPageIds)
     assert.equal(createdPages, 2)
     assert.deepEqual(closedPageIds, [1, 2])
     assert.lengthOf(chapter.images, 59)
