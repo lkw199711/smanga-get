@@ -230,6 +230,67 @@ test.group('Gentleman image download', (group) => {
     )
   })
 
+  test('replaces the detail page after 58 loads', async ({ assert }) => {
+    const service = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: 'Detail Page Rotation',
+      url: 'https://www.wnacg.ru/photos-index-aid-58.html',
+    })
+    const viewUrls = Array.from(
+      { length: 59 },
+      (_, index) => `https://www.wnacg.ru/photos-view-id-${index + 1}.html`
+    )
+    const imageUrls = Array.from({ length: 59 }, (_, index) => {
+      const fileName = `${String(index + 1).padStart(3, '0')}.jpg`
+      return `https://img5.qy0.ru/data/58/1/${fileName}?verify=rotation-${index + 1}`
+    })
+    const originalNewPage = gentlemanBrowser.new_page
+    const detailPageIds: number[] = []
+    const closedPageIds: number[] = []
+    let createdPages = 0
+
+    ;(service as any).config.detailPageMaxLoadsPerTab = 58
+    ;(service as any).get_chapter_view_urls = async () => viewUrls
+    ;(service as any).get_detail_image_url = async (
+      page: { id: number },
+      _chapter: unknown,
+      viewUrl: string
+    ) => {
+      const index = viewUrls.indexOf(viewUrl)
+      const imageUrl = imageUrls[index]
+      detailPageIds.push(page.id)
+      ;(gentlemanBrowser as any).rememberImageBuffer(imageUrl, Buffer.from(`image-${index + 1}`))
+      return imageUrl
+    }
+    gentlemanBrowser.new_page = async () => {
+      const id = ++createdPages
+      return {
+        id,
+        close: async () => {
+          closedPageIds.push(id)
+        },
+      } as any
+    }
+
+    const chapter = {
+      name: 'Detail Page Rotation 1話',
+      url: 'https://www.wnacg.ru/photos-index-aid-58.html',
+      imageNum: 59,
+      images: [],
+    }
+    try {
+      await (service as any).download_chapter_images(chapter)
+    } finally {
+      gentlemanBrowser.new_page = originalNewPage
+    }
+
+    assert.deepEqual(detailPageIds, [...Array(58).fill(1), 2])
+    assert.equal(createdPages, 2)
+    assert.deepEqual(closedPageIds, [1, 2])
+    assert.lengthOf(chapter.images, 59)
+  })
+
   test('restarts a frozen browser and resumes pagination from its checkpoint', async ({
     assert,
   }) => {

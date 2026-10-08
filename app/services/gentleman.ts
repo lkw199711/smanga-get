@@ -937,6 +937,11 @@ export default class Gentleman {
     let page: GentlemanPage | null = null
     let successCount = 0
     let requestedCount = 0
+    let detailPageLoadCount = 0
+    const configuredMaxLoadsPerTab = Number(this.config.detailPageMaxLoadsPerTab ?? 58)
+    const maxLoadsPerTab = Number.isFinite(configuredMaxLoadsPerTab)
+      ? Math.max(1, Math.floor(configuredMaxLoadsPerTab))
+      : 58
     const configuredRestartLimit = Number(this.config.detailPageBrowserRestartLimit ?? 3)
     const restartLimit = Number.isFinite(configuredRestartLimit)
       ? Math.max(1, configuredRestartLimit)
@@ -966,8 +971,19 @@ export default class Gentleman {
         let imageUrl = ''
         let restartAttempt = 0
         while (true) {
+          if (detailPageLoadCount >= maxLoadsPerTab) {
+            await page?.close().catch(() => {})
+            page = await gentlemanBrowser.new_page()
+            if (!page) throw new Error(`${item.name} 无法创建新的图片详情页页签`)
+
+            detailPageLoadCount = 0
+            write_log(
+              `[gentleman] ${item.name} 图片详情页页签已加载 ${maxLoadsPerTab} 次，已更换新页签`
+            )
+          }
           if (!page) throw new Error(`${item.name} 图片详情页页签不可用: ${viewUrl}`)
 
+          detailPageLoadCount++
           try {
             imageUrl = await this.get_detail_image_url(page, item, viewUrl)
             break
@@ -994,6 +1010,7 @@ export default class Gentleman {
               'original-only',
               '图片详情页'
             )
+            detailPageLoadCount = 0
           }
         }
         if (!imageUrl) throw new Error(`${item.name} 未能解析原图: ${viewUrl}`)

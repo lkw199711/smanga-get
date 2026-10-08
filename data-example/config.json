@@ -176,7 +176,8 @@
     "scrollDelay": 500,
     "latestSyncCloud": 1765017319232,
     "detailPageDelayMinMs": 1000,
-    "detailPageDelayMaxMs": 3000
+    "detailPageDelayMaxMs": 3000,
+    "detailPageMaxLoadsPerTab": 58
   },
   "downloadPath": "C:\\11manga",
   "compressPath": "C:\\12manga-compress"
