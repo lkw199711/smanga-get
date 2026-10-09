@@ -1106,6 +1106,15 @@ export default class Gentleman {
     const chapterList = chapterBox.match(/(?<=<li).+?(?=<\/li>)/gs) || []
 
     for (const chapter of chapterList) {
+      // 新版搜索结果会混入「合集」条目；其详情页是章节目录而非图片列表，
+      // 继续按普通章节处理会在 photos-view 元素解析阶段失败。
+      const isCollection =
+        /\bpic_box\b[^>]*\bcate-38\b/i.test(chapter) ||
+        /<span[^>]*class=["'][^"']*\bsr_ctag\b[^"']*["'][^>]*>\s*合集\s*<\/span>/i.test(
+          chapter
+        )
+      if (isCollection) continue
+
       // 章节详情页链接（相对路径），如 /photos-index-aid-12345.html
       const href = chapter.match(/\/photos-index-aid-[\d]+\.html/)?.[0] || ''
       // 章节名称从 title 属性中提取，可能包含 HTML 实体和标签

@@ -144,6 +144,31 @@ test.group('Gentleman image download', (group) => {
     )
   })
 
+  test('filters collection entries from the updated search result list', ({ assert }) => {
+    const service = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: '撩慾按摩師',
+      url: 'https://www.wnacg.ru/search/?q=撩慾按摩師',
+    })
+    const html = fs.readFileSync(
+      path.join(process.cwd(), 'tests', 'html', '新版列表-特殊元素.html'),
+      'utf-8'
+    )
+
+    const chapters = service.get_page_chapters(html)
+
+    assert.lengthOf(chapters, 10)
+    assert.notInclude(
+      chapters.map((chapter) => chapter.url),
+      'https://www.wnacg.ru/photos-index-aid-390047.html'
+    )
+    assert.include(
+      chapters.map((chapter) => chapter.url),
+      'https://www.wnacg.ru/photos-index-aid-393072.html'
+    )
+  })
+
   test('reuses pagination/detail pages and streams every image buffer to disk', async ({
     assert,
   }) => {
