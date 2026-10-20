@@ -58,12 +58,6 @@ import { ensureMangaIndexSchema } from '#services/manga_index'
 
 const isTestEnvironment = process.env.NODE_ENV === 'test'
 
-if (process.env.SMANGA_KERNEL_DEBUG === 'game-organize') {
-  const { default: GameOrganize } = await import('#services/game-organize')
-  await new GameOrganize('D:\\17H-game整理\\07').execute()
-  process.exit()
-}
-
 if (!isTestEnvironment) {
 
 // 先创建配置目录和默认配置文件，防止首次启动空指针

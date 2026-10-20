@@ -1,0 +1,230 @@
+{
+  "headless": 0,
+  "executablePath": "C:\\Users\\lkw\\.cache\\puppeteer\\chrome\\win64-149.0.7827.22\\chrome-win64\\chrome.exe",
+  "proxy": {
+    "enable": false,
+    "server": "http://192.168.5.2:7893",
+    "username": "Clash",
+    "password": "ykt3thsw"
+  },
+  "cron": {
+    "enable": false,
+    "interval": "0 0 1,13 * * *",
+    "clearCookies": false
+  },
+  "immediately": {
+    "subscribeTask": 0,
+    "toomicsUpdateSc": false,
+    "toomicsUpdateTc": false,
+    "omegascansUpdate": false,
+    "bilibili": false,
+    "toomicsCompressSc": false,
+    "toomicsCompressTc": false,
+    "omegascansCompress": false,
+    "omegascansSyncCloud": false,
+    "debugOmegascans": false
+  },
+  "endAfterSetCookie": false,
+  "shutdownAfterSetCookie": 0,
+  "autoRemoveSubscribe": true,
+  "watting": 0,
+  "downloadPath": "U:\\",
+  "compressPath": "M:\\",
+  "cacheRoot": "C:\\11manga\\toomics-cache",
+  "toomics": {
+    "cookieFile": "./data/cookies/toomics-cookies.json",
+    "downloadPath": "U:\\toomics",
+    "compressPath": "M:\\toomics",
+    "coverCache": "U:\\toomics-covers",
+    "chapterCache": "U:\\toomics-chapter-images",
+    "userName": "lkw199712@163.com",
+    "passWord": "123qwe",
+    "scrollStep": 400,
+    "scrollDelay": 500,
+    "maxRetry": 7,
+    "downloadLockedMeta": false,
+    "autoCompress": false,
+    "cloudPath": null,
+    "jumpExist": false,
+    "jumpMangas": null,
+    "updateOnlyDay": false,
+    "latestSyncCloud": 1765017319232,
+    "pretendNumStrategy": "probability",
+    "pretendNumWeights": [
+      0.5,
+      0.25,
+      0.25
+    ],
+    "readerPersona": {
+      "type": "moderate",
+      "pageReadMin": 3000,
+      "pageReadMax": 12000,
+      "keyPageRatio": 0.2,
+      "keyPageMin": 15000,
+      "keyPageMax": 40000,
+      "backFlipProb": 0.05,
+      "chapterEndExtraMin": 5000,
+      "chapterEndExtraMax": 15000
+    },
+    "dailyWindows": {
+      "monday": [
+        {
+          "start": "19:00",
+          "end": "22:30"
+        }
+      ],
+      "tuesday": [
+        {
+          "start": "18:30",
+          "end": "22:00"
+        }
+      ],
+      "wednesday": [
+        {
+          "start": "20:00",
+          "end": "23:00"
+        }
+      ],
+      "thursday": [
+        {
+          "start": "18:00",
+          "end": "21:30"
+        }
+      ],
+      "friday": [
+        {
+          "start": "19:30",
+          "end": "23:30"
+        }
+      ],
+      "saturday": [
+        {
+          "start": "10:00",
+          "end": "12:00"
+        },
+        {
+          "start": "15:00",
+          "end": "17:00"
+        },
+        {
+          "start": "20:00",
+          "end": "23:30"
+        }
+      ],
+      "sunday": [
+        {
+          "start": "10:30",
+          "end": "12:30"
+        },
+        {
+          "start": "21:00",
+          "end": "23:00"
+        }
+      ]
+    },
+    "antiBotEnabled": false,
+    "windowJitterMinutes": 1,
+    "skipDayProbability": 0.12,
+    "sessionMaxMinutes": 45,
+    "sessionMinMinutes": 15,
+    "cooldownMinutes": 1,
+    "timeCheckIntervalMinutes": 30,
+    "timeDriftThresholdMinutes": 2,
+    "dailyQuota": {
+      "monday": 100,
+      "tuesday": 100,
+      "wednesday": 12,
+      "thursday": 12,
+      "friday": 12,
+      "saturday": 20,
+      "sunday": 20
+    },
+    "turboMultiplier": 2,
+    "turboChapterDelayMin": 5000,
+    "turboChapterDelayMax": 10000,
+    "noiseEnabled": true,
+    "noiseMinRatio": 0.15,
+    "homePageScrollMin": 30000,
+    "homePageScrollMax": 60000,
+    "randomMangaBrowseMin": 1,
+    "randomMangaBrowseMax": 2,
+    "noiseIntervalTaskCount": 4,
+    "priority": {
+      "highPriorityIds": [
+        80,
+        84,
+        87
+      ],
+      "lowPriorityIds": [],
+      "autoDowngradeDays": 3,
+      "autoUpgradeDays": 5
+    }
+  },
+  "toomics-sc": {
+    "cookieFile": "./data/cookies/toomics-cookies.json",
+    "downloadPath": "U:\\toomics-sc",
+    "compressPath": "M:\\toomics-sc",
+    "coverCache": "U:\\toomics-covers",
+    "chapterCache": "U:\\toomics-chapter-images",
+    "userName": "lkw199712@163.com",
+    "passWord": "123qwe",
+    "scrollStep": 400,
+    "scrollDelay": 500,
+    "maxRetry": 7,
+    "downloadLockedMeta": false,
+    "autoCompress": true,
+    "cloudPath": "C:\\99mnt\\0\\20manga-compress\\toomics-sc",
+    "jumpExist": false,
+    "jumpMangas": null,
+    "updateOnlyDay": false,
+    "latestSyncCloud": 1765017319232
+  },
+  "toomics-tc": {
+    "cookieFile": "./data/cookies/toomics-cookies.json",
+    "downloadPath": "U:\\toomics-tc",
+    "compressPath": "M:\\toomics-tc",
+    "coverCache": "U:\\toomics-covers",
+    "chapterCache": "U:\\toomics-chapter-images",
+    "userName": "lkw199712@163.com",
+    "passWord": "123qwe",
+    "scrollStep": 400,
+    "scrollDelay": 500,
+    "maxRetry": 7,
+    "downloadLockedMeta": false,
+    "autoCompress": true,
+    "cloudPath": "C:\\99mnt\\0\\20manga-compress\\toomics-tc",
+    "jumpExist": false,
+    "jumpMangas": null,
+    "updateOnlyDay": false,
+    "latestSyncCloud": 1765017319232
+  },
+  "bilibili": {
+    "cookieFile": "./data/cookies/bilibili-cookies.json",
+    "downloadPath": "A:\\02manga\\10media",
+    "compressPath": "A:\\02manga\\11manga-compress",
+    "scrollStep": 400,
+    "scrollDelay": 500,
+    "skipDays": 7,
+    "downloadLockedMeta": false
+  },
+  "omegascans": {
+    "cookieFile": "./data/cookies/omegascans-cookies.json",
+    "downloadPath": "U:\\omegascans",
+    "compressPath": "M:\\omegascans",
+    "autoCompress": true,
+    "skipDays": 7,
+    "cloudPath": "C:\\99mnt\\0\\20manga-compress\\omegascans",
+    "latestSyncCloud": 1765017319232
+  },
+  "gentleman": {
+    "cookieFile": "./data/cookies/gentleman-cookies.json",
+    "downloadPath": "U:\\gentleman",
+    "compressPath": "M:\\gentleman",
+    "organizePath": "U:\\gentleman-organize",
+    "organize": true,
+    "skipDays": 7,
+    "latestSyncCloud": 1765017319232,
+    "detailPageDelayMinMs": 1000,
+    "detailPageDelayMaxMs": 3000
+  }
+}
