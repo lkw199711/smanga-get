@@ -109,6 +109,34 @@ test.group('task queue', (group) => {
     assert.equal(taskQueue.running, false)
     assert.equal(taskQueue.getRunning()?.status, 'paused')
     assert.equal(taskQueue.getRunning()?.error, '需要人工验证')
+    assert.equal(taskQueue.get().length, 0)
+  })
+
+  test('可恢复暂停会保留当前任务，人工处理后从队首继续', async ({ assert }) => {
+    let startCount = 0
+    const taskQueue = new MangaTask([makeTask({ website: 'gentleman' })], () => ({
+      async start() {
+        startCount++
+        if (startCount === 1) {
+          throw new TaskPauseError('需要登录', { resumeTask: true })
+        }
+      },
+    }))
+    stopAfterCurrentTask(taskQueue)
+
+    await taskQueue.run()
+
+    assert.equal(taskQueue.getRunning()?.status, 'paused')
+    assert.equal(taskQueue.get().length, 1)
+    assert.isTrue(taskQueue.resume())
+
+    for (let i = 0; i < 20 && taskQueue.running; i++) {
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+
+    assert.equal(startCount, 2)
+    assert.equal(taskQueue.get().length, 0)
+    assert.equal(taskQueue.getRunning()?.status, 'success')
   })
 
   test('TaskAbortError 会标记当前任务失败并停止，但不清空队列', async ({ assert }) => {

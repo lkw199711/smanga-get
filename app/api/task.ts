@@ -718,6 +718,20 @@ export class MangaTask extends Task {
     }
   }
 
+  /**
+   * 恢复一个因人工操作而暂停、且已经放回队首的任务。
+   * 启动后立即返回，避免认证接口等待整个下载队列执行完毕。
+   */
+  resume(): boolean {
+    if (this.running || this.runningTask?.status !== 'paused' || this.tasks.length === 0) {
+      return false
+    }
+
+    this.clearCurrentTask()
+    void this.run()
+    return true
+  }
+
   private async finishQueue(): Promise<boolean> {
     write_log('[MangaTask] 所有任务执行完毕')
     await close_all_browsers()
@@ -777,6 +791,9 @@ export class MangaTask extends Task {
       if (isTaskPauseError(error)) {
         result = 'paused'
         shouldRunCleanup = false
+        if (error.resumeTask === true) {
+          this.tasks.unshift(task)
+        }
         this.pauseCurrentTask(error)
         write_log(`[Task] ${task.id} ${task.name} 任务已暂停: ${getErrorMessage(error)}`)
         return result

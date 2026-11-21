@@ -1,5 +1,10 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { UseBrowser } from '#api/browser'
+import { gentlemanBrowser, UseBrowser } from '#api/browser'
+import { mangaTask } from '#api/task'
+import {
+  GENTLEMAN_AUTH_CHECK_URL,
+  probeGentlemanAccess,
+} from '#services/gentleman-auth'
 import { write_log } from '#utils/index'
 
 const targetUrls: Record<string, string> = {
@@ -8,7 +13,7 @@ const targetUrls: Record<string, string> = {
   'toomics-tc': 'https://toomics.com/tc',
   bilibili: 'https://manga.bilibili.com',
   omegascans: 'https://omegascans.org',
-  gentleman: 'https://www.wnacg.ru',
+  gentleman: GENTLEMAN_AUTH_CHECK_URL,
 }
 
 const manualAuthSessions = new Map<string, UseBrowser>()
@@ -61,8 +66,8 @@ export default class ManualAuthController {
   }
 
   async finish({ request, response }: HttpContext) {
+    const website = getWebsite(request.input('website'))
     try {
-      const website = getWebsite(request.input('website'))
       const browser = manualAuthSessions.get(website)
 
       if (!browser) {
@@ -72,13 +77,38 @@ export default class ManualAuthController {
         })
       }
 
+      if (website === 'gentleman') {
+        const result = await probeGentlemanAccess(browser)
+        if (result.state !== 'authenticated') {
+          const message = result.state === 'login-required'
+            ? '尚未登录 Gentleman 韩漫模块，请在已打开的浏览器中完成登录后再点击“完成操作”'
+            : `无法确认 Gentleman 登录状态: ${result.reason}`
+
+          return response.status(409).json({
+            code: 409,
+            message,
+          })
+        }
+      }
+
       await browser.finish_manual_auth()
       manualAuthSessions.delete(website)
       write_log(`[manual auth] ${website} cookie 已保存并关闭浏览器`)
 
+      let resumed = false
+      if (website === 'gentleman') {
+        // 共享实例可能仍持有旧 Cookie；关闭后恢复队列会从文件重新加载。
+        await gentlemanBrowser.close().catch(() => {})
+        resumed = mangaTask.resume()
+        if (resumed) write_log('[manual auth] Gentleman 登录成功，已自动恢复暂停任务')
+      }
+
       return {
         code: 200,
-        message: `${website} cookie 已保存`,
+        message: resumed
+          ? `${website} cookie 已保存，暂停任务已恢复`
+          : `${website} cookie 已保存`,
+        data: { resumed },
       }
     } catch (e: any) {
       return response.status(500).json({

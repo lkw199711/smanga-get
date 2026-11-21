@@ -24,12 +24,15 @@ function getLogFile(): string {
 
 export class TaskPauseError extends Error {
   pauseTask = true
+  /** 暂停后是否把当前任务放回队首，供人工处理完成后继续。 */
+  resumeTask: boolean
   /** 调试用：由任务队列读取并在此页面上截图保存错误现场 */
   debugPage?: import('rebrowser-puppeteer').Page
 
-  constructor(message: string) {
+  constructor(message: string, options: { resumeTask?: boolean } = {}) {
     super(message)
     this.name = 'TaskPauseError'
+    this.resumeTask = options.resumeTask === true
   }
 }
 

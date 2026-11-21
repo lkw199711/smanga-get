@@ -14,9 +14,17 @@ import * as fs from 'fs'
 import { subsribeType } from '#type/index.js'
 import { subscribe_remove } from '#api/subsribe'
 import path from 'path'
-import { copy_folder, end_app, get_config, write_log, make_can_be_floder } from '#utils/index'
+import {
+  copy_folder,
+  end_app,
+  get_config,
+  write_log,
+  make_can_be_floder,
+  TaskPauseError,
+} from '#utils/index'
 import { tryIndexMangaMetaFile } from '#api/manga'
 import { gentlemanBrowser } from '#api/browser'
+import { probeGentlemanAccess } from '#services/gentleman-auth'
 
 /** 章节信息，贯穿解析→下载→整理全流程 */
 type ChapterInfo = {
@@ -130,6 +138,10 @@ export default class Gentleman {
     await this.ensureBrowser()
     if (!gentlemanBrowser.browser || !this.mangaUrl) return
 
+    // 当前 Gentleman 订阅均为韩漫。先用站点韩漫分类页验证 Cookie，避免匿名
+    // 搜索返回空结果时被错误地当成“没有更新”。
+    await this.ensureKoreanMangaAccess()
+
     // Step 2: 解析漫画所有章节链接（支持分页加载）
     await this.get_chapters()
 
@@ -194,6 +206,28 @@ export default class Gentleman {
       await gentlemanBrowser.ensureBrowser()
       write_log(`[gentleman] 浏览器启动完成, browser=${!!gentlemanBrowser.browser}`)
     }
+  }
+
+  /** 验证韩漫模块登录态；失效时保留当前任务并等待用户手动认证。 */
+  private async ensureKoreanMangaAccess() {
+    const result = await probeGentlemanAccess(gentlemanBrowser)
+
+    if (result.state === 'authenticated') {
+      // 保存站点可能更新过的会话 Cookie，后续任务和重启后继续复用。
+      await gentlemanBrowser.save_cookie(false)
+      write_log(`[gentleman] 韩漫登录检查通过 (HTTP ${result.status || 'unknown'})`)
+      return
+    }
+
+    if (result.state === 'login-required') {
+      await gentlemanBrowser.close().catch(() => {})
+      throw new TaskPauseError(
+        'Gentleman 韩漫需要登录或 Cookie 已失效。当前任务已保留；请前往“配置 → 站点配置 → 绅士漫画”开始手动认证，登录后点击“完成操作”，任务会自动恢复。',
+        { resumeTask: true }
+      )
+    }
+
+    throw new Error(`Gentleman 登录检查失败: ${result.reason}`)
   }
 
   /** 写入 meta.json 并索引到 manga_results / manga_chapters 记录表（仅已下载章节） */
