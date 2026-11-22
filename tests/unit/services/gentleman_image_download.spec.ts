@@ -263,6 +263,65 @@ test.group('Gentleman image download', (group) => {
     )
   })
 
+  test('directly reads the signed image when the response listener misses its buffer', async ({
+    assert,
+  }) => {
+    const service = new Gentleman({
+      website: 'gentleman',
+      id: 1,
+      name: 'Direct Buffer Fallback',
+      url: 'https://www.wnacg.ru/photos-index-aid-2.html',
+    })
+    const viewUrl = 'https://www.wnacg.ru/photos-view-id-21.html'
+    const imageUrl = 'https://img5.qy0.ru/data/2/1/001.jpg?verify=direct'
+    const originalNewPage = gentlemanBrowser.new_page
+    let currentUrl = ''
+    let cacheDisabled = false
+    let directReferer = ''
+
+    ;(service as any).get_chapter_view_urls = async () => [viewUrl]
+    gentlemanBrowser.new_page = async () =>
+      ({
+        goto: async (url: string, options?: { referer?: string }) => {
+          currentUrl = url
+          if (url === imageUrl) {
+            directReferer = options?.referer || ''
+            return {
+              status: () => 200,
+              headers: () => ({ 'content-type': 'image/jpeg' }),
+              buffer: async () => Buffer.from('direct-image'),
+            }
+          }
+          return { status: () => 200, headers: () => ({ 'content-type': 'text/html' }) }
+        },
+        content: async () => `<img id="picarea" src="${imageUrl}">`,
+        title: async () => 'image detail',
+        setCacheEnabled: async (enabled: boolean) => {
+          cacheDisabled = !enabled
+        },
+        close: async () => {},
+      }) as any
+
+    const chapter = {
+      name: 'Direct Buffer Fallback 1話',
+      url: 'https://www.wnacg.ru/photos-index-aid-2.html',
+      imageNum: 1,
+      images: [],
+    }
+    try {
+      await (service as any).download_chapter_images(chapter)
+    } finally {
+      gentlemanBrowser.new_page = originalNewPage
+    }
+
+    const chapterPath = path.join(downloadPath, 'Direct Buffer Fallback', chapter.name)
+    assert.equal(fs.readFileSync(path.join(chapterPath, '001.jpg'), 'utf-8'), 'direct-image')
+    assert.equal(currentUrl, imageUrl)
+    assert.equal(directReferer, viewUrl)
+    assert.isTrue(cacheDisabled)
+    assert.deepEqual(chapter.images, [imageUrl])
+  })
+
   test('replaces the detail page after 58 loads', async ({ assert }) => {
     const service = new Gentleman({
       website: 'gentleman',

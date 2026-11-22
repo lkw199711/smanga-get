@@ -855,22 +855,75 @@ export default class Gentleman {
         failFastOnNavigationError: true,
       })
       const imageUrl = this.get_view_image_url(html, viewUrl)
-      if (imageUrl) {
-        const bufferReady = await this.wait_for_image_buffer(imageUrl)
-        if (bufferReady) return imageUrl
+      if (imageUrl) return imageUrl
 
-        write_log(
-          `[gentleman] ${chapter.name} 详情页原图缓存未捕获 (${attempt}/${retry}): ${viewUrl}`
-        )
-      } else {
-        write_log(
-          `[gentleman] ${chapter.name} 详情页未找到 #picarea (${attempt}/${retry}): ${viewUrl}`
-        )
-      }
+      write_log(
+        `[gentleman] ${chapter.name} 详情页未找到 #picarea (${attempt}/${retry}): ${viewUrl}`
+      )
       if (attempt < retry) await this.wait_before_detail_page()
     }
 
     return ''
+  }
+
+  /**
+   * 优先使用 response 监听器捕获的原图；监听器偶发漏存时，在同一浏览器页签中
+   * 禁用缓存并直接访问已解析的签名 URL。这条兜底链路仍使用 Chromium 的 Cookie、
+   * 代理和 TLS 环境，但不依赖异步 response 事件能否成功写入 buffs。
+   */
+  private async get_detail_image_buffer(
+    page: GentlemanPage,
+    chapter: ChapterInfo,
+    viewUrl: string,
+    imageUrl: string
+  ): Promise<Buffer> {
+    await this.wait_for_image_buffer(imageUrl)
+    const capturedBuffer = this.take_image_buffer(imageUrl)
+    if (capturedBuffer?.length) return capturedBuffer
+
+    const configuredRetry = Number(this.config.detailImageDirectRetry ?? 3)
+    const retry = Number.isFinite(configuredRetry) ? Math.max(1, Math.floor(configuredRetry)) : 3
+    const configuredDelay = Number(this.config.detailImageDirectRetryDelayMs ?? 1_000)
+    const retryDelay = Number.isFinite(configuredDelay) ? Math.max(0, configuredDelay) : 1_000
+    let lastError: unknown = null
+
+    write_log(`[gentleman] ${chapter.name} 原图响应缓存未命中，改用浏览器直接读取: ${viewUrl}`)
+
+    for (let attempt = 1; attempt <= retry; attempt++) {
+      try {
+        await page.setCacheEnabled(false)
+        const response = await page.goto(imageUrl, {
+          waitUntil: 'networkidle0',
+          timeout: 60 * 1000,
+          referer: viewUrl,
+        })
+        const status = response?.status() || 0
+        const contentType = response?.headers()['content-type'] || ''
+        if (!response || status >= 400) {
+          throw new Error(`HTTP ${status || 'unknown'}`)
+        }
+        if (contentType && !/image/i.test(contentType)) {
+          throw new Error(`响应不是图片 (Content-Type: ${contentType})`)
+        }
+
+        const buffer = await response.buffer()
+        if (!buffer.length) throw new Error('响应体为空')
+        write_log(
+          `[gentleman] ${chapter.name} 原图直接读取成功 (${buffer.length} bytes): ${viewUrl}`
+        )
+        return buffer
+      } catch (error) {
+        lastError = error
+        const message = error instanceof Error ? error.message : String(error)
+        write_log(
+          `[gentleman] ${chapter.name} 原图直接读取失败 (${attempt}/${retry}): ${viewUrl}, 原因: ${message}`
+        )
+        if (attempt < retry && retryDelay > 0) await this.wait(retryDelay * attempt)
+      }
+    }
+
+    const message = lastError instanceof Error ? lastError.message : String(lastError)
+    throw new Error(`${chapter.name} 原图读取失败: ${imageUrl}, 原因: ${message}`)
   }
 
   /**
@@ -1055,10 +1108,7 @@ export default class Gentleman {
         }
         if (!imageUrl) throw new Error(`${item.name} 未能解析原图: ${viewUrl}`)
 
-        const buffer = this.take_image_buffer(imageUrl)
-        if (!buffer?.length) {
-          throw new Error(`${item.name} 浏览器图片缓存缺失: ${imageUrl}`)
-        }
+        const buffer = await this.get_detail_image_buffer(page, item, viewUrl, imageUrl)
 
         const fileName = this.get_unique_image_file_name(imageUrl, index, usedFileNames, viewUrl)
         const filePath = path.join(downloadingPath, fileName)
@@ -1072,7 +1122,7 @@ export default class Gentleman {
         successCount++
         this.onProgress?.subProgress?.(index + 1, viewUrls.length)
 
-        // 页面中还可能有缩略图、logo 等响应；原图写盘后全部释放，内存峰值保持在单图级别。
+        // 页面中还可能有下一张预加载图；当前原图写盘后全部释放。
         gentlemanBrowser.clear_buffs()
       }
     } finally {
